@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  html {
+    font-family: 'Sarabun', system-ui, sans-serif;
+  }
+  body {
+    @apply bg-ditech-bg text-ditech-text;
+  }
+}
+
+@layer components {
+  .ditech-card {
+    @apply bg-white border border-ditech-border rounded-lg shadow-card;
+  }
+  .ditech-btn-primary {
+    @apply px-4 py-2 bg-ditech-primary text-white rounded text-sm font-medium hover:bg-ditech-primary-light transition-colors disabled:opacity-50;
+  }
+  .ditech-btn-secondary {
+    @apply px-4 py-2 border border-ditech-border-strong rounded text-sm hover:bg-ditech-surface-alt transition-colors;
+  }
+  .ditech-input {
+    @apply px-3 py-2 border border-ditech-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-ditech-secondary focus:border-transparent;
+  }
+  .live-pill {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-green-50 border border-ditech-success/30 text-ditech-success rounded-full text-xs font-medium;
+  }
+  .live-pill::before {
+    content: '';
+    @apply w-1.5 h-1.5 bg-ditech-success rounded-full animate-pulse;
+  }
+}

@@ -1,0 +1,82 @@
+import { z } from 'zod';
+import { PlanReadiness, PlanStatus, StoreRegion, WorkScope } from '@prisma/client';
+
+export const createPlanSchema = z.object({
+  customerId: z.string().uuid(),
+  departmentId: z.string().uuid(),
+  storeName: z.string().min(2),
+  branchName: z.string().optional().nullable(),
+  storeRegion: z.nativeEnum(StoreRegion).optional().default('BANGKOK'),
+  province: z.string().optional(),
+  address: z.string().optional(),
+  contactPerson: z.string().optional(),
+  contactPhone: z.string().optional(),
+  contactEmail: z.string().optional().nullable(),
+  contactLine: z.string().optional().nullable(),
+  description: z.string().min(2),
+  workScope: z.array(z.nativeEnum(WorkScope)).optional(),
+  sensorCount: z.number().int().min(0).optional().default(0),
+  durationDays: z.number().int().min(1).optional().default(1),
+  readiness: z.nativeEnum(PlanReadiness).optional().default('PENDING'),
+  readinessNote: z.string().optional(),
+  detail: z.string().optional(),
+  scheduledDate: z.string().or(z.date()).nullable().optional(),
+  teamId: z.string().uuid().optional(),
+  contractorName: z.string().optional(),
+});
+
+export const updatePlanSchema = z.object({
+  storeName: z.string().min(2).optional(),
+  branchName: z.string().optional().nullable(),
+  storeRegion: z.nativeEnum(StoreRegion).optional(),
+  province: z.string().optional(),
+  address: z.string().optional(),
+  contactPerson: z.string().optional(),
+  contactPhone: z.string().optional(),
+  contactEmail: z.string().optional().nullable(),
+  contactLine: z.string().optional().nullable(),
+  description: z.string().min(2).optional(),
+  workScope: z.array(z.nativeEnum(WorkScope)).optional(),
+  sensorCount: z.number().int().min(0).optional(),
+  sensorModel: z.string().optional().nullable(),
+  poeSwitchModel: z.string().optional().nullable(),
+  durationDays: z.number().int().min(1).optional(),
+  workStartTime: z.string().nullable().optional(),
+  workEndTime: z.string().nullable().optional(),
+  readiness: z.string().optional(),
+  readinessNote: z.string().optional(),
+  detail: z.string().optional(),
+  trackingResult: z.string().optional(),
+  scheduledDate: z.string().or(z.date()).nullable().optional(),
+  completedDate: z.string().or(z.date()).nullable().optional(),
+  planStatus: z.string().optional(),
+  teamId: z.string().uuid().nullable().optional(),
+  contractorName: z.string().optional(),
+});
+
+export const rescheduleSchema = z.object({
+  newDate: z.string(),
+});
+
+export const bulkImportSchema = z.object({
+  rows: z.array(z.object({
+    customerCode: z.string(),
+    departmentCode: z.string(),
+    storeName: z.string(),
+  branchName: z.string().optional().nullable(),
+    storeRegion: z.enum(['BANGKOK', 'UPC']).optional(),
+    description: z.string().optional().default('install Cam'),
+    sensorCount: z.number().int().min(0).optional().default(0),
+    readiness: z.enum(['PENDING', 'NOT_READY', 'READY', 'ON_HOLD']).optional(),
+    planStatus: z.enum(['DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']).optional(),
+    detail: z.string().optional(),
+    scheduledDate: z.string().optional(),
+    province: z.string().optional(),
+    contactPerson: z.string().optional(),
+    contactPhone: z.string().optional(),
+  contactEmail: z.string().optional().nullable(),
+  contactLine: z.string().optional().nullable(),
+    address: z.string().optional(),
+  }).passthrough()).min(1),
+  mode: z.enum(['create', 'upsert']).optional().default('create'),
+});

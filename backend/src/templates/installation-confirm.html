@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>แบบฟอร์มยืนยันการติดตั้งกล้องนับคน — {{docNumber}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 portrait; margin: 14mm 15mm; }
+
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    font-family: 'Sarabun', 'TH Sarabun New', Arial, sans-serif;
+    font-size: 11pt; line-height: 1.45; color: #111827;
+    background: white; margin: 0; padding: 0;
+  }
+  .page { min-height: calc(297mm - 28mm); display: flex; flex-direction: column; }
+  .content { flex: 1; }
+
+  /* Header */
+  .doc-header { width: 100%; border-collapse: collapse; margin-bottom: 4pt; }
+  .doc-header td { vertical-align: middle; padding: 0; }
+  .doc-header .logo-cell { width: 130pt; padding-right: 14pt; }
+  .doc-header .badge-cell { width: 100pt; text-align: right; vertical-align: top; }
+  .logo-block .logo-text { font-size: 24pt; font-weight: 800; color: #1F3447; letter-spacing: 1.5px; line-height: 1; }
+  .logo-block .logo-tag { font-size: 7pt; color: #5B6675; margin-top: 1pt; letter-spacing: 0.3px; }
+  .company-info { font-size: 8.5pt; line-height: 1.4; color: #1F2937; }
+  .company-info .name { font-weight: 700; font-size: 9.5pt; color: #111827; margin-bottom: 1pt; }
+  .company-info .muted { color: #5B6675; }
+  .doc-badge { display: inline-block; border: 0.6pt solid #1F3447; padding: 4pt 8pt; font-size: 8pt; color: #1F3447; text-align: left; }
+  .doc-badge .label { display: block; color: #5B6675; font-size: 6.5pt; margin-bottom: 1pt; letter-spacing: 0.3px; }
+  .doc-badge .num { font-weight: 700; font-family: 'Sarabun', monospace; }
+  .header-divider { border: none; border-top: 0.8pt solid #1F3447; margin: 6pt 0 12pt; }
+
+  /* Title */
+  .doc-title { text-align: center; font-size: 16pt; font-weight: 700; margin: 4pt 0 3pt; color: #111827; letter-spacing: 0.5px; }
+  .meta-row { display: table; width: 100%; margin-bottom: 4pt; }
+  .meta-row .meta-cell { display: table-cell; }
+  .meta-row .meta-cell.right { text-align: right; }
+  .date-line { color: #1F2937; font-size: 11pt; }
+
+  /* Section heading — centered (general / equipment) */
+  .section-heading {
+    text-align: left;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #1F3447;
+    margin: 10pt 0 5pt 24pt;
+  }
+
+  /* Two-column info row (label : value | label : value) */
+  .info-line {
+    display: table;
+    width: 100%;
+    margin: 0 0 3pt 24pt;
+    table-layout: fixed;
+  }
+  .info-line .info-cell {
+    display: table-cell;
+    padding-right: 18pt;
+    vertical-align: top;
+    font-size: 11pt;
+    line-height: 1.5;
+  }
+  .info-line .info-cell:last-child { padding-right: 0; }
+  .info-line .lbl { color: #111827; font-weight: 700; font-size: 11pt; margin-right: 4pt; }
+  .info-line .lbl::after { content: ':'; margin-left: 2pt; color: #111827; font-weight: 700; }
+  .info-line .val { color: #111827; }
+  .info-line .val.empty { color: #9CA3AF; font-style: italic; }
+  .info-block { margin-bottom: 4pt; }
+
+  /* Boxed content (equipment / checklist) */
+  .equip-wrap {
+    background: #F8FAFC;
+    border: 0.6pt solid #CBD5E1;
+    padding: 6pt 12pt;
+    margin: 0 24pt 6pt 24pt;
+  }
+
+  /* Checklist grid */
+  .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2pt 18pt; }
+  .check-item { font-size: 10pt; color: #111827; line-height: 1.45; display: flex; align-items: flex-start; gap: 7pt; }
+  .check-box { flex-shrink: 0; width: 10pt; height: 10pt; border: 0.7pt solid #1F3447; margin-top: 2pt; background: white; }
+
+  /* Notes */
+  .notes-wrap {
+    background: #F8FAFC;
+    border: 0.6pt solid #CBD5E1;
+    padding: 6pt 12pt;
+    min-height: 32pt;
+    margin: 0 24pt 6pt 24pt;
+    font-size: 10.5pt;
+    color: #111827;
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+  .notes-wrap.empty { color: #9CA3AF; font-style: italic; }
+
+  /* Closing */
+  .closing-text { margin: 6pt 0 4pt 24pt; font-size: 11pt; color: #111827; }
+
+  /* Signatures */
+  .signature-section { margin-top: 12pt; page-break-inside: avoid; }
+  .sig-table { width: 100%; border-collapse: collapse; }
+  .sig-table td { width: 50%; text-align: center; padding: 0 14pt; vertical-align: top; }
+  .sig-line { border-bottom: 0.7pt solid #111827; height: 38pt; margin: 0 12pt 4pt; }
+  .sig-role { font-size: 10.5pt; color: #1F2937; font-weight: 700; margin-bottom: 2pt; }
+  .sig-name { font-size: 10pt; color: #5B6675; margin-bottom: 1pt; }
+  .sig-date { font-size: 9.5pt; color: #5B6675; margin-top: 4pt; }
+
+  @media screen { body { padding: 14pt 16pt; } }
+</style>
+</head>
+<body>
+
+<div class="page">
+<div class="content">
+
+<!-- Header -->
+<table class="doc-header">
+  <tr>
+    <td class="logo-cell">
+      <div class="logo-block">
+        <div class="logo-text">DITECH</div>
+        <div class="logo-tag">AI-Powered People Counting Solution</div>
+      </div>
+    </td>
+    <td>
+      <div class="company-info">
+        <div class="name">บริษัท ดิชิตอล อินเทลลิเจนท์ เทคโนโลยี จำกัด (สำนักงานใหญ่)</div>
+        <div class="muted">30 ซอยสุขุมวิท 61 (เศรษฐบุตร) แขวงคลองตันเหนือ เขตวัฒนา กรุงเทพฯ 10110</div>
+        <div class="muted">เลขผู้เสียภาษี: 0105562178752</div>
+        <div class="muted">Technical Support | Tel: 02-457-2018 | LINE: @support_ditech | E-Mail: support@ditech.co.th</div>
+      </div>
+    </td>
+    {{#if docNumber}}
+    <td class="badge-cell">
+      <div class="doc-badge">
+        <span class="label">เลขที่เอกสาร</span>
+        <span class="num">{{docNumber}}</span>
+      </div>
+    </td>
+    {{/if}}
+  </tr>
+</table>
+
+<hr class="header-divider" />
+
+<h1 class="doc-title">แบบฟอร์มยืนยันการติดตั้งกล้องนับคน</h1>
+
+<div class="meta-row">
+  <div class="meta-cell"></div>
+  <div class="meta-cell right">
+    <span class="date-line">วันที่ {{thaiDateLong issuedAt}}</span>
+  </div>
+</div>
+
+<!-- ───── ข้อมูลทั่วไป (2 lines, 2 cols each) ───── -->
+<div class="section-heading">ข้อมูลทั่วไป</div>
+<div class="info-block">
+  <div class="info-line">
+    <div class="info-cell">
+      <span class="lbl">ชื่อลูกค้า</span><span class="val{{#unless plan.customer.customerName}} empty{{/unless}}">{{fallback plan.customer.customerName plan.customer.customerCode "—"}}</span>
+    </div>
+    <div class="info-cell">
+      <span class="lbl">สาขา</span><span class="val">{{fallback plan.storeName "—"}}{{#if plan.branchName}} สาขา {{plan.branchName}}{{/if}}</span>
+    </div>
+  </div>
+  <div class="info-line">
+    <div class="info-cell">
+      <span class="lbl">วันที่ติดตั้ง</span><span class="val">{{thaiDateLong plan.scheduledDate}}</span>
+    </div>
+    <div class="info-cell">
+      <span class="lbl">เวลาเข้าทำงาน</span><span class="val">{{fallback workStartTime plan.workStartTime "—"}} – {{fallback workEndTime plan.workEndTime "—"}} น.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ───── อุปกรณ์ที่ใช้ติดตั้ง (2 lines, 2 cols each, in box) ───── -->
+<div class="section-heading">อุปกรณ์ที่ใช้ติดตั้ง</div>
+<div class="equip-wrap">
+  <div class="info-line" style="margin-left: 0;">
+    <div class="info-cell">
+      <span class="lbl">รุ่นกล้อง</span><span class="val{{#unless plan.sensorModel}} empty{{/unless}}">{{fallback plan.sensorModel "—"}}</span>
+    </div>
+    <div class="info-cell">
+      <span class="lbl">จำนวนกล้อง AI</span><span class="val">{{fallback plan.sensorCount "—"}}{{#if plan.sensorCount}} Sensor{{/if}}</span>
+    </div>
+  </div>
+  <div class="info-line" style="margin-left: 0; margin-bottom: 0;">
+    <div class="info-cell">
+      <span class="lbl">รุ่น POE</span><span class="val{{#unless plan.poeSwitchModel}} empty{{/unless}}">{{fallback plan.poeSwitchModel "—"}}</span>
+    </div>
+    <div class="info-cell">
+      <span class="lbl">จำนวน POE</span><span class="val{{#unless poeCount}} empty{{/unless}}">{{fallback poeCount "—"}}</span>
+    </div>
+  </div>
+</div>
+
+<!-- ───── Checklist 1 ───── -->
+<div class="section-heading left">รายการตรวจสอบก่อนและการติดตั้ง</div>
+<div class="equip-wrap">
+  {{#if preInstallChecklist.length}}
+  <div class="check-grid">
+    {{#each preInstallChecklist}}
+    <div class="check-item"><span class="check-box"></span><span>{{this}}</span></div>
+    {{/each}}
+  </div>
+  {{else}}
+  <div style="text-align: center; color: #9CA3AF; font-style: italic; padding: 6pt 0;">— ไม่มีรายการ —</div>
+  {{/if}}
+</div>
+
+<!-- ───── Checklist 2 ───── -->
+<div class="section-heading left">รายการตรวจสอบการทำงาน</div>
+<div class="equip-wrap">
+  {{#if workingChecklist.length}}
+  <div class="check-grid">
+    {{#each workingChecklist}}
+    <div class="check-item"><span class="check-box"></span><span>{{this}}</span></div>
+    {{/each}}
+  </div>
+  {{else}}
+  <div style="text-align: center; color: #9CA3AF; font-style: italic; padding: 6pt 0;">— ไม่มีรายการ —</div>
+  {{/if}}
+</div>
+
+<!-- ───── Checklist 3 ───── -->
+<div class="section-heading left">การส่งมอบและอบรม</div>
+<div class="equip-wrap">
+  {{#if handoverChecklist.length}}
+  <div class="check-grid">
+    {{#each handoverChecklist}}
+    <div class="check-item"><span class="check-box"></span><span>{{this}}</span></div>
+    {{/each}}
+  </div>
+  {{else}}
+  <div style="text-align: center; color: #9CA3AF; font-style: italic; padding: 6pt 0;">— ไม่มีรายการ —</div>
+  {{/if}}
+</div>
+
+<!-- ───── หมายเหตุ ───── -->
+<div class="section-heading left">หมายเหตุ / ปัญหาที่พบ</div>
+<div class="notes-wrap{{#unless notes}} empty{{/unless}}">{{fallback notes ""}}</div>
+
+<p class="closing-text">จึงเรียนมาเพื่อรับทราบและรับมอบงาน</p>
+
+</div><!-- /.content -->
+
+<!-- Signatures -->
+<div class="signature-section">
+  <table class="sig-table">
+    <tr>
+      <td>
+        <div class="sig-line"></div>
+        <div class="sig-role">ผู้ติดตั้ง</div>
+        <div class="sig-name">DITECH Lead Technician</div>
+        <div class="sig-date">วันที่ ____ / ____ / ________</div>
+      </td>
+      <td>
+        <div class="sig-line"></div>
+        <div class="sig-role">ผู้รับมอบ (ลูกค้า)</div>
+        <div class="sig-name">{{fallback signedByName "ตัวแทนร้าน / ลูกค้า"}}</div>
+        <div class="sig-date">วันที่ ____ / ____ / ________</div>
+      </td>
+    </tr>
+  </table>
+</div>
+
+</div><!-- /.page -->
+
+</body>
+</html>

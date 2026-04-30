@@ -1,0 +1,192 @@
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DndContext, DragEndEvent, useDraggable, useDroppable } from '@dnd-kit/core';
+import { plansApi } from '../api/plans';
+import { capacityApi } from '../api/capacity';
+import { dateKey, sameDay, monthRange, plansOnDate } from '../lib/dates';
+import { useToast } from '../components/Toast';
+import { chipClass, StatusPill } from '../components/StatusPill';
+import { Spinner } from '../components/Spinner';
+import { PlanEditModal } from '../components/PlanEditModal';
+import type { InstallationPlan } from '../api/types';
+
+export function CalendarPage() {
+  const [cursor, setCursor] = useState(new Date());
+  const [selected, setSelected] = useState<Date | null>(null);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const showToast = useToast((s) => s.show);
+
+  const { from, to, first, last } = monthRange(cursor);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['plans', from, to],
+    queryFn: () => plansApi.list({ scheduledFrom: from, scheduledTo: to, limit: 100 }),
+  });
+
+  const { data: heatmap } = useQuery({
+    queryKey: ['heatmap', cursor.getFullYear(), cursor.getMonth() + 1],
+    queryFn: () => capacityApi.heatmap(cursor.getFullYear(), cursor.getMonth() + 1),
+  });
+
+  const reschedule = useMutation({
+    mutationFn: ({ id, date }: { id: string; date: string }) => plansApi.reschedule(id, date),
+    onSuccess: (_, vars) => {
+      showToast(`Rescheduled to ${vars.date}`);
+      qc.invalidateQueries({ queryKey: ['plans'] });
+      qc.invalidateQueries({ queryKey: ['heatmap'] });
+    },
+    onError: (err: any) => showToast(err.response?.data?.message || 'Reschedule failed'),
+  });
+
+  const plans = data?.data || [];
+
+  const handleDragEnd = (e: DragEndEvent) => {
+    if (!e.over) return;
+    const planId = e.active.id as string;
+    const newDate = e.over.id as string;
+    const plan = plans.find((p) => p.id === planId);
+    if (!plan || plan.scheduledDate?.split('T')[0] === newDate) return;
+    reschedule.mutate({ id: planId, date: newDate });
+  };
+
+  const monthInfo = `${plans.length} plans · ${plans.filter((p) => p.readiness === 'READY').length} ready · ${plans.filter((p) => p.readiness === 'NOT_READY').length} not ready · ${plans.reduce((s, p) => s + p.sensorCount, 0)} sensors`;
+
+  // calendar grid
+  const startWeekday = first.getDay();
+  const totalCells = Math.ceil((startWeekday + last.getDate()) / 7) * 7;
+  const gridStart = new Date(first); gridStart.setDate(1 - startWeekday);
+  const today = new Date();
+  const heatMap = new Map((heatmap || []).map((h) => [h.date, h]));
+
+  return (
+    <>
+    <DndContext onDragEnd={handleDragEnd}>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
+              className="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100 text-sm">‹</button>
+            <span className="text-base font-medium min-w-[180px] text-center">
+              {cursor.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+            </span>
+            <button onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
+              className="w-8 h-8 border border-gray-300 rounded hover:bg-gray-100 text-sm">›</button>
+            <button onClick={() => { setCursor(new Date()); setSelected(new Date()); }}
+              className="px-3 h-8 border border-gray-300 rounded hover:bg-gray-100 text-sm ml-1">Today</button>
+          </div>
+          <div className="text-xs text-gray-500">Drag chips to reschedule</div>
+        </div>
+
+        <div className="text-sm text-gray-600">{monthInfo}</div>
+
+        {isLoading ? <Spinner /> : (
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="grid grid-cols-7">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+                <div key={d} className="px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50 border-b border-r border-gray-200 text-center last:border-r-0">{d}</div>
+              ))}
+              {Array.from({ length: totalCells }).map((_, i) => {
+                const d = new Date(gridStart); d.setDate(gridStart.getDate() + i);
+                const key = dateKey(d);
+                const isOther = d.getMonth() !== cursor.getMonth();
+                const isToday = sameDay(d, today);
+                const isSelected = selected && sameDay(d, selected);
+                const dayPlans = plansOnDate(plans, d);
+                const cap = heatMap.get(key);
+                return (
+                  <DayCell key={key} dateKey={key} d={d} isOther={isOther} isToday={isToday} isSelected={!!isSelected}
+                    plans={dayPlans} cap={cap} onClick={() => setSelected(d)} onEdit={setEditingPlanId} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {selected && <DayPanel date={selected} plans={plansOnDate(plans, selected)} />}
+      </div>
+    </DndContext>
+    <PlanEditModal planId={editingPlanId} onClose={() => setEditingPlanId(null)} />
+    </>
+  );
+}
+
+function DayCell({ dateKey: dk, d, isOther, isToday, isSelected, plans, cap, onClick, onEdit }: any) {
+  const { setNodeRef, isOver } = useDroppable({ id: dk });
+  let cls = 'day-cell min-h-[96px] p-1.5 border-r border-b border-gray-200 cursor-pointer relative ';
+  cls += isOther ? 'bg-gray-50 ' : 'bg-white hover:bg-gray-50 ';
+  if (isSelected) cls += 'ring-2 ring-ditech-primary ring-inset bg-blue-50 ';
+  if (isOver) cls += 'drop-target ';
+  if (cap?.overflow) cls += 'ring-2 ring-amber-500 ring-inset ';
+
+  return (
+    <div ref={setNodeRef} className={cls} onClick={onClick}>
+      <div className="flex items-center justify-between mb-1">
+        <span className={`text-xs font-medium ${isOther ? 'text-gray-400' : ''} ${isToday ? 'bg-gray-900 text-white rounded-full w-5 h-5 inline-flex items-center justify-center' : ''}`}>
+          {d.getDate()}
+        </span>
+        {plans.length > 0 && cap && !isOther && (
+          <CapBadge cap={cap} />
+        )}
+      </div>
+      <div className="space-y-0.5">
+        {plans.slice(0, 3).map((p: InstallationPlan) => <DraggableChip key={p.id} plan={p} onEdit={onEdit} />)}
+        {plans.length > 3 && <div className="text-[10px] text-gray-500 px-1">+{plans.length - 3} more</div>}
+      </div>
+    </div>
+  );
+}
+
+function CapBadge({ cap }: any) {
+  let cls = 'bg-green-100 text-green-800';
+  if (cap.overflow) cls = 'bg-red-100 text-red-800';
+  else if (cap.total >= cap.totalCap) cls = 'bg-amber-100 text-amber-800';
+  return <span className={`text-[9px] px-1 py-0.5 rounded ${cls}`}>{cap.total}/{cap.totalCap}</span>;
+}
+
+function DraggableChip({ plan, onEdit }: { plan: InstallationPlan; onEdit: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: plan.id });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      className={`event-chip text-[10px] px-1.5 py-0.5 rounded truncate ${chipClass(plan)} ${isDragging ? 'dragging' : ''}`}
+      onClick={(e) => { e.stopPropagation(); onEdit(plan.id); }}
+      title={plan.storeName}
+    >
+      <span className="font-medium">{plan.customer.customerCode}</span> {plan.storeName.replace(/^[A-Za-z\s]+\s/, '')}
+    </div>
+  );
+}
+
+function DayPanel({ date, plans }: { date: Date; plans: InstallationPlan[] }) {
+  const dateLabel = date.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <h3 className="text-base font-medium mb-3">{dateLabel}</h3>
+      {plans.length === 0 ? (
+        <div className="text-center py-6 text-gray-400 text-sm">No installations scheduled</div>
+      ) : (
+        <div className="space-y-2">
+          {plans.map((p) => (
+            <div key={p.id} className="flex gap-3 items-start py-2 border-b border-gray-100 last:border-0">
+              <StatusPill plan={p} className="mt-1 min-w-[80px] text-center" />
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">
+                  {p.storeName}
+                  {(p.durationDays || 1) > 1 && <span className="text-xs text-gray-400 ml-2">· {p.durationDays} days</span>}
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  {p.customer.customerCode} · {p.department.departmentName} · {p.sensorCount} sensor{p.sensorCount > 1 ? 's' : ''}
+                  · {p.province || '—'} · {p.team?.name || <span className="text-amber-600">No team</span>}
+                </div>
+                {p.detail && <div className="text-xs text-gray-400 mt-1">{p.detail}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>ใบขออนุญาตเข้าปฏิบัติงาน — {{docNumber}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 portrait; margin: 14mm 15mm; }
+
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body {
+    font-family: 'Sarabun', 'TH Sarabun New', Arial, sans-serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    color: #111827;
+    background: white;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ─────────── Header ─────────── */
+  .doc-header {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 4pt;
+  }
+  .doc-header td { vertical-align: middle; padding: 0; }
+  .doc-header .logo-cell { width: 130pt; padding-right: 14pt; }
+  .doc-header .badge-cell { width: 100pt; text-align: right; vertical-align: top; }
+  .logo-block .logo-text { font-size: 24pt; font-weight: 800; color: #1F3447; letter-spacing: 1.5px; line-height: 1; }
+  .logo-block .logo-tag { font-size: 7pt; color: #5B6675; margin-top: 1pt; letter-spacing: 0.3px; }
+  .company-info { font-size: 8.5pt; line-height: 1.4; color: #1F2937; }
+  .company-info .name { font-weight: 700; font-size: 9.5pt; color: #111827; margin-bottom: 1pt; }
+  .company-info .muted { color: #5B6675; }
+  .doc-badge {
+    display: inline-block;
+    border: 0.6pt solid #1F3447;
+    padding: 4pt 8pt;
+    font-size: 8pt;
+    color: #1F3447;
+    text-align: left;
+  }
+  .doc-badge .label { display: block; color: #5B6675; font-size: 6.5pt; margin-bottom: 1pt; letter-spacing: 0.3px; }
+  .doc-badge .num { font-weight: 700; font-family: 'Sarabun', monospace; }
+
+  .header-divider {
+    border: none;
+    border-top: 0.8pt solid #1F3447;
+    margin: 6pt 0 12pt;
+  }
+
+  /* ─────────── Title ─────────── */
+  .doc-title {
+    text-align: center;
+    font-size: 17pt;
+    font-weight: 700;
+    margin: 6pt 0 4pt;
+    color: #111827;
+    letter-spacing: 0.5px;
+  }
+
+  /* ─────────── Letter meta (date + recipient + subject) ─────────── */
+  .meta-row { display: table; width: 100%; margin-bottom: 8pt; }
+  .meta-row .meta-cell { display: table-cell; }
+  .meta-row .meta-cell.right { text-align: right; }
+
+  .date-line { color: #1F2937; font-size: 11pt; }
+
+  .letter-fields { margin-top: 6pt; }
+  .letter-fields .row { margin-bottom: 3pt; font-size: 11pt; }
+  .letter-fields .label { font-weight: 700; color: #111827; display: inline-block; min-width: 50pt; }
+
+  /* ─────────── Body paragraph ─────────── */
+  .body-paragraph {
+    margin: 8pt 0 8pt;
+    text-indent: 24pt;
+    font-size: 11pt;
+    line-height: 1.6;
+  }
+
+  /* ─────────── Work detail (label/value table) ─────────── */
+  .detail-table { border-collapse: collapse; margin: 4pt 0 12pt 24pt; }
+  .detail-table td { padding: 2pt 0; vertical-align: top; font-size: 11pt; }
+  .detail-table .key { color: #1F2937; width: 110pt; font-weight: 500; }
+  .detail-table .sep { width: 12pt; color: #1F2937; }
+  .detail-table .val { color: #111827; }
+
+  /* ─────────── Section heading ─────────── */
+  .section-heading {
+    text-align: center;
+    font-weight: 700;
+    font-size: 12pt;
+    color: #1F3447;
+    margin: 12pt 0 6pt;
+  }
+
+  /* ─────────── Tech table ─────────── */
+  .tech-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 14pt;
+  }
+  .tech-table th, .tech-table td {
+    border: 0.5pt solid #CBD5E1;
+    padding: 6pt 8pt;
+    vertical-align: middle;
+  }
+  .tech-table th {
+    background: #1F3447;
+    color: white;
+    font-weight: 600;
+    font-size: 10pt;
+    text-align: center;
+    letter-spacing: 0.2px;
+  }
+  .tech-table td {
+    font-size: 10.5pt;
+    color: #111827;
+  }
+  .tech-table td.idx { text-align: center; width: 7%; color: #5B6675; }
+  .tech-table td.center { text-align: center; }
+  .tech-table tr.empty td { padding: 14pt; color: #9CA3AF; font-style: italic; text-align: center; }
+
+  /* ─────────── Equipment box ─────────── */
+  .equip-wrap { background: #F8FAFC; border: 0.6pt solid #CBD5E1; padding: 10pt 14pt; margin-bottom: 12pt; }
+  .equip-list {
+    list-style: none;
+    margin: 0; padding: 0;
+    column-count: 3;
+    column-gap: 18pt;
+  }
+  .equip-item {
+    padding: 1.5pt 0;
+    font-size: 10pt;
+    color: #111827;
+    line-height: 1.45;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+    display: list-item;
+    list-style: none;
+  }
+  .equip-item::before {
+    content: '•';
+    color: #1F3447;
+    font-weight: 700;
+    margin-right: 6pt;
+  }
+
+  /* ─────────── Closing ─────────── */
+  .closing-text {
+    margin: 14pt 0 0;
+    text-indent: 24pt;
+    font-size: 11pt;
+  }
+
+  /* ─────────── Signatures ─────────── */
+  .sig-table {
+    width: 100%;
+    margin-top: 36pt;
+    border-collapse: collapse;
+    page-break-inside: avoid;
+  }
+  .sig-table td {
+    width: 50%;
+    text-align: center;
+    padding: 0 14pt;
+    vertical-align: top;
+  }
+  .sig-line {
+    border-bottom: 0.7pt solid #111827;
+    height: 50pt;
+    margin: 0 12pt 5pt;
+  }
+  .sig-role { font-size: 10.5pt; color: #1F2937; font-weight: 700; margin-bottom: 2pt; }
+  .sig-name { font-size: 10pt; color: #5B6675; margin-bottom: 1pt; }
+  .sig-date { font-size: 9.5pt; color: #5B6675; margin-top: 4pt; }
+
+  /* ─────────── ID card photo page ─────────── */
+  .page-break { page-break-before: always; }
+  .photo-page-title {
+    text-align: center;
+    font-size: 15pt;
+    font-weight: 700;
+    margin: 8pt 0 14pt;
+    color: #1F3447;
+  }
+  .photo-grid-wrap { display: block; }
+  .photo-row { display: table; width: 100%; margin-bottom: 14pt; }
+  .photo-cell { display: table-cell; width: 50%; padding: 0 8pt; vertical-align: top; }
+  .photo-card { text-align: center; page-break-inside: avoid; }
+  .photo-card .frame {
+    width: 100%;
+    height: 110pt;
+    border: 0.6pt solid #9CA3AF;
+    background: #F8FAFC;
+    display: table-cell;
+    text-align: center;
+    vertical-align: middle;
+    overflow: hidden;
+  }
+  .photo-card .frame img { max-width: 100%; max-height: 100%; }
+  .photo-card .frame .placeholder { color: #9CA3AF; font-style: italic; font-size: 10pt; }
+  .photo-card .caption {
+    margin-top: 4pt;
+    font-size: 10pt;
+    color: #1F2937;
+    font-weight: 500;
+  }
+
+  @media screen { body { padding: 14pt 16pt; } }
+</style>
+</head>
+<body>
+
+<!-- ─────────── Header (3-cell table for predictable PDF layout) ─────────── -->
+<table class="doc-header">
+  <tr>
+    <td class="logo-cell">
+      <div class="logo-block">
+        <div class="logo-text">DITECH</div>
+        <div class="logo-tag">AI-Powered People Counting Solution</div>
+      </div>
+    </td>
+    <td>
+      <div class="company-info">
+        <div class="name">บริษัท ดิชิตอล อินเทลลิเจนท์ เทคโนโลยี จำกัด (สำนักงานใหญ่)</div>
+        <div class="muted">30 ซอยสุขุมวิท 61 (เศรษฐบุตร) แขวงคลองตันเหนือ เขตวัฒนา กรุงเทพฯ 10110</div>
+        <div class="muted">เลขผู้เสียภาษี: 0105562178752</div>
+        <div class="muted">Technical Support | Tel: 02-457-2018 | LINE: @support_ditech | E-Mail: support@ditech.co.th</div>
+      </div>
+    </td>
+    {{#if docNumber}}
+    <td class="badge-cell">
+      <div class="doc-badge">
+        <span class="label">เลขที่เอกสาร</span>
+        <span class="num">{{docNumber}}</span>
+      </div>
+    </td>
+    {{/if}}
+  </tr>
+</table>
+
+<hr class="header-divider" />
+
+<!-- ─────────── Title + date ─────────── -->
+<h1 class="doc-title">ใบขออนุญาตเข้าปฏิบัติงาน</h1>
+
+<div class="meta-row">
+  <div class="meta-cell"></div>
+  <div class="meta-cell right">
+    <span class="date-line">วันที่ {{thaiDateLong issuedAt}}</span>
+  </div>
+</div>
+
+<!-- ─────────── Recipient + subject ─────────── -->
+<div class="letter-fields">
+  <div class="row"><span class="label">เรียน</span> : ทุกฝ่ายที่เกี่ยวข้อง</div>
+  <div class="row"><span class="label">เรื่อง</span> : ขออนุญาตเข้าพื้นที่ร้าน {{fallback plan.customer.customerName plan.customer.customerCode}} {{fallback plan.storeName "—"}}</div>
+</div>
+
+<!-- ─────────── Body ─────────── -->
+<p class="body-paragraph">
+  ทางบริษัทฯ มีความประสงค์ ขออนุญาตเข้าพื้นที่ร้าน {{fallback plan.customer.customerName plan.customer.customerCode}} เพื่อดำเนินการ ตามรายละเอียดดังนี้
+</p>
+
+<!-- ─────────── Work detail ─────────── -->
+<table class="detail-table">
+  <tr><td class="key">หัวข้องาน</td><td class="sep">:</td><td class="val">{{fallback plan.description "ติดตั้งกล้องนับคน"}}</td></tr>
+  <tr><td class="key">ชื่อร้าน</td><td class="sep">:</td><td class="val">{{fallback plan.storeName "—"}}{{#if plan.branchName}} สาขา {{plan.branchName}}{{/if}}</td></tr>
+  <tr><td class="key">วันที่เข้าทำงาน</td><td class="sep">:</td><td class="val">{{thaiDateLong plan.scheduledDate}}</td></tr>
+  <tr><td class="key">เวลาเข้าทำงาน</td><td class="sep">:</td><td class="val">{{fallback workStartTime plan.workStartTime "____"}} – {{fallback workEndTime plan.workEndTime "____"}} น.</td></tr>
+</table>
+
+<!-- ─────────── Technician table ─────────── -->
+<div class="section-heading">รายชื่อผู้เข้าปฏิบัติงาน ดังนี้</div>
+
+<table class="tech-table">
+  <thead>
+    <tr>
+      <th style="width: 7%;">ลำดับ</th>
+      <th style="width: 30%;">รายชื่อ</th>
+      <th style="width: 22%;">ตำแหน่ง</th>
+      <th style="width: 23%;">บัตรประชาชน</th>
+      <th style="width: 18%;">เบอร์โทรศัพท์</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#if plan.team.members.length}}
+      {{#each plan.team.members}}
+      <tr>
+        <td class="idx">{{inc @index}}</td>
+        <td>{{fallback this.user.fullName "—"}}</td>
+        <td class="center">{{fallback this.user.position "—"}}</td>
+        <td class="center">{{fallback this.user.idCard "—"}}</td>
+        <td class="center">{{fallback this.user.phoneForDoc this.user.phone}}</td>
+      </tr>
+      {{/each}}
+    {{else}}
+      <tr class="empty"><td colspan="5">— ไม่มีรายชื่อทีมที่ได้รับมอบหมาย —</td></tr>
+    {{/if}}
+  </tbody>
+</table>
+
+<!-- ─────────── Equipment ─────────── -->
+<div class="section-heading">อุปกรณ์หลักที่ใช้ในการเข้าพื้นที่</div>
+
+<div class="equip-wrap">
+  {{#if equipmentList.length}}
+  <ul class="equip-list">
+    {{#each equipmentList}}
+      <li class="equip-item">{{this}}</li>
+    {{/each}}
+  </ul>
+  {{else}}
+  <div style="text-align: center; color: #9CA3AF; font-style: italic; padding: 8pt 0;">— ไม่มีรายการอุปกรณ์ —</div>
+  {{/if}}
+</div>
+</div>
+
+<!-- ─────────── Closing ─────────── -->
+<p class="closing-text">จึงเรียนมาเพื่อรับทราบและอนุมัติ</p>
+
+<!-- ─────────── Signatures ─────────── -->
+<table class="sig-table">
+  <tr>
+    <td>
+      <div class="sig-line"></div>
+      <div class="sig-role">ผู้ขออนุญาต</div>
+      <div class="sig-name">DITECH Project Manager</div>
+      <div class="sig-date">วันที่ ____ / ____ / ________</div>
+    </td>
+    <td>
+      <div class="sig-line"></div>
+      <div class="sig-role">ผู้อนุมัติ</div>
+      <div class="sig-name">{{fallback signedByName "ตัวแทนร้าน / ลูกค้า"}}</div>
+      <div class="sig-date">วันที่ ____ / ____ / ________</div>
+    </td>
+  </tr>
+</table>
+
+<!-- ─────────── Page 2: ID card photo attachment ─────────── -->
+<div class="page-break"></div>
+
+<!-- Repeat header (compact) on attachment page -->
+<table class="doc-header">
+  <tr>
+    <td class="logo-cell">
+      <div class="logo-block">
+        <div class="logo-text">DITECH</div>
+        <div class="logo-tag">AI-Powered People Counting Solution</div>
+      </div>
+    </td>
+    <td>
+      <div class="company-info">
+        <div class="name">เอกสารแนบ : สำเนาบัตรประชาชนผู้เข้าปฏิบัติงาน</div>
+        <div class="muted">เลขที่เอกสาร : {{docNumber}}</div>
+        <div class="muted">วันที่ : {{thaiDateLong issuedAt}}</div>
+      </div>
+    </td>
+  </tr>
+</table>
+<hr class="header-divider" />
+
+<h2 class="photo-page-title">สำเนาบัตรประชาชนผู้เข้าปฏิบัติงาน</h2>
+
+<!-- ─────────── ID card photo grid (8 per page: 2×4) ─────────── -->
+{{#if plan.team.members.length}}
+  <div class="photo-grid-wrap">
+    {{#each plan.team.members}}
+      {{#if (eq (mod @index 2) 0)}}<div class="photo-row">{{/if}}
+      <div class="photo-cell">
+        <div class="photo-card">
+          <div class="frame">
+            {{#if this.user.idCardPhotoUrl}}
+              <img src="{{this.user.idCardPhotoUrl}}" alt="{{this.user.fullName}}" />
+            {{else}}
+              <span class="placeholder">ไม่มีรูปบัตรประชาชน</span>
+            {{/if}}
+          </div>
+          <div class="caption">{{fallback this.user.fullName "—"}}</div>
+        </div>
+      </div>
+      {{#if (eq (mod @index 2) 1)}}</div>{{/if}}
+      {{#if (eq @last true)}}{{#unless (eq (mod @index 2) 1)}}</div>{{/unless}}{{/if}}
+    {{/each}}
+  </div>
+{{else}}
+  <div style="text-align: center; color: #9CA3AF; font-style: italic; padding: 50pt;">
+    — ไม่มีรายชื่อทีมที่ได้รับมอบหมาย —
+  </div>
+{{/if}}
+
+</body>
+</html>
