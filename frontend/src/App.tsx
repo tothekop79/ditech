@@ -3,6 +3,9 @@ import CommandCenterPage from './pages/CommandCenterPage';
 import CommandWallPage from './pages/CommandWallPage';
 import { useAuth } from './features/auth/useAuth';
 import { Login } from './pages/Login';
+import { NewEventWizard } from './pages/NewEventWizard';
+import { EventDetailPage } from './pages/EventDetailPage';
+import { EventsListPage } from './pages/EventsListPage';
 import { Layout } from './components/Layout';
 import { CalendarPage } from './pages/CalendarPage';
 import { GanttPage } from './pages/GanttPage';
@@ -51,6 +54,9 @@ export function App() {
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/plans" element={<PlansListPage />} />
         <Route path="/plans/:id" element={<PlanDetailPage />} />
+        <Route path="/events" element={<EventsListPage />} />
+        <Route path="/events/new" element={<NewEventWizard />} />
+        <Route path="/events/:id" element={<EventDetailPage />} />
         <Route path="*" element={<Navigate to="/calendar" replace />} />
       </Routes>
     </Layout>

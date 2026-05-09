@@ -101,9 +101,14 @@ export const eventService = {
 
   // ── Create event with optional initial setup ──
   async create(data: EventCreateInput, createdById?: string | null) {
-    const days = data.days?.length
+    const rawDays = data.days?.length
       ? data.days
       : this.generateDaysFromRange(data.startDate, data.endDate);
+    // Normalize: ensure date is a Date object (string from JSON would fail Prisma)
+    const days = rawDays.map((d: any) => ({
+      ...d,
+      date: d.date instanceof Date ? d.date : new Date(d.date),
+    }));
 
     return prisma.event.create({
       data: {

@@ -56,8 +56,10 @@ export const eventReportService = {
   async saveUploadedRawdata(eventId: string, originalPath: string) {
     const dir = await this.ensureEventDir(eventId);
     const dest = path.join(dir, RAWDATA_FILENAME);
-    // Move (rename) — multer writes to a temp path first
-    await fs.rename(originalPath, dest);
+    // Cross-device-safe move: copy + unlink (multer's tmp dir may be on a
+    // different filesystem than the uploads volume in Docker).
+    await fs.copyFile(originalPath, dest);
+    await fs.unlink(originalPath).catch(() => { /* best-effort cleanup */ });
     const stat = await fs.stat(dest);
     return { path: dest, size: stat.size };
   },
@@ -92,9 +94,13 @@ export const eventReportService = {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(rawdataPath);
 
-    // Drop any existing _config sheet (regenerate clean)
+    // PRESERVE user's _config if they wrote one in their Excel.
+    // Engine reads _config first, so if it's already complete, we use theirs.
     const existing = wb.getWorksheet('_config');
-    if (existing) wb.removeWorksheet(existing.id);
+    if (existing) {
+      console.log(`[eventReport] _config sheet already present in Rawdata.xlsx — preserving user's config`);
+      return; // skip regeneration entirely
+    }
 
     const cfg = wb.addWorksheet('_config');
 
@@ -205,8 +211,18 @@ export const eventReportService = {
       await this.writeConfigSheetIntoRawdata(eventId);
 
       // 3. Spawn Python engine
+      //    Engine uses __file__ to locate Rawdata.xlsx, so we copy a fresh
+      //    engine.py into the event directory before each run, then clean up.
       const dir = this.eventDir(eventId);
-      const { stdout, stderr, exitCode } = await this.spawnPython(dir);
+      const engineCopy = path.join(dir, 'dashboard_engine.py');
+      await fs.copyFile(PYTHON_ENGINE, engineCopy);
+      let stdout = '', stderr = '', exitCode = 1;
+      try {
+        const r = await this.spawnPython(dir, engineCopy);
+        stdout = r.stdout; stderr = r.stderr; exitCode = r.exitCode;
+      } finally {
+        await fs.unlink(engineCopy).catch(() => {});
+      }
 
       if (exitCode !== 0) {
         throw new Error(`Engine exited with code ${exitCode}. ${stderr.slice(-500)}`);
@@ -263,9 +279,9 @@ export const eventReportService = {
   },
 
   // ── Spawn Python ──
-  spawnPython(cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  spawnPython(cwd: string, enginePath: string = PYTHON_ENGINE): Promise<{ stdout: string; stderr: string; exitCode: number }> {
     return new Promise((resolve, reject) => {
-      const child = spawn(PYTHON_CMD, [PYTHON_ENGINE], {
+      const child = spawn(PYTHON_CMD, [enginePath], {
         cwd,
         env: { ...process.env, PYTHONUNBUFFERED: '1' },
       });
