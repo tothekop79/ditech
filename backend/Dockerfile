@@ -15,6 +15,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
+
+# ── M1: Python engine support ──
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-numpy \
+    python3-pandas \
+    python3-openpyxl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN mkdir -p /app/python-engine /app/uploads/events
+
 WORKDIR /app
 
 COPY package*.json ./

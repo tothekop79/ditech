@@ -36,6 +36,9 @@ model User {
   phoneForDoc    String?
   province       String?
   createdDocs Document[] @relation("DocCreatedBy")
+
+  createdEvents              Event[]         @relation("EventCreatedBy")
+  triggeredEventReports      EventReport[]   @relation("EventReportTriggeredBy")
 }
 
 enum UserRole {
@@ -67,6 +70,8 @@ model Customer {
 
   @@index([customerCode])
   @@index([isActive])
+
+  events            Event[]
 }
 
 model Department {
@@ -184,6 +189,10 @@ model InstallationPlan {
   photos            PlanPhoto[]
 
 
+  // M1: Event hierarchy
+  eventId       String?
+  event         Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
   @@index([customerId])
   @@index([departmentId])
   @@index([readiness])
@@ -194,6 +203,7 @@ model InstallationPlan {
   @@index([provinceId])
   @@index([teamId])
   documents Document[]
+  @@index([eventId])
 }
 
 enum StoreRegion {
@@ -438,5 +448,176 @@ model Province {
   @@index([code])
 
   plans     InstallationPlan[]
+}
+
+// ============================================================
+// Event Reports Module (M1)
+// ============================================================
+// Add this section to backend/prisma/schema.prisma
+// (deploy script will paste it just before "model DocumentSequence")
+
+model Event {
+  id              String       @id @default(uuid())
+  name            String
+  organizer       String?
+  venue           String?
+  venueType       String       @default("Booth")        // 'Booth' or 'Event'
+  startDate       DateTime
+  endDate         DateTime
+  status          EventStatus  @default(PLANNING)
+  profile         EventProfile @default(FULL)           // simple / standard / full
+  description     String?      @db.Text
+  systemCredit    String       @default("AI People Counting")
+  confidential    Boolean      @default(true)
+  showPasserby    Boolean      @default(true)
+
+  // Display config
+  displayHoursStart       Int    @default(9)
+  displayHoursEnd         Int    @default(19)
+  dwellMinSec             Int    @default(0)
+  dwellMaxSec             Int    @default(3600)
+  engagementThresholdSec  Int    @default(60)
+
+  // Sponsor / theme zones (comma-separated for now)
+  sponsorZones    String?
+
+  // Linked customer (master data)
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  // Hierarchy: Event → many Plans (sub-installations)
+  plans           InstallationPlan[]
+
+  // Day-by-day breakdown
+  days            EventDay[]
+  gates           EventGate[]
+  zones           EventZone[]
+  activities      EventActivity[]
+
+  // Reports (multiple versions / regenerations)
+  reports         EventReport[]
+
+  createdById     String?
+  createdBy       User?        @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([startDate])
+  @@index([status])
+  @@index([customerId])
+}
+
+enum EventStatus {
+  PLANNING
+  IN_PROGRESS
+  DATA_COLLECTED
+  REPORT_READY
+  COMPLETED
+  CANCELLED
+}
+
+enum EventProfile {
+  SIMPLE
+  STANDARD
+  FULL
+}
+
+model EventDay {
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  dayNumber   Int                      // 1, 2, 3
+  date        DateTime
+  label       String                   // e.g. "Day 1", "Opening Day"
+  color       String   @default("#1F77B4") // hex color for charts
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([eventId, dayNumber])
+  @@index([eventId])
+}
+
+model EventGate {
+  id        String   @id @default(uuid())
+  eventId   String
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name      String                     // e.g. "Front Gate", "VIP Entrance"
+  gateType  String   @default("ENTRANCE") // ENTRANCE | PASSERBY
+  sortOrder Int      @default(0)
+
+  @@index([eventId])
+}
+
+model EventZone {
+  id         String   @id @default(uuid())
+  eventId    String
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  name       String
+  abbrev     String?                  // short label for charts
+  sortOrder  Int      @default(0)
+
+  @@index([eventId])
+}
+
+model EventActivity {
+  id          String   @id @default(uuid())
+  eventId     String
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  date        DateTime                 // YYYY-MM-DD
+  startTime   String                   // 'HH:MM'
+  endTime     String                   // 'HH:MM'
+  name        String
+  zone        String?                  // optional zone name
+  description String?
+
+  @@index([eventId, date])
+}
+
+model EventReport {
+  id            String              @id @default(uuid())
+  eventId       String
+  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  status        EventReportStatus   @default(QUEUED)
+  profile       String              @default("full")      // snapshot of profile at gen time
+
+  // Files (relative to /app/uploads/events/<eventId>/)
+  rawdataPath   String?                                    // input Excel filename
+  htmlPath      String?                                    // output Dashboard.html
+  xlsxPath      String?                                    // output Dashboard.xlsx
+  htmlSize      Int?
+  xlsxSize      Int?
+
+  // Job tracking
+  queuedAt      DateTime            @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  durationMs    Int?
+
+  // Errors / logs
+  stdout        String?             @db.Text
+  stderr        String?             @db.Text
+  errorMessage  String?
+
+  // Who triggered this
+  triggeredById String?
+  triggeredBy   User?               @relation("EventReportTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@index([eventId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum EventReportStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
 }
 

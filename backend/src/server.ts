@@ -17,6 +17,8 @@ import teamRoutes from './routes/team.routes';
 import commLogRoutes from './routes/communicationLog.routes';
 import photoRoutes from './routes/photo.routes';
 import regionRoutes from './routes/region.routes';
+import eventRoutes from './routes/event.routes';
+import { startEventReportWorker } from './queues/eventReport.queue';
 import provinceRoutes from './routes/province.routes';
 
 import './queues/notification.queue';
@@ -76,6 +78,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/communication-logs', commLogRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/regions', regionRoutes);
+app.use('/api/events', eventRoutes);
 app.use('/api/provinces', provinceRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -96,6 +99,7 @@ server.listen(PORT, () => {
 `);
 
   startScheduler();
+  startEventReportWorker();
 });
 
 process.on('SIGTERM', async () => {
