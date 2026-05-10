@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { eventService } from '../services/event.service';
+import { rawdataFilesService } from '../services/rawdataFiles.service';
 import { eventReportService } from '../services/eventReport.service';
 
 const router = Router();
@@ -18,6 +19,16 @@ const upload = multer({
     cb(ok ? null : new Error('Only .xlsx files are accepted'), ok);
   },
 });
+// Multer for source files (CaptureRecordsDetails-*.xlsx) — multi-file
+const rawdataUpload = multer({
+  dest: '/tmp/event-uploads-multi',
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ok = /\.(xlsx|xlsm)$/i.test(file.originalname);
+    cb(null, ok);
+  },
+});
+
 
 // ──────────────────────────────────────────────────────────────
 // Event CRUD
@@ -183,6 +194,71 @@ router.post(
   },
 );
 
+// ═══════════════════════════════════════════════════════════════
+// Multi-file rawdata source files (CaptureRecordsDetails-*.xlsx)
+// ═══════════════════════════════════════════════════════════════
+
+router.get('/:id/rawdata-files', async (req: Request, res: Response) => {
+  try {
+    const files = await rawdataFilesService.list(req.params.id);
+    res.json({ success: true, data: files });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.post(
+  '/:id/rawdata-files',
+  authorize('ADMIN', 'PROJECT_MANAGER'),
+  rawdataUpload.array('files', 30),
+  async (req: Request, res: Response) => {
+    try {
+      const files = (req.files as Express.Multer.File[]) || [];
+      if (files.length === 0) {
+        res.status(400).json({ success: false, message: 'No files uploaded' });
+        return;
+      }
+      const saved = [];
+      for (const f of files) {
+        const entry = await rawdataFilesService.save(req.params.id, f.path, f.originalname);
+        saved.push(entry);
+      }
+      res.json({ success: true, data: saved });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+);
+
+router.delete('/:id/rawdata-files/:filename',
+  authorize('ADMIN', 'PROJECT_MANAGER'),
+  async (req: Request, res: Response) => {
+    try {
+      const ok = await rawdataFilesService.delete(req.params.id, req.params.filename);
+      if (!ok) {
+        res.status(404).json({ success: false, message: 'File not found' });
+        return;
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+);
+
+router.post('/:id/rawdata-files/clear',
+  authorize('ADMIN', 'PROJECT_MANAGER'),
+  async (req: Request, res: Response) => {
+    try {
+      const removed = await rawdataFilesService.clearAll(req.params.id);
+      res.json({ success: true, data: { removed } });
+    } catch (err: any) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  },
+);
+
+
 router.get('/:id/rawdata/status', async (req: Request, res: Response) => {
   try {
     const has = await eventReportService.hasRawdata(req.params.id);
@@ -195,6 +271,15 @@ router.get('/:id/rawdata/status', async (req: Request, res: Response) => {
 // ──────────────────────────────────────────────────────────────
 // Report generation
 // ──────────────────────────────────────────────────────────────
+
+router.post('/:id/verify', async (req: Request, res: Response) => {
+  try {
+    const result = await eventReportService.verifyEvent(req.params.id);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 router.post('/:id/generate', authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
   try {
@@ -225,6 +310,39 @@ router.get('/reports/:reportId', async (req: Request, res: Response) => {
 });
 
 // ── Serve the latest HTML dashboard ──
+router.get('/reports/:reportId/dashboard.html', async (req: Request, res: Response) => {
+  try {
+    const filepath = await eventReportService.getReportDashboardPath(req.params.reportId, 'html');
+    if (!filepath) {
+      res.status(404).json({ success: false, message: 'Report or dashboard not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.sendFile(filepath, (err: any) => {
+      if (err) res.status(404).send('Dashboard file not on disk');
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/reports/:reportId/dashboard.xlsx', async (req: Request, res: Response) => {
+  try {
+    const filepath = await eventReportService.getReportDashboardPath(req.params.reportId, 'xlsx');
+    if (!filepath) {
+      res.status(404).json({ success: false, message: 'Report or dashboard not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="dashboard-${req.params.reportId}.xlsx"`);
+    res.sendFile(filepath, (err: any) => {
+      if (err) res.status(404).send('Dashboard file not on disk');
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 router.get('/:id/dashboard.html', async (req: Request, res: Response) => {
   try {
     const buf = await eventReportService.readHtml(req.params.id);

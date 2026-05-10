@@ -4,7 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { eventsApi, type EventStatus, STATUS_LABEL, PROFILE_DESC } from '../api/events';
 import { EventStatusBadge } from '../components/events/EventStatusBadge';
 import { RawdataUploader } from '../components/events/RawdataUploader';
+import { RawdataFilesPanel } from '../components/events/RawdataFilesPanel';
+import { EditEventModal } from '../components/events/EditEventModal';
 import { ReportsList } from '../components/events/ReportsList';
+import { EventConfigEditor } from '../components/events/EventConfigEditor';
 import { useToast } from '../components/Toast';
 
 const STATUSES: EventStatus[] = ['PLANNING', 'IN_PROGRESS', 'DATA_COLLECTED', 'REPORT_READY', 'COMPLETED', 'CANCELLED'];
@@ -16,6 +19,7 @@ export function EventDetailPage() {
   const showToast = useToast((s) => s.show);
 
   const [tab, setTab] = useState<'overview' | 'config' | 'plans' | 'reports'>('overview');
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   const { data: event, isLoading } = useQuery({
     queryKey: ['event', id],
@@ -68,7 +72,12 @@ export function EventDetailPage() {
           )}
         </div>
 
-        <h2 className="text-xl font-bold text-gray-900">{event.name}</h2>
+        <div className="flex items-center flex-wrap"><h2 className="text-xl font-bold text-gray-900">{event.name}</h2>
+        <button type="button" onClick={() => setEditModalOpen(true)}
+          className="ml-3 text-xs px-2.5 py-1 border border-gray-300 text-gray-700 rounded hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 inline-flex items-center gap-1 align-middle cursor-pointer"
+          title="Edit event details">
+          ✏️ <span>Edit</span>
+        </button></div>
         <p className="text-sm text-gray-600 mt-1">
           {event.organizer && <span>👤 {event.organizer}</span>}
           {event.venue && <span> · 📍 {event.venue}</span>}
@@ -108,8 +117,9 @@ export function EventDetailPage() {
       {tab === 'config' && <ConfigTab event={event} />}
       {tab === 'plans' && <PlansTab event={event} />}
       {tab === 'reports' && (
-        <ReportsList eventId={event.id} hasRawdata={rawdataStatus?.uploaded || false} />
+        <ReportsList eventId={event.id} hasRawdata={rawdataStatus?.uploaded || false} event={event} />
       )}
+      <EditEventModal event={event} open={editModalOpen} onClose={() => setEditModalOpen(false)} />
     </div>
   );
 }
@@ -152,8 +162,10 @@ function OverviewTab({ event, hasRawdata }: { event: any; hasRawdata: boolean })
 
       <div className="space-y-4">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <h3 className="font-semibold text-sm mb-3">📤 Rawdata</h3>
-          <RawdataUploader eventId={event.id} />
+          <RawdataFilesPanel
+            eventId={event.id}
+            configuredDates={(event.days || []).map((d: any) => (typeof d.date === 'string' ? d.date.slice(0, 10) : new Date(d.date).toISOString().slice(0, 10)))}
+          />
           {hasRawdata && (
             <p className="text-[11px] text-gray-500 mt-2">
               ✅ Ready to generate reports — go to the Reports tab.
@@ -167,78 +179,7 @@ function OverviewTab({ event, hasRawdata }: { event: any; hasRawdata: boolean })
 
 // ─── Config Tab ──────────────────────────────────────────────
 function ConfigTab({ event }: { event: any }) {
-  const days = event.days || [];
-  const gates = event.gates || [];
-  const zones = event.zones || [];
-  const activities = event.activities || [];
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {/* Days */}
-      <Section title={`📅 Days (${days.length})`}>
-        {days.length === 0 ? <Empty /> : (
-          <ul className="text-sm space-y-1">
-            {days.map((d: any) => (
-              <li key={d.id} className="flex items-center gap-2 py-1 px-2 bg-gray-50 rounded">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: d.color }} />
-                <span className="font-mono text-xs text-gray-500 w-20">{d.date.slice(0,10)}</span>
-                <span className="font-medium">{d.label}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Gates */}
-      <Section title={`🚪 Gates (${gates.length})`}>
-        {gates.length === 0 ? <Empty /> : (
-          <ul className="text-sm space-y-1">
-            {gates.map((g: any) => (
-              <li key={g.id} className="flex items-center gap-2 py-1 px-2 bg-gray-50 rounded">
-                <span className={`text-[9px] uppercase px-1.5 py-0.5 rounded ${
-                  g.gateType === 'ENTRANCE' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
-                }`}>{g.gateType}</span>
-                <span>{g.name}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Zones */}
-      <Section title={`📍 Zones (${zones.length})`}>
-        {zones.length === 0 ? <Empty /> : (
-          <ul className="text-sm space-y-1">
-            {zones.map((z: any) => (
-              <li key={z.id} className="flex items-center gap-2 py-1 px-2 bg-gray-50 rounded">
-                <span>{z.name}</span>
-                {z.abbrev && <span className="text-[10px] text-gray-500 font-mono">[{z.abbrev}]</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Activities */}
-      <Section title={`🎯 Activities (${activities.length})`}>
-        {activities.length === 0 ? <Empty /> : (
-          <ul className="text-sm space-y-1">
-            {activities.map((a: any) => (
-              <li key={a.id} className="flex items-center gap-2 py-1 px-2 bg-gray-50 rounded">
-                <span className="font-mono text-[10px] text-gray-500">{a.date.slice(0,10)} {a.startTime}–{a.endTime}</span>
-                <span>{a.name}</span>
-                {a.zone && <span className="text-[10px] text-gray-400">@{a.zone}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      <p className="md:col-span-2 text-xs text-gray-400 text-center mt-2">
-        💡 Inline editing for these collections will be added in M1-D — for now you can adjust via the API.
-      </p>
-    </div>
-  );
+  return <EventConfigEditor event={event} />;
 }
 
 const Section = ({ title, children }: any) => (
@@ -294,6 +235,7 @@ function PlansTab({ event }: { event: any }) {
           ))}
         </ul>
       )}
+
     </div>
   );
 }
