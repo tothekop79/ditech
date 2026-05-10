@@ -20,6 +20,8 @@ import regionRoutes from './routes/region.routes';
 import eventRoutes from './routes/event.routes';
 import { startEventReportWorker } from './queues/eventReport.queue';
 import provinceRoutes from './routes/province.routes';
+import cameraModelRoutes from './routes/cameraModel.routes';
+import installationDesignRoutes from './routes/installationDesign.routes';
 
 import './queues/notification.queue';
 import { startScheduler } from './services/scheduler.service';
@@ -80,6 +82,8 @@ app.use('/api/photos', photoRoutes);
 app.use('/api/regions', regionRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/provinces', provinceRoutes);
+app.use('/api/camera-models', cameraModelRoutes);
+app.use('/api/designs', installationDesignRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err);

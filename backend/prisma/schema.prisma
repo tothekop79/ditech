@@ -7,191 +7,143 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================================
-// User & Auth
-// ============================================================
-
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  password  String
-  fullName  String
-  phone     String?
-  role      UserRole @default(INSTALLER)
-  isActive  Boolean  @default(true)
-
-  teamMemberships TeamMember[]
-  ledTeams        Team[]              @relation("TeamLead")
-  assignedPlans   InstallationPlan[]  @relation("AssignedPlans")
-  createdPlans    InstallationPlan[]  @relation("CreatedPlans")
-  planChanges     PlanStatusHistory[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  recordedComms     PlanCommunicationLog[] @relation("RecordedComms")
-  uploadedPhotos    PlanPhoto[]            @relation("UploadedPhotos")
-  idCard         String?
-  idCardPhotoUrl String?
-  position       String?
-  phoneForDoc    String?
-  province       String?
-  createdDocs Document[] @relation("DocCreatedBy")
-
-  createdEvents              Event[]         @relation("EventCreatedBy")
-  triggeredEventReports      EventReport[]   @relation("EventReportTriggeredBy")
+  id                    String                 @id @default(uuid())
+  email                 String                 @unique
+  password              String
+  fullName              String
+  phone                 String?
+  role                  UserRole               @default(INSTALLER)
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  idCard                String?
+  idCardPhotoUrl        String?
+  phoneForDoc           String?
+  position              String?
+  province              String?
+  createdDocs           Document[]             @relation("DocCreatedBy")
+  createdEvents         Event[]                @relation("EventCreatedBy")
+  triggeredEventReports EventReport[]          @relation("EventReportTriggeredBy")
+  assignedPlans         InstallationPlan[]     @relation("AssignedPlans")
+  createdPlans          InstallationPlan[]     @relation("CreatedPlans")
+  planChanges           PlanStatusHistory[]
+  ledTeams              Team[]                 @relation("TeamLead")
+  teamMemberships       TeamMember[]
+  recordedComms         PlanCommunicationLog[] @relation("RecordedComms")
+  uploadedPhotos        PlanPhoto[]            @relation("UploadedPhotos")
+  // ─── C1.1 BACK-RELATIONS ─── User
+  designsCreated        InstallationDesign[]   @relation("DesignsCreated")
+  designsChecked        InstallationDesign[]   @relation("DesignsChecked")
 }
-
-enum UserRole {
-  ADMIN
-  PROJECT_MANAGER
-  INSTALLER
-  QA
-  CUSTOMER
-}
-
-// ============================================================
-// Master data
-// ============================================================
 
 model Customer {
-  id            String  @id @default(uuid())
-  customerCode  String  @unique
-  customerName  String
-  contactPerson String?
-  contactPhone  String?
-  contactEmail  String?
-  logoUrl       String?
-  isActive      Boolean @default(true)
-
+  id                String             @id @default(uuid())
+  customerCode      String             @unique
+  customerName      String
+  contactPerson     String?
+  contactPhone      String?
+  logoUrl           String?
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  contactEmail      String?
+  events            Event[]
   installationPlans InstallationPlan[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@index([customerCode])
   @@index([isActive])
-
-  events            Event[]
 }
 
 model Department {
-  id             String         @id @default(uuid())
-  departmentCode String         @unique
-  departmentName String
-  departmentType DepartmentType @default(DEPARTMENT_STORE)
-  isActive       Boolean        @default(true)
-
+  id                String             @id @default(uuid())
+  departmentCode    String             @unique
+  departmentName    String
+  departmentType    DepartmentType     @default(DEPARTMENT_STORE)
+  isActive          Boolean            @default(true)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   installationPlans InstallationPlan[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@index([departmentCode])
 }
 
-enum DepartmentType {
-  DEPARTMENT_STORE
-  HYPERMARKET
-  SPECIALTY_STORE
-  SHOPPING_MALL
-  OTHER
-}
-
-// ============================================================
-// Teams
-// ============================================================
-
 model Team {
-  id             String      @id @default(uuid())
-  name           String      @unique
+  id             String             @id @default(uuid())
+  name           String             @unique
   region         StoreRegion
-  dailyCap       Int         @default(1)
+  dailyCap       Int                @default(1)
   leadUserId     String?
-  leadUser       User?       @relation("TeamLead", fields: [leadUserId], references: [id])
   telegramChatId String?
-  isActive       Boolean     @default(true)
-
-  members       TeamMember[]
-  assignedPlans InstallationPlan[] @relation("TeamPlans")
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  assignedPlans  InstallationPlan[] @relation("TeamPlans")
+  leadUser       User?              @relation("TeamLead", fields: [leadUserId], references: [id])
+  members        TeamMember[]
 }
 
 model TeamMember {
   teamId String
-  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   role   String @default("MEMBER")
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([teamId, userId])
 }
 
-// ============================================================
-// Installation Plan (core domain)
-// ============================================================
-
 model InstallationPlan {
-  id            String      @id @default(uuid())
-  customerId    String
-  customer      Customer    @relation(fields: [customerId], references: [id])
-  departmentId  String
-  department    Department  @relation(fields: [departmentId], references: [id])
-
-  storeName     String
-  branchName    String?
-  storeRegion   StoreRegion @default(BANGKOK)
-  // K4 phase 1: new region/province relations (existing storeRegion + province kept)
-  regionId      String?
-  region        Region?     @relation(fields: [regionId], references: [id], onDelete: SetNull)
-  provinceId    String?
-  provinceRel   Province?   @relation(fields: [provinceId], references: [id], onDelete: SetNull)
-  province      String?
-  address       String?
-  contactPerson String?
-  contactPhone  String?
-  contactEmail  String?
-  contactLine   String?
-
-  description   String
-  workScope     WorkScope[]
-  sensorCount   Int         @default(0)
-  sensorModel   String?
-  poeSwitchModel String?
-  durationDays  Int         @default(1)
-  workStartTime String?
-  workEndTime   String?
-
-  readiness     PlanReadiness @default(PENDING)
-  readinessNote String?
-  detail        String?       @db.Text
-  trackingResult String?      @db.Text
-
-  scheduledDate DateTime?
-  completedDate DateTime?
-  planStatus    PlanStatus    @default(DRAFT)
-
-  teamId        String?
-  team          Team?         @relation("TeamPlans", fields: [teamId], references: [id], onDelete: SetNull)
-  assignedById  String?
-  assignedBy    User?         @relation("AssignedPlans", fields: [assignedById], references: [id], onDelete: SetNull)
-  contractorName String?
-
-  createdById   String?
-  createdBy     User?         @relation("CreatedPlans", fields: [createdById], references: [id], onDelete: SetNull)
-
-  statusHistory PlanStatusHistory[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String                 @id @default(uuid())
+  customerId        String
+  departmentId      String
+  storeName         String
+  storeRegion       StoreRegion            @default(BANGKOK)
+  province          String?
+  address           String?
+  contactPerson     String?
+  contactPhone      String?
+  description       String
+  workScope         WorkScope[]
+  sensorCount       Int                    @default(0)
+  durationDays      Int                    @default(1)
+  readiness         PlanReadiness          @default(PENDING)
+  readinessNote     String?
+  detail            String?
+  trackingResult    String?
+  scheduledDate     DateTime?
+  completedDate     DateTime?
+  planStatus        PlanStatus             @default(DRAFT)
+  teamId            String?
+  assignedById      String?
+  contractorName    String?
+  createdById       String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  branchName        String?
+  poeSwitchModel    String?
+  sensorModel       String?
+  contactEmail      String?
+  contactLine       String?
+  workEndTime       String?
+  workStartTime     String?
+  provinceId        String?
+  regionId          String?
+  eventId           String?
+  documents         Document[]
+  assignedBy        User?                  @relation("AssignedPlans", fields: [assignedById], references: [id])
+  createdBy         User?                  @relation("CreatedPlans", fields: [createdById], references: [id])
+  customer          Customer               @relation(fields: [customerId], references: [id])
+  department        Department             @relation(fields: [departmentId], references: [id])
+  event             Event?                 @relation(fields: [eventId], references: [id])
+  provinceRel       Province?              @relation(fields: [provinceId], references: [id])
+  region            Region?                @relation(fields: [regionId], references: [id])
+  team              Team?                  @relation("TeamPlans", fields: [teamId], references: [id])
+  statusHistory     PlanStatusHistory[]
   communicationLogs PlanCommunicationLog[]
   photos            PlanPhoto[]
-
-
-  // M1: Event hierarchy
-  eventId       String?
-  event         Event?      @relation(fields: [eventId], references: [id], onDelete: SetNull)
+  // ─── C1.1 BACK-RELATIONS ─── InstallationPlan
+  designs           InstallationDesign[]   @relation("PlanDesigns")
 
   @@index([customerId])
   @@index([departmentId])
@@ -202,8 +154,296 @@ model InstallationPlan {
   @@index([regionId])
   @@index([provinceId])
   @@index([teamId])
-  documents Document[]
   @@index([eventId])
+}
+
+model PlanStatusHistory {
+  id           String           @id @default(uuid())
+  planId       String
+  fieldChanged String
+  oldValue     String?
+  newValue     String
+  changedById  String?
+  changedAt    DateTime         @default(now())
+  note         String?
+  changedBy    User?            @relation(fields: [changedById], references: [id])
+  plan         InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([changedAt])
+}
+
+model NotificationRule {
+  id               String              @id @default(uuid())
+  name             String
+  description      String?
+  enabled          Boolean             @default(true)
+  trigger          NotificationTrigger
+  triggerTime      String?
+  triggerDay       String?
+  triggerCondition String?
+  daysAhead        Int?
+  recipients       String[]
+  templateBody     String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  logs             NotificationLog[]
+}
+
+model NotificationLog {
+  id            String             @id @default(uuid())
+  ruleId        String?
+  recipient     String
+  channel       String             @default("TELEGRAM")
+  subject       String?
+  body          String
+  attachmentUrl String?
+  status        NotificationStatus @default(PENDING)
+  errorMessage  String?
+  sentAt        DateTime?
+  createdAt     DateTime           @default(now())
+  rule          NotificationRule?  @relation(fields: [ruleId], references: [id])
+
+  @@index([ruleId])
+  @@index([status])
+  @@index([sentAt])
+}
+
+model PlanCommunicationLog {
+  id            String           @id @default(uuid())
+  planId        String           @map("plan_id")
+  channel       String
+  direction     String
+  contactedAt   DateTime         @default(now()) @map("contacted_at")
+  contactPerson String?          @map("contact_person")
+  summary       String
+  outcome       String?
+  recordedById  String?          @map("recorded_by_id")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  plan          InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  recordedBy    User?            @relation("RecordedComms", fields: [recordedById], references: [id])
+
+  @@index([planId])
+  @@map("plan_communication_logs")
+}
+
+model PlanPhoto {
+  id           String           @id @default(uuid())
+  planId       String           @map("plan_id")
+  category     String
+  caption      String?
+  filename     String
+  storagePath  String           @map("storage_path")
+  mimeType     String           @map("mime_type")
+  fileSize     Int              @map("file_size")
+  uploadedById String?          @map("uploaded_by_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  plan         InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  uploadedBy   User?            @relation("UploadedPhotos", fields: [uploadedById], references: [id])
+
+  @@index([planId])
+  @@map("plan_photos")
+}
+
+model Document {
+  id                  String           @id @default(uuid())
+  planId              String
+  docType             DocType
+  docNumber           String           @unique
+  payload             Json
+  status              DocStatus        @default(DRAFT)
+  createdById         String?
+  finalizedAt         DateTime?
+  signedAt            DateTime?
+  signedByName        String?
+  pdfUrl              String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  notes               String?
+  poeCount            Int?
+  workEndTime         String?
+  workStartTime       String?
+  equipmentList       Json?
+  handoverChecklist   Json?
+  preInstallChecklist Json?
+  workingChecklist    Json?
+  createdBy           User?            @relation("DocCreatedBy", fields: [createdById], references: [id])
+  plan                InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@index([docType])
+  @@index([status])
+}
+
+model DocumentSequence {
+  date    String @id
+  lastSeq Int
+}
+
+model Region {
+  id        String             @id @default(uuid())
+  code      String             @unique
+  name      String
+  nameThai  String
+  sortOrder Int                @default(0)
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  plans     InstallationPlan[]
+  provinces Province[]
+
+  @@index([code])
+}
+
+model Province {
+  id        String             @id @default(uuid())
+  code      String             @unique
+  name      String
+  nameThai  String
+  regionId  String
+  isActive  Boolean            @default(true)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  plans     InstallationPlan[]
+  region    Region             @relation(fields: [regionId], references: [id])
+
+  @@index([regionId])
+  @@index([code])
+}
+
+model Event {
+  id                     String               @id @default(uuid())
+  name                   String
+  organizer              String?
+  venue                  String?
+  venueType              String               @default("Booth")
+  startDate              DateTime
+  endDate                DateTime
+  status                 EventStatus          @default(PLANNING)
+  profile                EventProfile         @default(FULL)
+  description            String?
+  systemCredit           String               @default("AI People Counting")
+  confidential           Boolean              @default(true)
+  showPasserby           Boolean              @default(true)
+  displayHoursStart      Int                  @default(9)
+  displayHoursEnd        Int                  @default(19)
+  dwellMinSec            Int                  @default(0)
+  dwellMaxSec            Int                  @default(3600)
+  engagementThresholdSec Int                  @default(60)
+  sponsorZones           String?
+  customerId             String?
+  createdById            String?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  createdBy              User?                @relation("EventCreatedBy", fields: [createdById], references: [id])
+  customer               Customer?            @relation(fields: [customerId], references: [id])
+  activities             EventActivity[]
+  days                   EventDay[]
+  gates                  EventGate[]
+  reports                EventReport[]
+  zones                  EventZone[]
+  plans                  InstallationPlan[]
+  // ─── C1.1 BACK-RELATIONS ─── Event
+  designs                InstallationDesign[] @relation("EventDesigns")
+
+  @@index([startDate])
+  @@index([status])
+  @@index([customerId])
+}
+
+model EventDay {
+  id        String   @id @default(uuid())
+  eventId   String
+  dayNumber Int
+  date      DateTime
+  label     String
+  color     String   @default("#1F77B4")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, dayNumber])
+  @@index([eventId])
+}
+
+model EventGate {
+  id        String @id @default(uuid())
+  eventId   String
+  name      String
+  gateType  String @default("ENTRANCE")
+  sortOrder Int    @default(0)
+  event     Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model EventZone {
+  id        String  @id @default(uuid())
+  eventId   String
+  name      String
+  abbrev    String?
+  sortOrder Int     @default(0)
+  event     Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+model EventActivity {
+  id          String   @id @default(uuid())
+  eventId     String
+  date        DateTime
+  startTime   String
+  endTime     String
+  name        String
+  zone        String?
+  description String?
+  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, date])
+}
+
+model EventReport {
+  id            String            @id @default(uuid())
+  eventId       String
+  status        EventReportStatus @default(QUEUED)
+  profile       String            @default("full")
+  rawdataPath   String?
+  htmlPath      String?
+  xlsxPath      String?
+  htmlSize      Int?
+  xlsxSize      Int?
+  queuedAt      DateTime          @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  durationMs    Int?
+  stdout        String?
+  stderr        String?
+  errorMessage  String?
+  triggeredById String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  triggeredBy   User?             @relation("EventReportTriggeredBy", fields: [triggeredById], references: [id])
+
+  @@index([eventId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+enum UserRole {
+  ADMIN
+  PROJECT_MANAGER
+  INSTALLER
+  QA
+  CUSTOMER
+}
+
+enum DepartmentType {
+  DEPARTMENT_STORE
+  HYPERMARKET
+  SPECIALTY_STORE
+  SHOPPING_MALL
+  OTHER
 }
 
 enum StoreRegion {
@@ -236,47 +476,6 @@ enum PlanStatus {
   CANCELLED
 }
 
-model PlanStatusHistory {
-  id           String           @id @default(uuid())
-  planId       String
-  plan         InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  fieldChanged String
-  oldValue     String?
-  newValue     String
-
-  changedById  String?
-  changedBy    User?            @relation(fields: [changedById], references: [id], onDelete: SetNull)
-  changedAt    DateTime         @default(now())
-  note         String?
-
-  @@index([planId])
-  @@index([changedAt])
-}
-
-// ============================================================
-// Notifications (Phase 5)
-// ============================================================
-
-model NotificationRule {
-  id               String              @id @default(uuid())
-  name             String
-  description      String?
-  enabled          Boolean             @default(true)
-  trigger          NotificationTrigger
-  triggerTime      String?
-  triggerDay       String?
-  triggerCondition String?
-  daysAhead        Int?
-  recipients       String[]
-  templateBody     String?             @db.Text
-
-  logs             NotificationLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 enum NotificationTrigger {
   DAILY_AT
   EVENING_DAY_BEFORE
@@ -293,105 +492,10 @@ enum NotificationTrigger {
   EVENT_REPORT_READY
 }
 
-model NotificationLog {
-  id            String             @id @default(uuid())
-  ruleId        String?
-  rule          NotificationRule?  @relation(fields: [ruleId], references: [id], onDelete: SetNull)
-  recipient     String
-  channel       String             @default("TELEGRAM")
-  subject       String?
-  body          String             @db.Text
-  attachmentUrl String?
-  status        NotificationStatus @default(PENDING)
-  errorMessage  String?
-  sentAt        DateTime?
-  createdAt     DateTime           @default(now())
-
-  @@index([ruleId])
-  @@index([status])
-  @@index([sentAt])
-}
-
 enum NotificationStatus {
   PENDING
   SENT
   FAILED
-}
-
-model PlanCommunicationLog {
-  id            String   @id @default(uuid())
-  planId        String   @map("plan_id")
-  plan          InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  channel       String   // PHONE, EMAIL, LINE, TELEGRAM, ON_SITE, OTHER
-  direction     String   // INBOUND, OUTBOUND
-  contactedAt   DateTime @default(now()) @map("contacted_at")
-  contactPerson String?  @map("contact_person")
-  summary       String   @db.Text
-  outcome       String?  // CONFIRMED, PENDING_RESPONSE, RESCHEDULED, ISSUE, NO_ANSWER
-
-  recordedById  String?  @map("recorded_by_id")
-  recordedBy    User?    @relation("RecordedComms", fields: [recordedById], references: [id], onDelete: SetNull)
-
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  @@index([planId])
-  @@map("plan_communication_logs")
-}
-
-model PlanPhoto {
-  id          String   @id @default(uuid())
-  planId      String   @map("plan_id")
-  plan        InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-
-  category    String   // BEFORE, DURING, AFTER, EQUIPMENT, ISSUE, HANDOVER, OTHER
-  caption     String?
-  filename    String
-  storagePath String   @map("storage_path")
-  mimeType    String   @map("mime_type")
-  fileSize    Int      @map("file_size")
-
-  uploadedById String? @map("uploaded_by_id")
-  uploadedBy   User?   @relation("UploadedPhotos", fields: [uploadedById], references: [id], onDelete: SetNull)
-
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  @@index([planId])
-  @@map("plan_photos")
-}
-
-// ============================================================
-// Documents (Work Permit + Installation Confirmation)
-// ============================================================
-
-model Document {
-  id            String      @id @default(uuid())
-  planId        String
-  plan          InstallationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
-  docType       DocType
-  docNumber     String      @unique
-  payload       Json
-  status        DocStatus   @default(DRAFT)
-  createdById   String?
-  createdBy     User?       @relation("DocCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  finalizedAt   DateTime?
-  signedAt      DateTime?
-  signedByName  String?
-  pdfUrl        String?
-  workStartTime String?
-  workEndTime   String?
-  notes         String?    @db.Text
-  poeCount      Int?
-  equipmentList Json?
-  preInstallChecklist  Json?
-  workingChecklist     Json?
-  handoverChecklist    Json?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([planId])
-  @@index([docType])
-  @@index([status])
 }
 
 enum DocType {
@@ -403,110 +507,6 @@ enum DocStatus {
   DRAFT
   FINALIZED
   SIGNED
-}
-
-model DocumentSequence {
-  date    String  @id
-  lastSeq Int
-}
-
-// ============================================================
-// Region & Province (master data — Apr 30, 2026)
-// 7 operational regions + 77 provinces of Thailand.
-// ============================================================
-
-model Region {
-  id        String   @id @default(uuid())
-  code      String   @unique  // BANGKOK, CENTRAL, NORTH, NORTHEAST, EAST, SOUTH, WEST
-  name      String              // English name
-  nameThai  String              // Thai name
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-
-  provinces Province[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([code])
-
-  plans     InstallationPlan[]
-}
-
-model Province {
-  id        String   @id @default(uuid())
-  code      String   @unique  // BANGKOK, CHIANG_MAI, KHON_KAEN, ...
-  name      String              // English name
-  nameThai  String              // Thai name
-  regionId  String
-  region    Region   @relation(fields: [regionId], references: [id], onDelete: Restrict)
-  isActive  Boolean  @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([regionId])
-  @@index([code])
-
-  plans     InstallationPlan[]
-}
-
-// ============================================================
-// Event Reports Module (M1)
-// ============================================================
-// Add this section to backend/prisma/schema.prisma
-// (deploy script will paste it just before "model DocumentSequence")
-
-model Event {
-  id              String       @id @default(uuid())
-  name            String
-  organizer       String?
-  venue           String?
-  venueType       String       @default("Booth")        // 'Booth' or 'Event'
-  startDate       DateTime
-  endDate         DateTime
-  status          EventStatus  @default(PLANNING)
-  profile         EventProfile @default(FULL)           // simple / standard / full
-  description     String?      @db.Text
-  systemCredit    String       @default("AI People Counting")
-  confidential    Boolean      @default(true)
-  showPasserby    Boolean      @default(true)
-
-  // Display config
-  displayHoursStart       Int    @default(9)
-  displayHoursEnd         Int    @default(19)
-  dwellMinSec             Int    @default(0)
-  dwellMaxSec             Int    @default(3600)
-  engagementThresholdSec  Int    @default(60)
-
-  // Sponsor / theme zones (comma-separated for now)
-  sponsorZones    String?
-
-  // Linked customer (master data)
-  customerId      String?
-  customer        Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  // Hierarchy: Event → many Plans (sub-installations)
-  plans           InstallationPlan[]
-
-  // Day-by-day breakdown
-  days            EventDay[]
-  gates           EventGate[]
-  zones           EventZone[]
-  activities      EventActivity[]
-
-  // Reports (multiple versions / regenerations)
-  reports         EventReport[]
-
-  createdById     String?
-  createdBy       User?        @relation("EventCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  @@index([startDate])
-  @@index([status])
-  @@index([customerId])
 }
 
 enum EventStatus {
@@ -524,96 +524,6 @@ enum EventProfile {
   FULL
 }
 
-model EventDay {
-  id          String   @id @default(uuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  dayNumber   Int                      // 1, 2, 3
-  date        DateTime
-  label       String                   // e.g. "Day 1", "Opening Day"
-  color       String   @default("#1F77B4") // hex color for charts
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@unique([eventId, dayNumber])
-  @@index([eventId])
-}
-
-model EventGate {
-  id        String   @id @default(uuid())
-  eventId   String
-  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name      String                     // e.g. "Front Gate", "VIP Entrance"
-  gateType  String   @default("ENTRANCE") // ENTRANCE | PASSERBY
-  sortOrder Int      @default(0)
-
-  @@index([eventId])
-}
-
-model EventZone {
-  id         String   @id @default(uuid())
-  eventId    String
-  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  name       String
-  abbrev     String?                  // short label for charts
-  sortOrder  Int      @default(0)
-
-  @@index([eventId])
-}
-
-model EventActivity {
-  id          String   @id @default(uuid())
-  eventId     String
-  event       Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  date        DateTime                 // YYYY-MM-DD
-  startTime   String                   // 'HH:MM'
-  endTime     String                   // 'HH:MM'
-  name        String
-  zone        String?                  // optional zone name
-  description String?
-
-  @@index([eventId, date])
-}
-
-model EventReport {
-  id            String              @id @default(uuid())
-  eventId       String
-  event         Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
-
-  status        EventReportStatus   @default(QUEUED)
-  profile       String              @default("full")      // snapshot of profile at gen time
-
-  // Files (relative to /app/uploads/events/<eventId>/)
-  rawdataPath   String?                                    // input Excel filename
-  htmlPath      String?                                    // output Dashboard.html
-  xlsxPath      String?                                    // output Dashboard.xlsx
-  htmlSize      Int?
-  xlsxSize      Int?
-
-  // Job tracking
-  queuedAt      DateTime            @default(now())
-  startedAt     DateTime?
-  completedAt   DateTime?
-  durationMs    Int?
-
-  // Errors / logs
-  stdout        String?             @db.Text
-  stderr        String?             @db.Text
-  errorMessage  String?
-
-  // Who triggered this
-  triggeredById String?
-  triggeredBy   User?               @relation("EventReportTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
-
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-
-  @@index([eventId])
-  @@index([status])
-  @@index([createdAt])
-}
-
 enum EventReportStatus {
   QUEUED
   RUNNING
@@ -622,3 +532,195 @@ enum EventReportStatus {
   CANCELLED
 }
 
+// ═══════════════════════════════════════════════════
+// Coverage Simulator — Phase C1.1
+// ═══════════════════════════════════════════════════
+
+//   Used across designs (one model = many sensor placements).
+// ─────────────────────────────────────────────────────────────────
+model CameraModel {
+  id String @id @default(uuid())
+
+  brand     String // 'Vionvision' | 'Hikvision' | 'Other'
+  modelName String // 'G6', 'G5', 'DS-2CD6425G0', etc.
+  variant   String? // 'White' | 'Black' | null
+
+  displayName String // computed: "Vionvision G6 (White)"
+
+  // Coverage table — array of {height, width, depth} rows
+  // Used to interpolate coverage rect at any mounting height
+  coverageTable Json // CoverageRow[]
+
+  // Specs
+  minHeight   Float   @default(2.5)
+  maxHeight   Float   @default(4.6)
+  resolution  String? // '3840x2160@25fps'
+  powerSupply String? // 'PoE / DC12V'
+  notes       String? @db.Text
+
+  // Function compatibility (which sensor functions can use this model)
+  // ['entrance', 'engagement', 'heatmap', 'cctv', 'passerby']
+  supportedFunctions String[] @default(["entrance", "engagement", "heatmap"])
+
+  // Visual
+  imageUrl  String? // uploaded camera image (per model, not per sensor)
+  iconColor String? // hex for symbol display, e.g. "#3b82f6"
+
+  isActive Boolean @default(true)
+  isSystem Boolean @default(false) // true for built-in (G5/G6/Hikvision)
+
+  // Reverse relation
+  sensors SensorPlacement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([brand, modelName, variant])
+  @@index([brand, modelName])
+  @@index([isActive])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// InstallationDesign — one design per plan/event (or standalone)
+//   Holds floor plan + sensors + zones + calculated coverage stats.
+// ─────────────────────────────────────────────────────────────────
+model InstallationDesign {
+  id String @id @default(uuid())
+
+  // Optional links — one design can be tied to a plan, event, both, or neither
+  planId  String?
+  plan    InstallationPlan? @relation("PlanDesigns", fields: [planId], references: [id], onDelete: SetNull)
+  eventId String?
+  event   Event?            @relation("EventDesigns", fields: [eventId], references: [id], onDelete: SetNull)
+
+  // Site info
+  siteName     String
+  storeType    String? // 'department_store' | 'shopping_mall' | 'event_booth' | etc
+  designNumber String? // 'Design 01', auto-incremented per plan/event
+  version      String  @default("v1.0")
+
+  // Floor plan
+  floorPlanUrl    String? // uploaded PNG/JPG path
+  floorPlanWidth  Int? // px (image natural size)
+  floorPlanHeight Int? // px
+  ceilingHeight   Float   @default(3.5)
+  entranceHeight  Float? // entrance opening height in m (for obstruction calc)
+  entranceWidth   Float? // entrance opening width in m
+  scalePxPerMeter Float   @default(20) // 20 px = 1m, i.e. 1px = 0.05m default
+
+  // People involved
+  designerId  String?
+  designer    User?   @relation("DesignsCreated", fields: [designerId], references: [id], onDelete: SetNull)
+  checkedById String?
+  checkedBy   User?   @relation("DesignsChecked", fields: [checkedById], references: [id], onDelete: SetNull)
+
+  // Calculated coverage stats (computed from sensors + zones)
+  entranceCoveragePercent   Float?
+  engagementCoveragePercent Float?
+  heatmapCoveragePercent    Float?
+  overallStatus             String? // 'PASS' | 'WARNING' | 'FAIL'
+  recommendations           Json? // string[] — auto-generated suggestions
+
+  // Notes
+  installationNote String? @db.Text
+
+  // Relations
+  sensors SensorPlacement[]
+  zones   CoverageZone[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([planId])
+  @@index([eventId])
+  @@index([overallStatus])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SensorPlacement — one sensor placed on the floor plan
+// ─────────────────────────────────────────────────────────────────
+model SensorPlacement {
+  id String @id @default(uuid())
+
+  designId String
+  design   InstallationDesign @relation(fields: [designId], references: [id], onDelete: Cascade)
+
+  cameraModelId String
+  cameraModel   CameraModel @relation(fields: [cameraModelId], references: [id])
+
+  sensorName   String // 'Sensor1' (user editable, not unique globally)
+  functionType String // 'entrance' | 'engagement' | 'heatmap' | 'cctv' | 'passerby' | 'zone'
+  mountingType String // 'embedded' | 'surface' | 'bracket' | 'tilt_bracket'
+
+  // Position on floor plan (px)
+  x              Float
+  y              Float
+  rotation       Float @default(0) // yaw in degrees, 0 = up
+  mountingHeight Float @default(3.5)
+  tiltAngle      Float @default(0) // pitch tilt for bracket mount
+
+  // Coverage rectangle (auto from model+height, or manually overridden)
+  coverageWidth    Float // m
+  coverageDepth    Float // m
+  coverageOverride Boolean @default(false)
+  // anchorMode: where the sensor sits relative to its coverage rect
+  //   'center'    — sensor at center of rect (top-down camera, standard)
+  //   'back_edge' — sensor at back of rect (looking forward, e.g. tilted)
+  //   'front_edge'— sensor at front of rect
+  anchorMode       String  @default("center")
+
+  // Obstruction check (entrance sensors only)
+  obstructionData Json? // { ceilingHeight, camHeight, obstrDrop, camIn, targetOut, targetHeight, margin, type }
+  obstructionPass Boolean?
+  obstructionNote String?
+
+  // Display
+  showAsImage Boolean @default(false) // toggle: image overlay vs symbol dot
+
+  // Status
+  status String  @default("PASS") // 'PASS' | 'WARNING' | 'FAIL'
+  note   String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([designId])
+  @@index([cameraModelId])
+  @@index([functionType])
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CoverageZone — a region on the floor plan to evaluate coverage against
+//   Examples:
+//     entrance_line  — line drawn across door opening (people-counting target)
+//     engagement_area — polygon around a display table or product zone
+//     heatmap_area   — walking area for store-wide heatmap
+//     walking_area   — overall walkable floor (default = full floor)
+//     obstruction    — area to exclude (pillars, fixtures)
+// ─────────────────────────────────────────────────────────────────
+model CoverageZone {
+  id String @id @default(uuid())
+
+  designId String
+  design   InstallationDesign @relation(fields: [designId], references: [id], onDelete: Cascade)
+
+  zoneType String // see enum-like values in comment above
+  name     String? // user label, e.g. "Front entrance line"
+
+  // Geometry — exactly one of these must be set
+  linePoints Json? // [{x, y}, {x, y}] for entrance_line
+  polygon    Json? // [{x, y}, {x, y}, ...] for areas
+
+  // Calculated
+  coveragePercent Float? // % of zone covered by sensors
+  status          String? // 'PASS' | 'WARNING' | 'FAIL'
+
+  // Optional metadata
+  metadata Json? // free-form, e.g. { lineWidthM: 8.6 }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([designId])
+  @@index([zoneType])
+}
