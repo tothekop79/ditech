@@ -290,6 +290,7 @@ enum NotificationTrigger {
   TEAM_CHANGED
   PLAN_CREATED
   PHOTO_UPLOADED
+  EVENT_REPORT_READY
 }
 
 model NotificationLog {

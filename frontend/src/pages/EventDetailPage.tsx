@@ -6,6 +6,7 @@ import { EventStatusBadge } from '../components/events/EventStatusBadge';
 import { RawdataUploader } from '../components/events/RawdataUploader';
 import { RawdataFilesPanel } from '../components/events/RawdataFilesPanel';
 import { EditEventModal } from '../components/events/EditEventModal';
+import { LinkExistingPlanModal } from '../components/events/LinkExistingPlanModal';
 import { ReportsList } from '../components/events/ReportsList';
 import { EventConfigEditor } from '../components/events/EventConfigEditor';
 import { useToast } from '../components/Toast';
@@ -200,10 +201,17 @@ const Field = ({ label, children }: any) => (
 
 // ─── Plans Tab ────────────────────────────────────────────────
 function PlansTab({ event }: { event: any }) {
+  const [linkExistingOpen, setLinkExistingOpen] = useState(false);
   const plans = event.plans || [];
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg">
+      <div className="flex justify-end mb-2">
+        <button type="button" onClick={() => setLinkExistingOpen(true)}
+          className="text-xs px-3 py-1.5 border border-blue-500 text-blue-700 rounded hover:bg-blue-50 bg-white">
+          📎 Link existing plan
+        </button>
+      </div>
       <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <h3 className="font-semibold text-sm">🔧 Linked installation plans</h3>
         <span className="text-xs text-gray-400">{plans.length} plan{plans.length !== 1 ? 's' : ''}</span>
@@ -236,6 +244,7 @@ function PlansTab({ event }: { event: any }) {
         </ul>
       )}
 
+      <LinkExistingPlanModal eventId={event.id} eventName={event.name} open={linkExistingOpen} onClose={() => setLinkExistingOpen(false)} />
     </div>
   );
 }

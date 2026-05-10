@@ -6,6 +6,9 @@ import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { eventService } from '../services/event.service';
 import { rawdataFilesService } from '../services/rawdataFiles.service';
 import { eventReportService } from '../services/eventReport.service';
+import { PrismaClient } from '@prisma/client';
+const prisma = new PrismaClient();
+
 
 const router = Router();
 router.use(authenticate);
@@ -38,6 +41,40 @@ router.get('/', async (req: Request, res: Response) => {
   try {
     const list = await eventService.list(req.query as any);
     res.json({ success: true, data: list });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/:id/available-plans', async (req: Request, res: Response) => {
+  try {
+    const plans = await prisma.installationPlan.findMany({
+      where: { eventId: null },
+      select: {
+        id: true, storeName: true, branchName: true, planStatus: true, scheduledDate: true,
+        customer: { select: { customerName: true, customerCode: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    res.json({ success: true, data: plans });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+router.get('/:id/linked-plans', async (req: Request, res: Response) => {
+  try {
+    const plans = await prisma.installationPlan.findMany({
+      where: { eventId: req.params.id },
+      select: {
+        id: true, storeName: true, branchName: true, planStatus: true, readiness: true,
+        scheduledDate: true, durationDays: true,
+        customer: { select: { customerName: true, customerCode: true } },
+      },
+      orderBy: { scheduledDate: 'asc' },
+    });
+    res.json({ success: true, data: plans });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err.message });
   }

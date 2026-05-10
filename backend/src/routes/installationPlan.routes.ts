@@ -118,6 +118,9 @@ router.post('/', authorize('ADMIN', 'PROJECT_MANAGER'), validate(createPlanSchem
 router.put('/:id', authorize('ADMIN', 'PROJECT_MANAGER', 'INSTALLER'), validate(updatePlanSchema), (req, res) => ctrl.update(req, res));
 router.patch('/:id/reschedule', authorize('ADMIN', 'PROJECT_MANAGER'), validate(rescheduleSchema), (req, res) => ctrl.reschedule(req, res));
 router.delete('/:id', authorize('ADMIN'), (req, res) => ctrl.delete(req, res));
+router.post('/:id/link-event', authorize('ADMIN', 'PROJECT_MANAGER'), (req, res) => ctrl.linkEvent(req, res));
+router.post('/:id/unlink-event', authorize('ADMIN', 'PROJECT_MANAGER'), (req, res) => ctrl.unlinkEvent(req, res));
+
 router.post('/bulk-import/validate', authorize('ADMIN', 'PROJECT_MANAGER'), validate(bulkImportSchema), (req, res) => ctrl.validateImport(req, res));
 router.post('/bulk-import', authorize('ADMIN', 'PROJECT_MANAGER'), validate(bulkImportSchema), (req, res) => ctrl.bulkImport(req, res));
 

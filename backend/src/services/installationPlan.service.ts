@@ -8,6 +8,7 @@ export class InstallationPlanService {
     customer: { select: { id: true, customerCode: true, customerName: true, logoUrl: true } },
     department: { select: { id: true, departmentCode: true, departmentName: true } },
     team: { select: { id: true, name: true, region: true } },
+    event: { select: { id: true, name: true, startDate: true, endDate: true, venue: true, organizer: true, profile: true, status: true } },
   };
 
   async create(data: CreateInstallationPlanDTO, createdById?: string) {
@@ -362,6 +363,98 @@ export class InstallationPlanService {
     import('../queues/notification.queue').then(({ enqueueByTrigger }) => {
       enqueueByTrigger(trigger, payload).catch(err => console.error('Notify enqueue failed:', err));
     }).catch(() => {});
+  }
+
+  async linkToEvent(planId: string, eventId: string, inheritFields = true, changedById?: string) {
+    const event = await prisma.event.findUnique({
+      where: { id: eventId },
+      include: { customer: { select: { id: true } } },
+    });
+    if (!event) throw new Error('Event not found');
+
+    const plan = await prisma.installationPlan.findUnique({ where: { id: planId } });
+    if (!plan) throw new Error('Plan not found');
+
+    const updateData: any = { eventId };
+
+    if (inheritFields) {
+      // Inherit dates: scheduledDate ← event.startDate, durationDays ← span
+      updateData.scheduledDate = event.startDate;
+      const spanMs = event.endDate.getTime() - event.startDate.getTime();
+      updateData.durationDays = Math.max(1, Math.round(spanMs / 86400000) + 1);
+
+      // Inherit venue / contact / customer
+      if (event.venue) updateData.address = event.venue;
+      if (event.organizer) updateData.contactPerson = event.organizer;
+      if (event.customer?.id) updateData.customerId = event.customer.id;
+
+      // Description: keep existing if non-empty, else use event name
+      if (!plan.description || plan.description.trim() === '') {
+        updateData.description = event.name;
+      }
+    }
+
+    const updated = await prisma.installationPlan.update({
+      where: { id: planId },
+      data: updateData,
+      include: {
+        event: { select: { id: true, name: true, startDate: true, endDate: true, venue: true, organizer: true } },
+      },
+    });
+
+    // Status history entry
+    if (changedById) {
+      // Look up old event name if there was one
+      let oldName: string | null = null;
+      if (plan.eventId) {
+        const oldEvent = await prisma.event.findUnique({
+          where: { id: plan.eventId },
+          select: { name: true },
+        });
+        oldName = oldEvent?.name ?? null;
+      }
+      await prisma.planStatusHistory.create({
+        data: {
+          planId,
+          fieldChanged: 'event',
+          oldValue: oldName,
+          newValue: event.name,
+          changedById,
+          note: inheritFields ? 'Linked with field inheritance' : 'Linked to event',
+        },
+      });
+    }
+    return updated;
+  }
+
+  async unlinkFromEvent(planId: string, changedById?: string) {
+    const plan = await prisma.installationPlan.findUnique({ where: { id: planId } });
+    if (!plan) throw new Error('Plan not found');
+    if (!plan.eventId) throw new Error('Plan is not linked to any event');
+
+    const updated = await prisma.installationPlan.update({
+      where: { id: planId },
+      data: { eventId: null },
+    });
+
+    if (changedById) {
+      // Look up old event name
+      const oldEvent = plan.eventId ? await prisma.event.findUnique({
+        where: { id: plan.eventId },
+        select: { name: true },
+      }) : null;
+      await prisma.planStatusHistory.create({
+        data: {
+          planId,
+          fieldChanged: 'event',
+          oldValue: oldEvent?.name ?? null,
+          newValue: '',
+          changedById,
+          note: 'Unlinked from event',
+        },
+      });
+    }
+    return updated;
   }
 }
 

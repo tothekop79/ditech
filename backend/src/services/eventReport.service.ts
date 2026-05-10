@@ -51,6 +51,81 @@ export const eventReportService = {
       xlsxSize: xStat.size,
     };
   },
+  async dispatchEventReportReady(eventId: string, reportId: string): Promise<void> {
+    try {
+      const rules = await prisma.notificationRule.findMany({
+        where: { trigger: 'EVENT_REPORT_READY' as any, enabled: true },
+      });
+      if (rules.length === 0) return;
+
+      const event = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { id: true, name: true, organizer: true, venue: true, startDate: true, endDate: true, profile: true },
+      });
+      const report = await prisma.eventReport.findUnique({
+        where: { id: reportId },
+        select: { id: true, profile: true, durationMs: true, htmlSize: true, xlsxSize: true },
+      });
+      if (!event || !report) return;
+
+      const dashboardUrl = `${process.env.APP_URL || 'http://192.168.1.120:3000'}/events/${event.id}`;
+      const durationSec = ((report.durationMs ?? 0) / 1000).toFixed(1);
+      const dateRange = `${event.startDate.toISOString().slice(0, 10)} → ${event.endDate.toISOString().slice(0, 10)}`;
+
+      // Build default message (can be overridden by rule.templateBody)
+      const defaultMsg = `📊 *Event Report Ready*
+
+🎪 *${event.name}*
+${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${event.venue}\n` : ''}📅 ${dateRange}
+⚙️ Profile: \`${report.profile}\`
+⏱ Duration: ${durationSec}s
+📄 HTML: ${((report.htmlSize ?? 0) / 1024).toFixed(0)} KB
+📊 XLSX: ${((report.xlsxSize ?? 0) / 1024).toFixed(0)} KB
+
+🌐 [Open dashboard](${dashboardUrl})`;
+
+      const { telegramService } = await import('./telegram.service');
+
+      for (const rule of rules) {
+        const text = rule.templateBody && rule.templateBody.trim()
+          ? rule.templateBody
+              .replace(/\{\{event\.name\}\}/g, event.name)
+              .replace(/\{\{event\.organizer\}\}/g, event.organizer || '')
+              .replace(/\{\{event\.venue\}\}/g, event.venue || '')
+              .replace(/\{\{report\.profile\}\}/g, report.profile)
+              .replace(/\{\{report\.durationSec\}\}/g, durationSec)
+              .replace(/\{\{dashboardUrl\}\}/g, dashboardUrl)
+          : defaultMsg;
+
+        for (const recipient of rule.recipients) {
+          let status: 'SENT' | 'FAILED' = 'SENT';
+          let errorMsg: string | null = null;
+          try {
+            await telegramService.sendMessage(recipient, text);
+          } catch (err: any) {
+            status = 'FAILED';
+            errorMsg = err.message;
+            console.warn(`[notify] Telegram send to ${recipient} failed:`, err.message);
+          }
+          await prisma.notificationLog.create({
+            data: {
+              ruleId: rule.id,
+              recipient,
+              channel: 'TELEGRAM',
+              subject: `Event report: ${event.name}`,
+              body: text,
+              status,
+              errorMessage: errorMsg,
+              sentAt: status === 'SENT' ? new Date() : null,
+            },
+          });
+        }
+      }
+    } catch (err: any) {
+      console.error('[dispatchEventReportReady] error:', err);
+    }
+  },
+
 
   async getReportDashboardPath(reportId: string, kind: 'html' | 'xlsx'): Promise<string | null> {
     const report = await prisma.eventReport.findUnique({ where: { id: reportId } });
@@ -325,6 +400,8 @@ export const eventReportService = {
         },
       });
 
+      // 5b. Dispatch EVENT_REPORT_READY notification (best-effort)
+      this.dispatchEventReportReady(eventId, reportId).catch((e) => console.warn('notify dispatch failed:', e));
       // 6. Bump event status
       await prisma.event.update({
         where: { id: eventId },

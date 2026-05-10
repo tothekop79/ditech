@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { plansApi } from '../api/plans';
 import { teamsApi } from '../api/teams';
 import { CreatePlanModal } from '../components/CreatePlanModal';
+import { LinkedEventCard } from '../components/LinkedEventCard';
 import { PhotosSection } from '../components/PhotosSection';
 import { ActivityTimeline } from '../components/ActivityTimeline';
 import { useToast } from '../components/Toast';
@@ -180,6 +181,16 @@ export function PlanDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* LEFT (2/3) */}
         <div className="lg:col-span-2 space-y-4">
+          <LinkedEventCard planId={plan.id} event={plan.event ? {
+            id: plan.event.id,
+            name: plan.event.name,
+            startDate: plan.event.startDate,
+            endDate: plan.event.endDate,
+            venue: plan.event.venue,
+            organizer: plan.event.organizer,
+            profile: plan.event.profile,
+            status: plan.event.status,
+          } : null} />
           {/* 3-col status/schedule/team */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StatusCard plan={plan} updateMutation={updateMutation} />

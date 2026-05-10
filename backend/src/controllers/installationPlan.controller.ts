@@ -94,4 +94,28 @@ export class InstallationPlanController {
       res.status(400).json({ success: false, message: msg, details });
     }
   }
+  async linkEvent(req: any, res: any) {
+    try {
+      const { eventId, inheritFields = true } = req.body;
+      if (!eventId) {
+        return res.status(400).json({ success: false, message: 'eventId is required' });
+      }
+      const userId = req.user?.userId ?? req.user?.id;
+      const plan = await installationPlanService.linkToEvent(req.params.id, eventId, inheritFields, userId);
+      res.json({ success: true, data: plan });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
+  async unlinkEvent(req: any, res: any) {
+    try {
+      const userId = req.user?.userId ?? req.user?.id;
+      const plan = await installationPlanService.unlinkFromEvent(req.params.id, userId);
+      res.json({ success: true, data: plan });
+    } catch (err: any) {
+      res.status(400).json({ success: false, message: err.message });
+    }
+  }
+
 }
