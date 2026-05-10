@@ -33,7 +33,7 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
-RUN npx prisma generate
+# RUN npx prisma generate  # skip during build
 
 EXPOSE 5000
 
