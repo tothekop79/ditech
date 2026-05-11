@@ -32,7 +32,9 @@ Thumbs.db
 .cursor*
 
 # Coverage
-coverage/
+/coverage/
+backend/coverage/
+frontend/coverage/
 .nyc_output/
 
 # Backups
