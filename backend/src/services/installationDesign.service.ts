@@ -439,6 +439,10 @@ export const installationDesignService = {
       if ('showAsImage' in data) updateData.showAsImage = data.showAsImage;
       if ('note' in data) updateData.note = data.note;
       if ('status' in data) updateData.status = data.status;
+      if ('coverageMode' in data) updateData.coverageMode = data.coverageMode;
+      if ('showLabels' in data) updateData.showLabels = data.showLabels;
+      if ('showDimensions' in data) updateData.showDimensions = data.showDimensions;
+      if ('showDirectionArrow' in data) updateData.showDirectionArrow = data.showDirectionArrow;
 
       // Re-interpolate coverage if model or height changed and override is false
       const willOverride = data.coverageOverride ?? existing.coverageOverride;
