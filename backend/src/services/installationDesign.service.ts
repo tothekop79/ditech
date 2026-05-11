@@ -5,6 +5,7 @@ import {
   interpolateCoverage,
   CoverageRow,
 } from '../utils/cameraCoverage';
+import { applyTiltProjection } from '../utils/tiltProjection';
 import {
   sensorRectCorners,
   computeDesignStats,
@@ -49,7 +50,9 @@ const designInclude = {
 async function computeCoverageForSensor(
   cameraModelId: string,
   mountingHeight: number,
-): Promise<{ width: number; depth: number }> {
+  coverageMode?: string,
+  tiltAngle?: number,
+): Promise<{ width: number; depth: number; nearEdgeRatio?: number }> {
   const model = await prisma.cameraModel.findUnique({
     where: { id: cameraModelId },
     select: { coverageTable: true, minHeight: true, maxHeight: true },
@@ -61,7 +64,21 @@ async function computeCoverageForSensor(
     throw new Error('Camera model has no coverage table');
   }
 
-  return interpolateCoverage(mountingHeight, table);
+  const base = interpolateCoverage(mountingHeight, table);
+
+  // Apply tilt projection — return trapezoid with width = far edge (max)
+  // and nearEdgeRatio so the frontend can render the near edge as
+  //   nearWidth = coverageWidth * nearEdgeRatio
+  if (coverageMode === 'tilt_projection' && typeof tiltAngle === 'number') {
+    const proj = applyTiltProjection(base.width, base.depth, tiltAngle);
+    return {
+      width: proj.farWidth,
+      depth: proj.depth,
+      nearEdgeRatio: proj.nearEdgeRatio,
+    };
+  }
+
+  return base;
 }
 
 /**
@@ -377,9 +394,18 @@ export const installationDesignService = {
       // Auto-compute coverage if not provided or override is false
       let { coverageWidth, coverageDepth } = data;
       if (!data.coverageOverride || coverageWidth == null || coverageDepth == null) {
-        const result = await computeCoverageForSensor(data.cameraModelId, data.mountingHeight ?? 3.5);
+        const result = await computeCoverageForSensor(
+          data.cameraModelId,
+          data.mountingHeight ?? 3.5,
+          data.coverageMode,
+          data.tiltAngle,
+        );
         coverageWidth = result.width;
         coverageDepth = result.depth;
+        // Capture trapezoid ratio for tilt_projection mode
+        if (result.nearEdgeRatio !== undefined) {
+          data.nearEdgeRatio = result.nearEdgeRatio;
+        }
       }
 
       const sensor = await prisma.sensorPlacement.create({
@@ -402,6 +428,11 @@ export const installationDesignService = {
           showAsImage: data.showAsImage ?? false,
           note: data.note ?? null,
           status: 'PASS',
+          coverageMode: data.coverageMode ?? 'rectangle',
+          nearEdgeRatio: data.nearEdgeRatio ?? 0.47,
+          showLabels: data.showLabels ?? true,
+          showDimensions: data.showDimensions ?? true,
+          showDirectionArrow: data.showDirectionArrow ?? true,
         },
         include: {
           cameraModel: { select: { id: true, displayName: true, iconColor: true, imageUrl: true } },
@@ -444,17 +475,24 @@ export const installationDesignService = {
       if ('showDimensions' in data) updateData.showDimensions = data.showDimensions;
       if ('showDirectionArrow' in data) updateData.showDirectionArrow = data.showDirectionArrow;
 
-      // Re-interpolate coverage if model or height changed and override is false
+      // Re-interpolate coverage if model, height, tilt, or mode changed and override is false
       const willOverride = data.coverageOverride ?? existing.coverageOverride;
       const modelChanged = 'cameraModelId' in data && data.cameraModelId !== existing.cameraModelId;
       const heightChanged = 'mountingHeight' in data && data.mountingHeight !== existing.mountingHeight;
-      if (!willOverride && (modelChanged || heightChanged)) {
+      const tiltChanged = 'tiltAngle' in data && data.tiltAngle !== existing.tiltAngle;
+      const modeChanged = 'coverageMode' in data && data.coverageMode !== existing.coverageMode;
+      if (!willOverride && (modelChanged || heightChanged || tiltChanged || modeChanged)) {
         const result = await computeCoverageForSensor(
           data.cameraModelId ?? existing.cameraModelId,
           data.mountingHeight ?? existing.mountingHeight,
+          data.coverageMode ?? existing.coverageMode,
+          data.tiltAngle ?? existing.tiltAngle,
         );
         updateData.coverageWidth = result.width;
         updateData.coverageDepth = result.depth;
+        if (result.nearEdgeRatio !== undefined) {
+          updateData.nearEdgeRatio = result.nearEdgeRatio;
+        }
       }
 
       const sensor = await prisma.sensorPlacement.update({
