@@ -603,7 +603,7 @@ model InstallationDesign {
   floorPlanUrl    String? // uploaded PNG/JPG path
   floorPlanWidth  Int? // px (image natural size)
   floorPlanHeight Int? // px
-  ceilingHeight   Float   @default(3.5)
+  ceilingHeight   Float   @default(3.0)
   entranceHeight  Float? // entrance opening height in m (for obstruction calc)
   entranceWidth   Float? // entrance opening width in m
   scalePxPerMeter Float   @default(20) // 20 px = 1m, i.e. 1px = 0.05m default
@@ -656,7 +656,7 @@ model SensorPlacement {
   x              Float
   y              Float
   rotation       Float @default(0) // yaw in degrees, 0 = up
-  mountingHeight Float @default(3.5)
+  mountingHeight Float @default(3.0)
   tiltAngle      Float @default(0) // pitch tilt for bracket mount
 
   // Coverage rectangle (auto from model+height, or manually overridden)
@@ -670,9 +670,16 @@ model SensorPlacement {
   anchorMode       String  @default("center")
 
   // Obstruction check (entrance sensors only)
-  obstructionData Json? // { ceilingHeight, camHeight, obstrDrop, camIn, targetOut, targetHeight, margin, type }
-  obstructionPass Boolean?
-  obstructionNote String?
+  color              String? // Per-sensor color override (CSS hex)
+  nearEdgeRatio      Float    @default(0.47) // Trapezoid near/far edge ratio (for tilt_bracket)
+  obstructionData    Json? // { ceilingHeight, camHeight, obstrDrop, camIn, targetOut, targetHeight, margin, type
+  // C1.8 — Coverage rendering options
+  coverageMode       String   @default("rectangle")
+  showLabels         Boolean  @default(true)
+  showDimensions     Boolean  @default(true)
+  showDirectionArrow Boolean  @default(true)
+  obstructionPass    Boolean?
+  obstructionNote    String?
 
   // Display
   showAsImage Boolean @default(false) // toggle: image overlay vs symbol dot

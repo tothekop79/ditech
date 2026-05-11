@@ -7,6 +7,7 @@ const PRIMARY_NAV = [
   { to: '/calendar', label: 'Calendar', icon: '📅' },
   { to: '/plans', label: 'Plans', icon: '📋' },
   { to: '/events', label: 'Events', icon: '📊' },
+  { to: '/designs', label: 'Designs', icon: '📐' },
   { to: '/gantt', label: 'Gantt', icon: '📊' },
   { to: '/map', label: 'Map', icon: '🗺️' },
   { to: '/reports', label: 'Reports', icon: '📈' },

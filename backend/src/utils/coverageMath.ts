@@ -1,48 +1,50 @@
 /**
- * Coverage Math — Phase C1.2
+ * Coverage Math — Phase C1.4 (updated for tilt bracket trapezoid)
  *
- * Geometry helpers for calculating coverage % across a floor plan.
- *
- * Coordinate system:
- *  - All inputs/outputs are in PIXELS on the floor plan
- *  - Convert to meters using design.scalePxPerMeter when reporting
- *
- * Sensor coverage rectangle:
- *  - Sensor is at (x, y) with rotation (yaw degrees, 0 = up)
- *  - Coverage rect dimensions: coverageWidth × coverageDepth (meters → px via scale)
- *  - anchorMode determines where sensor sits:
- *      'center'     → sensor at rect center (top-down camera, default)
- *      'back_edge'  → sensor at back edge midpoint (tilted camera, looks forward)
- *      'front_edge' → sensor at front edge midpoint
+ * IMPORTANT: This is a drop-in replacement for src/utils/coverageMath.ts.
+ * Changes vs C1.2:
+ *  - Added support for `shape: 'rectangle' | 'trapezoid'`
+ *  - Trapezoid for tilt bracket: near edge narrower (1m default), far edge full coverage width
+ *  - sensorRectCorners → sensorShapeCorners (returns 4 corners for both rect+trapezoid)
+ *  - Same back/front anchor logic preserved
  */
 
 export type Point = { x: number; y: number };
-export type Rect = { x: number; y: number; w: number; h: number };  // axis-aligned
+export type Rect = { x: number; y: number; w: number; h: number };
 export type Polygon = Point[];
 
-export type SensorRectInput = {
-  x: number;            // sensor position x (px)
-  y: number;            // sensor position y (px)
-  rotation: number;     // yaw degrees, 0 = up, 90 = right
-  coverageWidth: number;  // meters
-  coverageDepth: number;  // meters
+export type SensorShapeInput = {
+  x: number;
+  y: number;
+  rotation: number;          // yaw degrees, 0 = up
+  coverageWidth: number;      // meters (far edge for trapezoid)
+  coverageDepth: number;      // meters
   anchorMode?: 'center' | 'back_edge' | 'front_edge';
+  shape?: 'rectangle' | 'trapezoid';
   scalePxPerMeter: number;
+  // For trapezoid only — proportion of far-edge width at near edge (0..1)
+  // Default 0.15 means near is 15% of far (visualizes perspective)
+  nearEdgeRatio?: number;
 };
 
 /**
- * Compute the 4 corners of a sensor's coverage rectangle in floor-plan pixels.
- * Returns corners in order: front-left, front-right, back-right, back-left
- * (clockwise from sensor's "front" viewpoint).
+ * Compute the 4 corners of a sensor's coverage shape in floor-plan pixels.
+ * Order: front-left, front-right, back-right, back-left (clockwise).
+ *
+ * Rectangle: 4 corners equidistant from center axis.
+ * Trapezoid: front (camera-side) edge narrower, back edge wider — perspective view.
  */
-export function sensorRectCorners(input: SensorRectInput): Point[] {
-  const { x, y, rotation, coverageWidth, coverageDepth, anchorMode = 'center', scalePxPerMeter } = input;
+export function sensorShapeCorners(input: SensorShapeInput): Point[] {
+  const {
+    x, y, rotation, coverageWidth, coverageDepth,
+    anchorMode = 'center', shape = 'rectangle',
+    scalePxPerMeter, nearEdgeRatio = 0.15,
+  } = input;
 
   const wPx = coverageWidth * scalePxPerMeter;
   const dPx = coverageDepth * scalePxPerMeter;
 
-  // Local coordinates (sensor at origin, "up" is forward)
-  // Rect spans [-w/2, w/2] horizontally, depth varies by anchor
+  // Determine front/back y in local coords (sensor at origin, "up" is forward = -y)
   let frontY: number, backY: number;
   switch (anchorMode) {
     case 'center':
@@ -59,15 +61,27 @@ export function sensorRectCorners(input: SensorRectInput): Point[] {
       break;
   }
 
-  const localCorners: Point[] = [
-    { x: -wPx / 2, y: frontY },  // front-left
-    { x:  wPx / 2, y: frontY },  // front-right
-    { x:  wPx / 2, y: backY  },  // back-right
-    { x: -wPx / 2, y: backY  },  // back-left
-  ];
+  let localCorners: Point[];
+  if (shape === 'trapezoid') {
+    // Camera at narrow (near) end → front=narrow, back=wide
+    const nearHalf = (wPx * nearEdgeRatio) / 2;
+    const farHalf = wPx / 2;
+    localCorners = [
+      { x: -nearHalf, y: frontY },  // front-left (near)
+      { x:  nearHalf, y: frontY },  // front-right (near)
+      { x:  farHalf,  y: backY },   // back-right (far)
+      { x: -farHalf,  y: backY },   // back-left (far)
+    ];
+  } else {
+    localCorners = [
+      { x: -wPx / 2, y: frontY },
+      { x:  wPx / 2, y: frontY },
+      { x:  wPx / 2, y: backY  },
+      { x: -wPx / 2, y: backY  },
+    ];
+  }
 
-  // Rotate by yaw (rotation=0 → up = -y direction)
-  // Standard rotation: theta in radians, x' = x cosθ - y sinθ, y' = x sinθ + y cosθ
+  // Rotate by yaw
   const theta = (rotation * Math.PI) / 180;
   const cos = Math.cos(theta);
   const sin = Math.sin(theta);
@@ -79,8 +93,33 @@ export function sensorRectCorners(input: SensorRectInput): Point[] {
 }
 
 /**
- * Axis-aligned bounding box of a polygon (handy for quick reject in tests).
+ * Map mounting type → default shape and anchor.
+ * Used both server-side and client-side for consistency.
  */
+export function defaultShapeForMounting(mountingType: string): {
+  shape: 'rectangle' | 'trapezoid';
+  anchorMode: 'center' | 'back_edge' | 'front_edge';
+} {
+  switch (mountingType) {
+    case 'embedded':
+    case 'surface':
+      return { shape: 'rectangle', anchorMode: 'center' };
+    case 'bracket':
+      return { shape: 'rectangle', anchorMode: 'back_edge' };
+    case 'tilt_bracket':
+      return { shape: 'trapezoid', anchorMode: 'back_edge' };
+    default:
+      return { shape: 'rectangle', anchorMode: 'center' };
+  }
+}
+
+// ── Backward-compat alias for existing imports ──
+export const sensorRectCorners = sensorShapeCorners;
+export type SensorRectInput = SensorShapeInput;
+
+// ════════════════════════════════════════════════
+// Geometry helpers (unchanged from C1.2)
+// ════════════════════════════════════════════════
 export function polygonBBox(poly: Polygon): Rect {
   if (!poly.length) return { x: 0, y: 0, w: 0, h: 0 };
   let minX = poly[0].x, minY = poly[0].y, maxX = poly[0].x, maxY = poly[0].y;
@@ -93,9 +132,6 @@ export function polygonBBox(poly: Polygon): Rect {
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
-/**
- * Polygon area (shoelace formula). Sign indicates winding (positive = CCW).
- */
 export function polygonArea(poly: Polygon): number {
   if (poly.length < 3) return 0;
   let area = 0;
@@ -107,16 +143,6 @@ export function polygonArea(poly: Polygon): number {
   return Math.abs(area) / 2;
 }
 
-/**
- * Sutherland-Hodgman polygon clipping.
- * Returns the intersection of `subject` with `clip` (clip must be CONVEX).
- *
- * For our use:
- *  - subject = zone polygon (could be any shape, but for engagement zones usually rectangular/quad)
- *  - clip    = sensor coverage rect (always convex quad)
- *
- * If the zone is non-convex, callers should triangulate first or accept approximation.
- */
 export function clipPolygon(subject: Polygon, clip: Polygon): Polygon {
   if (subject.length < 3 || clip.length < 3) return [];
   let output: Polygon = [...subject];
@@ -147,16 +173,13 @@ export function clipPolygon(subject: Polygon, clip: Polygon): Polygon {
       }
     }
   }
-
   return output;
 }
 
-/** Is point p on the inside of edge a→b (left side, assuming CCW clip)? */
 function isInside(p: Point, a: Point, b: Point): boolean {
   return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) >= 0;
 }
 
-/** Intersection of segment p1-p2 with infinite line a-b. */
 function lineIntersect(p1: Point, p2: Point, a: Point, b: Point): Point | null {
   const x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y;
   const x3 = a.x,  y3 = a.y,  x4 = b.x,  y4 = b.y;
@@ -166,13 +189,6 @@ function lineIntersect(p1: Point, p2: Point, a: Point, b: Point): Point | null {
   return { x: x1 + t * (x2 - x1), y: y1 + t * (y2 - y1) };
 }
 
-/**
- * Coverage % of a polygon zone by N sensor rectangles.
- * Computes union area covered (handles overlaps correctly via inclusion-exclusion
- * on small N, or grid-sampling fallback for N > 5).
- *
- * Returns 0..1 (multiply by 100 for percent).
- */
 export function polygonCoverageByRects(
   zone: Polygon,
   sensorRects: Polygon[],
@@ -181,25 +197,15 @@ export function polygonCoverageByRects(
   const zoneArea = polygonArea(zone);
   if (zoneArea === 0) return 0;
   if (!sensorRects.length) return 0;
-
-  // For small numbers of rects, use exact polygon clipping + inclusion-exclusion
   if (sensorRects.length <= 4) {
     return exactCoverage(zone, sensorRects) / zoneArea;
   }
-
-  // Otherwise, grid-sample (faster for many rects)
   return sampledCoverage(zone, sensorRects, options.sampleStep ?? 4);
 }
 
-/**
- * Exact union area via inclusion-exclusion (only feasible for small N).
- * |A ∪ B ∪ C| = ΣA - Σ(A∩B) + Σ(A∩B∩C) - ...
- */
 function exactCoverage(zone: Polygon, rects: Polygon[]): number {
   const n = rects.length;
   let total = 0;
-
-  // Iterate over all non-empty subsets (2^n - 1)
   for (let mask = 1; mask < (1 << n); mask++) {
     let intersection: Polygon = [...zone];
     let bits = 0;
@@ -216,15 +222,10 @@ function exactCoverage(zone: Polygon, rects: Polygon[]): number {
   return total;
 }
 
-/**
- * Grid-sampled coverage estimation. Step = pixels between samples.
- * Faster but approximate. Step=4 gives ~16x speedup vs step=1.
- */
 function sampledCoverage(zone: Polygon, rects: Polygon[], step: number): number {
   const bbox = polygonBBox(zone);
   let total = 0;
   let covered = 0;
-
   for (let y = bbox.y; y <= bbox.y + bbox.h; y += step) {
     for (let x = bbox.x; x <= bbox.x + bbox.w; x += step) {
       if (!pointInPolygon({ x, y }, zone)) continue;
@@ -237,11 +238,9 @@ function sampledCoverage(zone: Polygon, rects: Polygon[], step: number): number 
       }
     }
   }
-
   return total === 0 ? 0 : covered / total;
 }
 
-/** Ray-casting point-in-polygon. */
 export function pointInPolygon(p: Point, poly: Polygon): boolean {
   let inside = false;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -255,12 +254,6 @@ export function pointInPolygon(p: Point, poly: Polygon): boolean {
   return inside;
 }
 
-/**
- * Entrance line coverage: what fraction of the line is "under" any sensor rect?
- * For people-counting, the line should be 100% covered by exactly one entrance sensor.
- *
- * Returns 0..1.
- */
 export function lineCoverageByRects(
   linePoints: [Point, Point],
   sensorRects: Polygon[],
@@ -272,7 +265,6 @@ export function lineCoverageByRects(
   const len = Math.hypot(dx, dy);
   if (len === 0) return 0;
   if (!sensorRects.length) return 0;
-
   const samples = Math.max(50, Math.ceil(len / step));
   let covered = 0;
   for (let i = 0; i <= samples; i++) {
@@ -288,12 +280,11 @@ export function lineCoverageByRects(
   return covered / (samples + 1);
 }
 
-/**
- * Convenience: full design coverage stats from sensors + zones.
- * Returns percentages for entrance/engagement/heatmap and overall status.
- */
+// ════════════════════════════════════════════════
+// Design stats
+// ════════════════════════════════════════════════
 export type DesignStats = {
-  entrancePercent: number | null;     // null if no entrance line
+  entrancePercent: number | null;
   engagementPercent: number | null;
   heatmapPercent: number | null;
   overallStatus: 'PASS' | 'WARNING' | 'FAIL';
@@ -302,7 +293,7 @@ export type DesignStats = {
 
 export type DesignSensor = {
   functionType: string;
-  rect: Polygon;  // 4 corners (already computed via sensorRectCorners)
+  rect: Polygon;
 };
 
 export type DesignZone = {
@@ -318,7 +309,6 @@ export function computeDesignStats(
 ): DesignStats {
   const recs: string[] = [];
 
-  // ─── Entrance line coverage ───
   const entranceLines = zones.filter((z) => z.zoneType === 'entrance_line' && z.linePoints);
   const entranceRects = sensors
     .filter((s) => s.functionType === 'entrance' || s.functionType === 'passerby')
@@ -338,7 +328,6 @@ export function computeDesignStats(
     }
   }
 
-  // ─── Engagement coverage ───
   const engagementZones = zones.filter((z) => z.zoneType === 'engagement_area' && z.polygon);
   const engagementRects = sensors
     .filter((s) => s.functionType === 'engagement')
@@ -361,7 +350,6 @@ export function computeDesignStats(
     }
   }
 
-  // ─── Heatmap / walking area coverage ───
   const heatmapRects = sensors
     .filter((s) => s.functionType === 'heatmap')
     .map((s) => s.rect);
@@ -376,7 +364,6 @@ export function computeDesignStats(
     }
   }
 
-  // ─── Overall status ───
   let status: 'PASS' | 'WARNING' | 'FAIL' = 'PASS';
   const checks = [entrancePercent, engagementPercent, heatmapPercent].filter((x) => x !== null) as number[];
   if (checks.some((p) => p < 0.7)) status = 'FAIL';

@@ -140,6 +140,10 @@ export function PlanDetailPage() {
       <div className="flex items-center justify-between mb-4">
         <Link to="/plans" className="text-sm text-blue-600 hover:underline">← Back to plans</Link>
         <div className="flex gap-2">
+          <button onClick={() => navigate(`/designs/by-plan/${id}`)}
+            className="px-3 py-1.5 text-sm border border-purple-500 text-purple-700 rounded inline-flex items-center gap-1.5 hover:bg-purple-50 bg-white">
+            📐 Coverage Design
+          </button>
           <button onClick={() => setShowDocModal(true)}
             className="px-3 py-1.5 text-sm border border-blue-500 text-blue-700 rounded inline-flex items-center gap-1.5 hover:bg-blue-50 bg-white">
             📄 Generate doc
