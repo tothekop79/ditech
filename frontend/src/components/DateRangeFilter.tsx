@@ -7,6 +7,7 @@ export type PresetKey =
   | 'this_week' | 'last_week'
   | 'this_month' | 'last_month'
   | 'last_7d' | 'last_30d' | 'last_90d'
+  | 'next_7d' | 'next_30d' | 'next_90d'
   | 'this_quarter' | 'this_year' | 'ytd' | 'all'
   | 'custom';
 
@@ -50,6 +51,9 @@ export function getPresetRange(key: PresetKey, custom?: { from: Date; to: Date }
     case 'last_7d':     return { from: startOfDay(addDays(now, -6)), to: endOfDay(now), label: 'Last 7 days' };
     case 'last_30d':    return { from: startOfDay(addDays(now, -29)), to: endOfDay(now), label: 'Last 30 days' };
     case 'last_90d':    return { from: startOfDay(addDays(now, -89)), to: endOfDay(now), label: 'Last 90 days' };
+    case 'next_7d':     return { from: startOfDay(now), to: endOfDay(addDays(now, 6)),  label: 'Next 7 days' };
+    case 'next_30d':    return { from: startOfDay(now), to: endOfDay(addDays(now, 29)), label: 'Next 30 days' };
+    case 'next_90d':    return { from: startOfDay(now), to: endOfDay(addDays(now, 89)), label: 'Next 90 days' };
     case 'this_quarter':return { from: startOfQuarter(now), to: endOfQuarter(now), label: 'This quarter' };
     case 'this_year':   return { from: startOfYear(now), to: endOfYear(now), label: 'This year' };
     case 'ytd':         return { from: startOfYear(now), to: endOfDay(now), label: 'Year-to-date' };
@@ -69,6 +73,9 @@ const PRESET_GROUPS: { label: string; items: { key: PresetKey; label: string }[]
     { key: 'last_7d',   label: 'Last 7 days' },
     { key: 'last_30d',  label: 'Last 30 days' },
     { key: 'last_90d',  label: 'Last 90 days' },
+    { key: 'next_7d',   label: 'Next 7 days' },
+    { key: 'next_30d',  label: 'Next 30 days' },
+    { key: 'next_90d',  label: 'Next 90 days' },
   ]},
   { label: 'Calendar', items: [
     { key: 'this_week',  label: 'This week' },
