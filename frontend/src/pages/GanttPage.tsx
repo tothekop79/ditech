@@ -171,7 +171,7 @@ export function GanttPage() {
 
   const { data: plans = [], isLoading } = useQuery({
     queryKey: ['plans', 'gantt'],
-    queryFn: () => plansApi.list({ pageSize: 500 }).then((r: any) => r.data || []),
+    queryFn: () => plansApi.list({ limit: 1000 }).then((r: any) => r.data || []),
   });
 
   const customerOptions = useMemo(
