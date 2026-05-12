@@ -161,3 +161,27 @@
     background: #94a3b8;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Print rules for inline single-row Plan rows
+   ───────────────────────────────────────────────────────────── */
+
+@media print {
+  /* Keep each plan row together (don't split across pages) */
+  .plan-detail-row {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Stronger row separator on paper */
+  .plan-detail-row {
+    border-bottom: 0.3pt solid #94a3b8 !important;
+  }
+
+  /* Status chip and bar colors preserved */
+  .plan-detail-row span[style*="background"],
+  .plan-detail-row button[style*="background"] {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}

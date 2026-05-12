@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { plansApi } from '../api/plans';
+import { DateRangeFilter, getPresetRange, type DateRange } from '../components/DateRangeFilter';
 import './gantt-print.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -10,7 +11,6 @@ import './gantt-print.css';
 
 type PlanStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'ATTENTION';
 type GroupBy = 'customer' | 'region' | 'team' | 'status';
-type ViewMode = '2weeks' | 'month' | 'quarter';
 
 interface Plan {
   id: string;
@@ -18,12 +18,24 @@ interface Plan {
   branchName?: string | null;
   storeRegion: string;
   province?: string | null;
+  address?: string | null;
+  description?: string | null;
   scheduledDate?: string | null;
   completedDate?: string | null;
   durationDays?: number | null;
+  workStartTime?: string | null;
+  workEndTime?: string | null;
   planStatus: PlanStatus;
+  workScope?: string[] | null;
   sensorCount?: number | null;
+  sensorModel?: string | null;
+  poeSwitchModel?: string | null;
+  cctvCount?: number | null;       // future field; falls back to '—' if missing
   contactPerson?: string | null;
+  contactPhone?: string | null;
+  contactLine?: string | null;
+  detail?: string | null;
+  readinessNote?: string | null;
   customer?: { id: string; customerCode: string; customerName: string };
   department?: { id: string; departmentName: string };
   team?: { id: string; name: string } | null;
@@ -53,12 +65,19 @@ interface GroupRow {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<PlanStatus, { label: string; bg: string; text: string; chipBg: string; chipText: string }> = {
-  DRAFT:       { label: 'DRAFT',                bg: '#6B7280', text: '#FFFFFF', chipBg: '#E5E7EB', chipText: '#374151' },
-  CONFIRMED:   { label: 'CONFIRMED',            bg: '#2563EB', text: '#FFFFFF', chipBg: '#DBEAFE', chipText: '#1E40AF' },
-  IN_PROGRESS: { label: 'IN PROGRESS',          bg: '#F59E0B', text: '#1F2937', chipBg: '#FEF3C7', chipText: '#92400E' },
-  COMPLETED:   { label: 'COMPLETED',            bg: '#16A34A', text: '#FFFFFF', chipBg: '#DCFCE7', chipText: '#166534' },
-  CANCELLED:   { label: 'CANCELLED',            bg: '#DC2626', text: '#FFFFFF', chipBg: '#FEE2E2', chipText: '#991B1B' },
-  ATTENTION:   { label: 'DELAYED / ATTENTION',  bg: '#7C3AED', text: '#FFFFFF', chipBg: '#EDE9FE', chipText: '#5B21B6' },
+  DRAFT:       { label: 'DRAFT',                bg: '#64748B', text: '#FFFFFF', chipBg: '#F1F5F9', chipText: '#334155' },
+  CONFIRMED:   { label: 'CONFIRMED',            bg: '#3B82F6', text: '#FFFFFF', chipBg: '#DBEAFE', chipText: '#1E40AF' },
+  IN_PROGRESS: { label: 'IN PROGRESS',          bg: '#EAB308', text: '#FFFFFF', chipBg: '#FEF9C3', chipText: '#854D0E' },
+  COMPLETED:   { label: 'COMPLETED',            bg: '#10B981', text: '#FFFFFF', chipBg: '#D1FAE5', chipText: '#065F46' },
+  CANCELLED:   { label: 'CANCELLED',            bg: '#F43F5E', text: '#FFFFFF', chipBg: '#FFE4E6', chipText: '#9F1239' },
+  ATTENTION:   { label: 'DELAYED / ATTENTION',  bg: '#A855F7', text: '#FFFFFF', chipBg: '#F3E8FF', chipText: '#6B21A8' },
+};
+
+// Region indicator colors — top half of each Gantt bar
+const REGION_COLORS: Record<string, string> = {
+  BANGKOK:  '#06B6D4',  // cyan-500 — turquoise blue
+  UPC:      '#FB923C',  // orange-400 — soft orange (UPC = Upcountry / ต่างจังหวัด)
+  _default: '#94A3B8',  // slate-400 fallback
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,23 +93,6 @@ const isSunday = (d: Date) => d.getDay() === 0;
 const monthLabel = (d: Date) => d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 const dateRangeLabel = (s: Date, e: Date) =>
   `${s.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })} – ${e.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}`;
-
-function buildDateRange(mode: ViewMode, anchor: Date): { start: Date; end: Date; days: Date[] } {
-  let start: Date, end: Date;
-  if (mode === '2weeks') {
-    start = startOfDay(anchor); end = addDays(start, 13);
-  } else if (mode === 'quarter') {
-    const m = Math.floor(anchor.getMonth() / 3) * 3;
-    start = new Date(anchor.getFullYear(), m, 1);
-    end = new Date(anchor.getFullYear(), m + 3, 0);
-  } else {
-    start = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
-    end = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0);
-  }
-  const days: Date[] = [];
-  for (let d = new Date(start); d <= end; d = addDays(d, 1)) days.push(new Date(d));
-  return { start, end, days };
-}
 
 function weekSpans(days: Date[]): { startIdx: number; len: number; label: string }[] {
   const out: { startIdx: number; len: number; label: string }[] = [];
@@ -123,8 +125,8 @@ function getISOWeek(d: Date): number {
 const DAY_W = 44;
 const ROW_H = 64;
 const BAR_H = 28;
-const LEFT_CUSTOMER = 220;
-const LEFT_SUMMARY = 180;
+const LEFT_CUSTOMER = 160;  // narrower — just for team/customer name
+const LEFT_SUMMARY = 420;   // wider — holds long plan details line
 const LEFT_TOTAL = LEFT_CUSTOMER + LEFT_SUMMARY;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,23 +136,43 @@ const LEFT_TOTAL = LEFT_CUSTOMER + LEFT_SUMMARY;
 export function GanttPage() {
   const navigate = useNavigate();
 
-  const [anchorDate, setAnchorDate] = useState(() => startOfDay(new Date()));
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
-  const [groupBy, setGroupBy] = useState<GroupBy>('customer');
-  const [filters, setFilters] = useState({
-    customer: '', department: '', region: '', province: '', status: '',
+  // ── Persisted user preferences (dateRange, groupBy, filters, showPlanDetails) ─
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    const saved = loadPref<{ from: string; to: string; label: string } | null>('dateRange', null);
+    if (saved && saved.from && saved.to) {
+      // Re-hydrate Date objects (localStorage stores ISO strings)
+      return { from: new Date(saved.from), to: new Date(saved.to), label: saved.label };
+    }
+    return getPresetRange('this_month');
   });
+  const [groupBy, setGroupBy] = useState<GroupBy>(() => loadPref('groupBy', 'customer' as GroupBy));
+  const [filters, setFilters] = useState(() => loadPref('filters', {
+    customer: '', department: '', region: '', province: '', status: '', team: '',
+  }));
+  const [showPlanDetails, setShowPlanDetails] = useState(() => loadPref('showPlanDetails', false));
+
+  // ── Non-persisted ephemeral state ─────────────────────────────────────────
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [hoveredBar, setHoveredBar] = useState<{ plan: Plan; x: number; y: number } | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  const { start: rangeStart, end: rangeEnd, days } = useMemo(
-    () => buildDateRange(viewMode, anchorDate),
-    [viewMode, anchorDate],
-  );
+  // ── Save prefs to localStorage on change ──────────────────────────────────
+  useEffect(() => { savePref('dateRange', dateRange); }, [dateRange]);
+  useEffect(() => { savePref('groupBy', groupBy); }, [groupBy]);
+  useEffect(() => { savePref('filters', filters); }, [filters]);
+  useEffect(() => { savePref('showPlanDetails', showPlanDetails); }, [showPlanDetails]);
+
+  const { rangeStart, rangeEnd, days } = useMemo(() => {
+    const start = startOfDay(dateRange.from);
+    const end = startOfDay(dateRange.to);
+    const arr: Date[] = [];
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) arr.push(new Date(d));
+    return { rangeStart: start, rangeEnd: end, days: arr };
+  }, [dateRange]);
 
   const { data: plans = [], isLoading } = useQuery({
     queryKey: ['plans', 'gantt'],
-    queryFn: () => plansApi.list({ pageSize: 500 }).then((r: any) => r.data || []),
+    queryFn: () => plansApi.list({ limit: 500 }).then((r: any) => r.data || []),
   });
 
   const customerOptions = useMemo(
@@ -169,6 +191,10 @@ export function GanttPage() {
     () => Array.from(new Set((plans as Plan[]).map((p) => p.province).filter(Boolean))) as string[],
     [plans],
   );
+  const teamOptions = useMemo(
+    () => uniqueBy<Plan, string, string>(plans, (p) => p.team?.id, (p) => p.team?.name || ''),
+    [plans],
+  );
 
   const filteredPlans = useMemo(() => {
     return (plans as Plan[]).filter((p) => {
@@ -182,6 +208,7 @@ export function GanttPage() {
       if (filters.region && p.storeRegion !== filters.region) return false;
       if (filters.province && p.province !== filters.province) return false;
       if (filters.status && p.planStatus !== filters.status) return false;
+      if (filters.team && p.team?.id !== filters.team) return false;
       return true;
     });
   }, [plans, rangeStart, rangeEnd, filters]);
@@ -229,14 +256,24 @@ export function GanttPage() {
   const kpis = useMemo(() => {
     const customerSet = new Set<string>();
     let sensors = 0, inProgress = 0, completed = 0, attention = 0;
+    let cctv = 0, lanJobs = 0, unassigned = 0, withNotes = 0;
     for (const p of filteredPlans) {
       if (p.customer?.id) customerSet.add(p.customer.id);
       sensors += p.sensorCount || 0;
+      cctv += p.cctvCount || 0;
+      if ((p.workScope || []).includes('INSTALL_LAN')) lanJobs++;
+      if (!p.team && !p.contractorName) unassigned++;
+      if ((p.detail && p.detail.trim()) || (p.readinessNote && p.readinessNote.trim())) withNotes++;
       if (p.planStatus === 'IN_PROGRESS') inProgress++;
       if (p.planStatus === 'COMPLETED') completed++;
       if (p.planStatus === 'CANCELLED' || p.planStatus === 'ATTENTION') attention++;
     }
-    return { plans: filteredPlans.length, customers: customerSet.size, sensors, inProgress, completed, attention };
+    return {
+      plans: filteredPlans.length,
+      customers: customerSet.size,
+      sensors, cctv, lanJobs, unassigned, withNotes,
+      inProgress, completed, attention,
+    };
   }, [filteredPlans]);
 
   const activeChips = useMemo(() => {
@@ -252,19 +289,15 @@ export function GanttPage() {
     if (filters.region)   chips.push({ key: 'region',   label: filters.region });
     if (filters.province) chips.push({ key: 'province', label: filters.province });
     if (filters.status)   chips.push({ key: 'status',   label: STATUS_CONFIG[filters.status as PlanStatus]?.label || filters.status });
+    if (filters.team) {
+      const opt = teamOptions.find((o) => o.value === filters.team);
+      chips.push({ key: 'team', label: opt?.label || filters.team });
+    }
     return chips;
-  }, [filters, customerOptions, departmentOptions]);
+  }, [filters, customerOptions, departmentOptions, teamOptions]);
 
-  const resetFilters = () => setFilters({ customer: '', department: '', region: '', province: '', status: '' });
+  const resetFilters = () => setFilters({ customer: '', department: '', region: '', province: '', status: '', team: '' });
   const clearChip = (key: keyof typeof filters) => setFilters({ ...filters, [key]: '' });
-
-  const goToday = () => setAnchorDate(startOfDay(new Date()));
-  const goPrev = () => setAnchorDate(viewMode === '2weeks' ? addDays(anchorDate, -14)
-    : viewMode === 'quarter' ? new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 3, 1)
-    : new Date(anchorDate.getFullYear(), anchorDate.getMonth() - 1, 1));
-  const goNext = () => setAnchorDate(viewMode === '2weeks' ? addDays(anchorDate, 14)
-    : viewMode === 'quarter' ? new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 3, 1)
-    : new Date(anchorDate.getFullYear(), anchorDate.getMonth() + 1, 1));
 
   const toggleGroup = (key: string) => {
     const next = new Set(collapsedGroups);
@@ -274,14 +307,26 @@ export function GanttPage() {
   const expandAll  = () => setCollapsedGroups(new Set());
   const collapseAll = () => setCollapsedGroups(new Set(groups.map((g) => g.key)));
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    // Force-show plan details for the print so installation teams see everything
+    const wasShowing = showPlanDetails;
+    setShowPlanDetails(true);
+    // Wait a tick for React to render the expanded layout, then print
+    setTimeout(() => {
+      window.print();
+      // Restore previous state after print dialog closes
+      if (!wasShowing) {
+        setTimeout(() => setShowPlanDetails(false), 200);
+      }
+    }, 100);
+  };
 
   if (isLoading) {
     return <div className="py-24 text-center text-slate-400">Loading schedule…</div>;
   }
 
   return (
-    <div className="gantt-page bg-slate-50 min-h-screen pb-12">
+    <div className="gantt-page bg-[#f1f5f9] min-h-screen pb-12">
       <GanttPrintHeader rangeStart={rangeStart} rangeEnd={rangeEnd} groupBy={groupBy} />
 
       <div className="max-w-[1800px] mx-auto px-6 pt-6 space-y-4">
@@ -297,83 +342,87 @@ export function GanttPage() {
           </div>
 
           <div className="flex items-center gap-2 no-print">
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm">
-              <div className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700">
-                <span>📅</span>
-                <span>{dateRangeLabel(rangeStart, rangeEnd)}</span>
-              </div>
-              <select value={viewMode} onChange={(e) => setViewMode(e.target.value as ViewMode)}
-                className="border-l border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 bg-white outline-none cursor-pointer hover:bg-slate-50">
-                <option value="2weeks">2 weeks</option>
-                <option value="month">1 month</option>
-                <option value="quarter">Quarter</option>
-              </select>
-              <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-                className="border-l border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 bg-white outline-none cursor-pointer hover:bg-slate-50">
-                <option value="customer">Group by customer</option>
-                <option value="region">Group by region</option>
-                <option value="team">Group by team</option>
-                <option value="status">Group by status</option>
-              </select>
-            </div>
+            <DateRangeFilter value={dateRange} onChange={setDateRange} />
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+              className="px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg outline-none cursor-pointer hover:bg-slate-50 shadow-sm">
+              <option value="customer">Group by customer</option>
+              <option value="region">Group by region</option>
+              <option value="team">Group by team</option>
+              <option value="status">Group by status</option>
+            </select>
           </div>
         </header>
 
         {/* ───── KPI cards + nav buttons ───── */}
         <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 lg:col-span-8 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            <KpiCard icon="📋" iconBg="#3B82F6" label="Total Plans"  value={kpis.plans}      unit="plans" />
-            <KpiCard icon="👥" iconBg="#8B5CF6" label="Customers"    value={kpis.customers}  unit="customers" />
-            <KpiCard icon="📷" iconBg="#0EA5E9" label="Sensors"      value={kpis.sensors}    unit="sensors" />
-            <KpiCard icon="⚙"  iconBg="#F59E0B" label="In Progress"  value={kpis.inProgress} unit="plans" />
-            <KpiCard icon="✓"  iconBg="#16A34A" label="Completed"    value={kpis.completed}  unit="plans" />
-            <KpiCard icon="!"  iconBg="#DC2626" label="Attention"    value={kpis.attention}  unit="plans" />
+          <div className="col-span-12 lg:col-span-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
+            <KpiCard icon="📋" iconBg="#3B82F6" label="Plans"        value={kpis.plans}      unit="" />
+            <KpiCard icon="👥" iconBg="#8B5CF6" label="Customers"    value={kpis.customers}  unit="" />
+            <KpiCard icon="📷" iconBg="#0EA5E9" label="People Cnt."  value={kpis.sensors}    unit="" />
+            <KpiCard icon="🎥" iconBg="#06B6D4" label="CCTV"         value={kpis.cctv}       unit="" />
+            <KpiCard icon="🔌" iconBg="#10B981" label="LAN Jobs"     value={kpis.lanJobs}    unit="" />
+            <KpiCard icon="⚙"  iconBg="#F59E0B" label="In Progress"  value={kpis.inProgress} unit="" />
+            <KpiCard icon="✓"  iconBg="#16A34A" label="Completed"    value={kpis.completed}  unit="" />
+            <KpiCard icon="!"  iconBg="#DC2626" label="Attention"    value={kpis.attention}  unit="" />
+            <KpiCard icon="⚠"  iconBg={kpis.unassigned > 0 ? '#DC2626' : '#9CA3AF'} label="Unassigned" value={kpis.unassigned} unit="" />
+            <KpiCard icon="📝" iconBg="#7C3AED" label="With Notes"   value={kpis.withNotes}  unit="" />
           </div>
 
-          <div className="col-span-12 lg:col-span-4 flex items-center justify-end gap-2 no-print">
-            <button onClick={goToday}    className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm">Today</button>
-            <button onClick={goPrev}     className="px-3 py-2 text-sm text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm">‹</button>
-            <button onClick={goNext}     className="px-3 py-2 text-sm text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm">›</button>
-            <button onClick={handlePrint} className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm inline-flex items-center gap-1.5">
-              🖨️ Print / Export for Team
+          <div className="col-span-12 lg:col-span-2 flex items-center justify-end gap-2 no-print">
+            <button onClick={handlePrint} className="px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm inline-flex items-center gap-1">
+              🖨️ Print
             </button>
-            <button onClick={handlePrint} className="px-4 py-2 text-sm font-semibold text-white bg-slate-800 rounded-lg hover:bg-slate-900 shadow-sm inline-flex items-center gap-1.5">
-              📥 Export PDF
+            <button onClick={handlePrint} className="px-3 py-2 text-xs font-semibold text-white bg-slate-800 rounded-lg hover:bg-slate-900 shadow-sm inline-flex items-center gap-1">
+              📥 PDF
             </button>
           </div>
         </div>
 
         {/* ───── Filters ───── */}
         <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden no-print">
-          <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-            <span className="text-sm font-semibold text-slate-700 mr-1">Filters</span>
+          <div className="flex items-center gap-2 px-3 py-2 overflow-x-auto">
+            <span className="text-xs font-semibold text-slate-700 mr-1 shrink-0">Filters</span>
 
-            <FilterSelect value={filters.customer}   onChange={(v) => setFilters({ ...filters, customer: v })} placeholder="All customers"   options={customerOptions} />
+            <FilterSelect value={filters.customer}   onChange={(v) => setFilters({ ...filters, customer: v })}   placeholder="All customers"   options={customerOptions} />
             <FilterSelect value={filters.department} onChange={(v) => setFilters({ ...filters, department: v })} placeholder="All departments" options={departmentOptions} />
+            <FilterSelect value={filters.team}       onChange={(v) => setFilters({ ...filters, team: v })}       placeholder="All teams"       options={teamOptions} />
             <FilterSelect value={filters.region}     onChange={(v) => setFilters({ ...filters, region: v })}     placeholder="All regions"     options={regionOptions.map((r) => ({ value: r, label: r }))} />
             <FilterSelect value={filters.province}   onChange={(v) => setFilters({ ...filters, province: v })}   placeholder="All provinces"   options={provinceOptions.map((p) => ({ value: p, label: p }))} />
             <FilterSelect value={filters.status}     onChange={(v) => setFilters({ ...filters, status: v })}     placeholder="All status"      options={Object.entries(STATUS_CONFIG).map(([v, c]) => ({ value: v, label: c.label }))} />
 
-            <button onClick={resetFilters} className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50">
-              Reset filters
+            <button onClick={resetFilters} className="shrink-0 px-2.5 py-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-md hover:bg-slate-50 whitespace-nowrap">
+              Reset
             </button>
 
-            <div className="flex items-center gap-2 ml-auto flex-wrap">
-              {activeChips.length > 0 && (
-                <>
-                  <span className="text-xs text-slate-500">Active filters:</span>
-                  {activeChips.map((c) => (
-                    <span key={c.key} className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium bg-sky-50 text-sky-700 border border-sky-200 rounded-full">
-                      {c.label}
-                      <button onClick={() => clearChip(c.key)} className="hover:text-sky-900 ml-0.5">✕</button>
-                    </span>
-                  ))}
-                  <button onClick={resetFilters} className="text-xs text-sky-600 hover:underline">Clear all</button>
-                </>
-              )}
-              <button onClick={expandAll}   className="ml-2 px-3 py-1.5 text-xs font-medium text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50">Expand all</button>
-              <button onClick={collapseAll} className="px-3 py-1.5 text-xs font-medium text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50">Collapse all</button>
-            </div>
+            {/* Active chips inline */}
+            {activeChips.length > 0 && (
+              <div className="flex items-center gap-1.5 pl-2 border-l border-slate-200 shrink-0">
+                {activeChips.map((c) => (
+                  <span key={c.key} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-300 rounded-full whitespace-nowrap max-w-[140px]">
+                    <span className="truncate">{c.label}</span>
+                    <button onClick={() => clearChip(c.key)} className="hover:text-sky-900 shrink-0">✕</button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Spacer pushes right-side actions to the end */}
+            <div className="flex-1" />
+
+            <button onClick={expandAll}   className="shrink-0 px-2.5 py-1.5 text-xs font-medium text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50 whitespace-nowrap">Expand all</button>
+            <button onClick={collapseAll} className="shrink-0 px-2.5 py-1.5 text-xs font-medium text-slate-700 border border-slate-300 rounded-md hover:bg-slate-50 whitespace-nowrap">Collapse all</button>
+
+            <label className={`shrink-0 inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium border rounded-md cursor-pointer transition-colors whitespace-nowrap ${
+              showPlanDetails
+                ? 'bg-slate-800 text-white border-slate-800'
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+            }`}>
+              <input type="checkbox"
+                checked={showPlanDetails}
+                onChange={(e) => setShowPlanDetails(e.target.checked)}
+                className="w-3.5 h-3.5 rounded accent-sky-600 cursor-pointer" />
+              Show plan details
+            </label>
           </div>
         </section>
 
@@ -384,14 +433,24 @@ export function GanttPage() {
             groups={groups}
             collapsedGroups={collapsedGroups}
             onToggleGroup={toggleGroup}
-            onBarClick={(plan) => navigate(`/plans/${plan.id}`)}
+            selectedPlanId={selectedPlanId}
+            showPlanDetails={showPlanDetails}
+            onBarClick={(plan) => {
+              setSelectedPlanId(plan.id);
+              // Scroll detail row into view
+              setTimeout(() => {
+                const el = document.getElementById(`work-row-${plan.id}`);
+                if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 50);
+            }}
             onBarHover={setHoveredBar}
+            onOpenPlan={(plan) => navigate(`/plans/${plan.id}`)}
           />
         </section>
 
         {/* ───── Legend ───── */}
         <section className="bg-white rounded-xl border border-slate-200 shadow-sm px-4 py-3 flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Legend</span>
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Status</span>
           {(Object.entries(STATUS_CONFIG) as [PlanStatus, typeof STATUS_CONFIG[PlanStatus]][]).map(([k, c]) => (
             <span key={k}
               className="inline-flex items-center px-2.5 py-1 rounded text-[11px] font-bold tracking-wider"
@@ -399,6 +458,23 @@ export function GanttPage() {
               {c.label}
             </span>
           ))}
+
+          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide ml-3 pl-3 border-l border-slate-200">Region</span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+            <span className="inline-block w-5 h-4 rounded-sm overflow-hidden flex flex-col">
+              <span className="block h-1/2" style={{ background: REGION_COLORS.BANGKOK }}></span>
+              <span className="block h-1/2 bg-slate-400"></span>
+            </span>
+            BANGKOK
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
+            <span className="inline-block w-5 h-4 rounded-sm overflow-hidden flex flex-col">
+              <span className="block h-1/2" style={{ background: REGION_COLORS.UPC }}></span>
+              <span className="block h-1/2 bg-slate-400"></span>
+            </span>
+            UPC (ต่างจังหวัด)
+          </span>
+
           <span className="text-xs text-slate-600 inline-flex items-center gap-1.5 ml-auto">
             <span className="inline-block w-0.5 h-4 bg-blue-600 align-middle"></span>
             Today: {new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
@@ -407,7 +483,6 @@ export function GanttPage() {
             <span className="inline-block w-4 h-4 bg-slate-100 border border-slate-200 align-middle"></span>
             Weekend
           </span>
-          <span className="text-xs text-slate-400 italic ml-2">* Click plan bar to view details</span>
         </section>
 
         {/* Print-only footer */}
@@ -428,16 +503,16 @@ export function GanttPage() {
 
 function KpiCard({ icon, iconBg, label, value, unit }: { icon: string; iconBg: string; label: string; value: number; unit: string }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3 flex items-center gap-3">
-      <div className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-lg font-bold shrink-0"
+    <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-2.5 py-2 flex items-center gap-2">
+      <div className="w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shrink-0"
            style={{ background: iconBg }}>
         {icon}
       </div>
       <div className="min-w-0">
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">{label}</div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-2xl font-bold text-slate-900 leading-none">{value}</span>
-          <span className="text-xs text-slate-500">{unit}</span>
+        <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 truncate leading-tight">{label}</div>
+        <div className="flex items-baseline gap-1">
+          <span className="text-lg font-bold text-slate-900 leading-none tabular-nums">{value}</span>
+          {unit && <span className="text-[10px] text-slate-500">{unit}</span>}
         </div>
       </div>
     </div>
@@ -450,7 +525,7 @@ function FilterSelect({ value, onChange, placeholder, options }: {
 }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
-      className="px-3 py-1.5 text-sm text-slate-700 bg-white border border-slate-300 rounded-md hover:border-slate-400 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 min-w-[140px]">
+      className="shrink-0 px-2 py-1.5 text-xs text-slate-700 bg-white border border-slate-300 rounded-md hover:border-slate-400 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 min-w-[110px] max-w-[160px]">
       <option value="">{placeholder}</option>
       {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
@@ -466,11 +541,14 @@ interface GanttTableProps {
   groups: GroupRow[];
   collapsedGroups: Set<string>;
   onToggleGroup: (key: string) => void;
+  selectedPlanId: string | null;
+  showPlanDetails: boolean;
   onBarClick: (plan: Plan) => void;
   onBarHover: (bar: { plan: Plan; x: number; y: number } | null) => void;
+  onOpenPlan: (plan: Plan) => void;
 }
 
-function GanttTable({ days, groups, collapsedGroups, onToggleGroup, onBarClick, onBarHover }: GanttTableProps) {
+function GanttTable({ days, groups, collapsedGroups, onToggleGroup, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan }: GanttTableProps) {
   const totalW = days.length * DAY_W;
   const weeks = useMemo(() => weekSpans(days), [days]);
   const todayIdx = days.findIndex((d) => isSameDay(d, new Date()));
@@ -480,7 +558,7 @@ function GanttTable({ days, groups, collapsedGroups, onToggleGroup, onBarClick, 
       <div style={{ width: LEFT_TOTAL + totalW, minWidth: '100%' }}>
         {/* Header */}
         <div className="flex items-stretch bg-slate-50 border-b-2 border-slate-300 sticky top-0 z-30">
-          <div className="sticky left-0 z-30 bg-slate-50 flex border-r-2 border-slate-300 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
+          <div className="sticky left-0 z-30 bg-slate-50 flex border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
                style={{ width: LEFT_TOTAL }}>
             <div style={{ width: LEFT_CUSTOMER }} className="px-4 py-3 flex items-center text-xs font-bold uppercase tracking-wider text-slate-600 border-r border-slate-200">
               Customer / Group
@@ -553,8 +631,11 @@ function GanttTable({ days, groups, collapsedGroups, onToggleGroup, onBarClick, 
               totalW={totalW}
               collapsed={collapsedGroups.has(g.key)}
               onToggle={() => onToggleGroup(g.key)}
+              selectedPlanId={selectedPlanId}
+              showPlanDetails={showPlanDetails}
               onBarClick={onBarClick}
               onBarHover={onBarHover}
+              onOpenPlan={onOpenPlan}
               todayIdx={todayIdx}
             />
           ))
@@ -575,12 +656,15 @@ interface GroupRowProps {
   totalW: number;
   collapsed: boolean;
   onToggle: () => void;
+  selectedPlanId: string | null;
+  showPlanDetails: boolean;
   onBarClick: (plan: Plan) => void;
   onBarHover: (bar: { plan: Plan; x: number; y: number } | null) => void;
+  onOpenPlan: (plan: Plan) => void;
   todayIdx: number;
 }
 
-function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, onBarClick, onBarHover, todayIdx }: GroupRowProps) {
+function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan, todayIdx }: GroupRowProps) {
   const rangeStart = days[0];
   const bgColor = groupIndex % 2 === 0 ? '#ffffff' : '#f8fafc';
 
@@ -598,92 +682,159 @@ function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, o
 
   const lanes = useMemo(() => assignLanes(bars), [bars]);
   const laneCount = Math.max(1, ...lanes.map((l) => l + 1));
-  const rowHeight = collapsed ? ROW_H : Math.max(ROW_H, laneCount * (BAR_H + 6) + 18);
+  const overviewBarsHeight = collapsed ? ROW_H : Math.max(ROW_H, laneCount * (BAR_H + 6) + 18);
+
+  // ─── Plans sorted by date+time, used when showPlanDetails is on ─────────
+  const sortedPlans = useMemo(() => {
+    return [...group.plans]
+      .filter((p) => !!p.scheduledDate)
+      .sort((a, b) => {
+        const da = new Date(a.scheduledDate!).getTime();
+        const db = new Date(b.scheduledDate!).getTime();
+        if (da !== db) return da - db;
+        return (a.workStartTime || '').localeCompare(b.workStartTime || '');
+      });
+  }, [group.plans]);
+
+  const PLAN_ROW_H = 38; // single-line plan row
 
   return (
-    <div className="flex items-stretch border-b border-slate-200 hover:bg-sky-50/30 transition-colors"
-         style={{ minHeight: rowHeight, background: bgColor }}>
-      {/* Left fixed */}
-      <div className="sticky left-0 z-20 flex border-r-2 border-slate-300 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.08)]"
-           style={{ width: LEFT_TOTAL, background: bgColor }}>
-        <div style={{ width: LEFT_CUSTOMER }} className="px-4 py-3 flex items-start gap-2 border-r border-slate-200">
-          <button onClick={onToggle}
-            className="mt-0.5 text-slate-400 hover:text-slate-700 text-xs leading-none w-4 shrink-0"
-            aria-label={collapsed ? 'Expand' : 'Collapse'}>
-            {collapsed ? '▶' : '▼'}
-          </button>
-          <div className="min-w-0">
-            <div className="text-sm font-bold text-slate-900 truncate uppercase tracking-wide">{group.label}</div>
-            {group.subtitle && <div className="text-xs text-slate-500 truncate mt-0.5">{group.subtitle}</div>}
+    <>
+      {/* ─── Group header row ─── */}
+      <div className="flex items-stretch border-b border-slate-200 hover:bg-slate-50 transition-colors"
+           style={{ background: bgColor }}>
+        {/* Left fixed */}
+        <div className="sticky left-0 z-20 flex border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+             style={{ width: LEFT_TOTAL, background: bgColor }}>
+          <div style={{ width: LEFT_CUSTOMER }} className="px-4 py-3 flex items-start gap-2 border-r border-slate-200">
+            <button onClick={onToggle}
+              className="mt-0.5 text-slate-400 hover:text-slate-700 text-xs leading-none w-4 shrink-0"
+              aria-label={collapsed ? 'Expand' : 'Collapse'}>
+              {collapsed ? '▶' : '▼'}
+            </button>
+            <div className="min-w-0">
+              <div className="text-base font-bold text-slate-900 truncate uppercase tracking-wide">{group.label}</div>
+              {group.subtitle && <div className="text-sm text-slate-500 truncate mt-0.5">{group.subtitle}</div>}
+            </div>
+          </div>
+
+          <div style={{ width: LEFT_SUMMARY }} className="px-3 py-2.5 flex flex-col gap-1">
+            <div className="text-sm text-slate-700">
+              <span className="font-semibold">{group.totals.plans}</span> plan{group.totals.plans === 1 ? '' : 's'} ·{' '}
+              <span className="font-semibold">{group.totals.sensors}</span> sensor{group.totals.sensors === 1 ? '' : 's'}
+            </div>
+            <ProgressBar pct={group.completionPct} />
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {group.totals.draft       > 0 && <StatusBadge status="DRAFT"       count={group.totals.draft} />}
+              {group.totals.confirmed   > 0 && <StatusBadge status="CONFIRMED"   count={group.totals.confirmed} />}
+              {group.totals.inProgress  > 0 && <StatusBadge status="IN_PROGRESS" count={group.totals.inProgress} />}
+              {group.totals.completed   > 0 && <StatusBadge status="COMPLETED"   count={group.totals.completed} />}
+              {group.totals.attention   > 0 && <StatusBadge status="ATTENTION"   count={group.totals.attention} />}
+              {group.totals.cancelled   > 0 && <StatusBadge status="CANCELLED"   count={group.totals.cancelled} />}
+            </div>
           </div>
         </div>
 
-        <div style={{ width: LEFT_SUMMARY }} className="px-3 py-2.5 flex flex-col gap-1">
-          <div className="text-xs text-slate-600">
-            <span className="font-semibold">{group.totals.plans}</span> plan{group.totals.plans === 1 ? '' : 's'} ·{' '}
-            <span className="font-semibold">{group.totals.sensors}</span> sensor{group.totals.sensors === 1 ? '' : 's'}
-          </div>
-          <ProgressBar pct={group.completionPct} />
-          <div className="flex flex-wrap gap-1 mt-0.5">
-            {group.totals.draft       > 0 && <StatusBadge status="DRAFT"       count={group.totals.draft} />}
-            {group.totals.confirmed   > 0 && <StatusBadge status="CONFIRMED"   count={group.totals.confirmed} />}
-            {group.totals.inProgress  > 0 && <StatusBadge status="IN_PROGRESS" count={group.totals.inProgress} />}
-            {group.totals.completed   > 0 && <StatusBadge status="COMPLETED"   count={group.totals.completed} />}
-            {group.totals.attention   > 0 && <StatusBadge status="ATTENTION"   count={group.totals.attention} />}
-            {group.totals.cancelled   > 0 && <StatusBadge status="CANCELLED"   count={group.totals.cancelled} />}
-          </div>
+        {/* Right: Gantt overview — bars stacked when collapsed or showPlanDetails=OFF;
+            empty backdrop when showPlanDetails=ON (per-plan rows below own the bars) */}
+        <div className="relative" style={{ width: totalW }}>
+          <DayGridBackground days={days} todayIdx={todayIdx} />
+
+          {!collapsed && !showPlanDetails && (
+            <div className="relative" style={{ height: overviewBarsHeight }}>
+              {bars.map((b, i) => (
+                <GanttPlanBar
+                  key={b.plan.id}
+                  plan={b.plan}
+                  left={b.left}
+                  width={b.width}
+                  top={lanes[i] * (BAR_H + 6) + 10}
+                  selected={selectedPlanId === b.plan.id}
+                  onClick={() => onBarClick(b.plan)}
+                  onHover={(x, y) => onBarHover({ plan: b.plan, x, y })}
+                  onLeave={() => onBarHover(null)}
+                />
+              ))}
+            </div>
+          )}
+
+          {collapsed && (
+            <div className="relative h-full flex items-center" style={{ height: ROW_H }}>
+              <div className="text-xs text-slate-400 italic px-3">— Collapsed ({group.totals.plans} hidden) —</div>
+            </div>
+          )}
+          {/* When !collapsed && showPlanDetails: header row stays tall enough for left summary; right side is just backdrop */}
+          {!collapsed && showPlanDetails && (
+            <div style={{ height: ROW_H }} />
+          )}
         </div>
       </div>
 
-      {/* Right scrolling */}
-      <div className="relative" style={{ width: totalW }}>
-        <div className="absolute inset-0 flex pointer-events-none">
-          {days.map((d, i) => {
-            const isToday = isSameDay(d, new Date());
-            const we = isWeekend(d);
-            const sun = isSunday(d);
-            return (
-              <div key={i}
-                className={`border-r ${
-                  isToday ? 'bg-amber-50/60 border-amber-200'
-                  : sun ? 'bg-slate-100/70 border-slate-200'
-                  : we ? 'bg-slate-50/80 border-slate-200'
-                  : 'border-slate-100'
-                }`}
-                style={{ width: DAY_W }}
-              />
-            );
-          })}
-        </div>
+      {/* ─── Per-plan rows (only when expanded + showPlanDetails) ─── */}
+      {!collapsed && showPlanDetails && sortedPlans.map((plan) => {
+        const scheduled = startOfDay(new Date(plan.scheduledDate!));
+        const startOffset = Math.max(0, daysBetween(rangeStart, scheduled));
+        const dur = Math.max(1, plan.durationDays || 1);
+        const endIdx = Math.min(days.length - 1, startOffset + dur - 1);
+        const startIdx = Math.min(days.length - 1, startOffset);
+        const widthDays = Math.max(1, endIdx - startIdx + 1);
+        const barLeft = startIdx * DAY_W + 3;
+        const barWidth = widthDays * DAY_W - 6;
 
-        {todayIdx >= 0 && (
-          <div className="absolute top-0 bottom-0 w-0.5 bg-blue-600 z-10 pointer-events-none"
-               style={{ left: todayIdx * DAY_W + DAY_W / 2 - 1 }}
+        return (
+          <PlanDetailRow
+            key={plan.id}
+            plan={plan}
+            rowHeight={PLAN_ROW_H}
+            barLeft={barLeft}
+            barWidth={barWidth}
+            totalW={totalW}
+            days={days}
+            todayIdx={todayIdx}
+            selected={selectedPlanId === plan.id}
+            bgColor={bgColor}
+            onClick={() => onBarClick(plan)}
+            onHover={(x, y) => onBarHover({ plan, x, y })}
+            onLeave={() => onBarHover(null)}
+            onOpenPlan={() => onOpenPlan(plan)}
           />
-        )}
+        );
+      })}
+    </>
+  );
+}
 
-        {!collapsed ? (
-          <div className="relative" style={{ height: rowHeight }}>
-            {bars.map((b, i) => (
-              <GanttPlanBar
-                key={b.plan.id}
-                plan={b.plan}
-                left={b.left}
-                width={b.width}
-                top={lanes[i] * (BAR_H + 6) + 10}
-                onClick={() => onBarClick(b.plan)}
-                onHover={(x, y) => onBarHover({ plan: b.plan, x, y })}
-                onLeave={() => onBarHover(null)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="relative h-full flex items-center" style={{ height: ROW_H }}>
-            <div className="text-xs text-slate-400 italic px-3">— Collapsed ({group.totals.plans} hidden) —</div>
-          </div>
-        )}
+/**
+ * Re-usable day grid background (with today highlight + weekend tint).
+ * Used by group header and each per-plan row to keep visual alignment identical.
+ */
+function DayGridBackground({ days, todayIdx }: { days: Date[]; todayIdx: number }) {
+  return (
+    <>
+      <div className="absolute inset-0 flex pointer-events-none">
+        {days.map((d, i) => {
+          const isToday = isSameDay(d, new Date());
+          const we = isWeekend(d);
+          const sun = isSunday(d);
+          return (
+            <div key={i}
+              className={`border-r ${
+                isToday ? 'bg-amber-50/60 border-amber-200'
+                : sun ? 'bg-slate-100/70 border-slate-200'
+                : we ? 'bg-slate-50/80 border-slate-200'
+                : 'border-slate-100'
+              }`}
+              style={{ width: DAY_W }}
+            />
+          );
+        })}
       </div>
-    </div>
+      {todayIdx >= 0 && (
+        <div className="absolute top-0 bottom-0 w-0.5 bg-blue-600 z-10 pointer-events-none"
+             style={{ left: todayIdx * DAY_W + DAY_W / 2 - 1 }}
+        />
+      )}
+    </>
   );
 }
 
@@ -715,16 +866,18 @@ function StatusBadge({ status, count }: { status: PlanStatus; count: number }) {
 
 interface BarProps {
   plan: Plan; left: number; width: number; top: number;
+  selected: boolean;
   onClick: () => void;
   onHover: (x: number, y: number) => void;
   onLeave: () => void;
 }
 
-function GanttPlanBar({ plan, left, width, top, onClick, onHover, onLeave }: BarProps) {
+function GanttPlanBar({ plan, left, width, top, selected, onClick, onHover, onLeave }: BarProps) {
   const c = STATUS_CONFIG[plan.planStatus] || STATUS_CONFIG.DRAFT;
   const showAttentionIcon = plan.planStatus === 'ATTENTION' || plan.planStatus === 'CANCELLED';
   const labelText = `${plan.storeName}${plan.branchName ? ` ${plan.branchName}` : ''}`;
   const meta = `P${planSeq(plan)} · ${plan.sensorCount || 0} sensor${(plan.sensorCount || 0) === 1 ? '' : 's'}`;
+  const regionColor = REGION_COLORS[plan.storeRegion] || REGION_COLORS._default;
 
   return (
     <button
@@ -732,19 +885,30 @@ function GanttPlanBar({ plan, left, width, top, onClick, onHover, onLeave }: Bar
       onMouseEnter={(e) => onHover(e.clientX, e.clientY)}
       onMouseMove={(e) => onHover(e.clientX, e.clientY)}
       onMouseLeave={onLeave}
-      className="absolute rounded-md shadow-sm hover:shadow-md hover:brightness-105 active:brightness-95 transition-all text-left overflow-hidden border border-black/10 cursor-pointer focus:outline-none focus:ring-2 focus:ring-sky-400 focus:ring-offset-1"
+      className={`absolute rounded-md transition-all text-left overflow-hidden cursor-pointer focus:outline-none ${
+        selected
+          ? 'ring-2 ring-offset-2 ring-sky-500 shadow-lg z-20 brightness-110 scale-[1.02]'
+          : 'shadow-sm hover:shadow-md hover:brightness-105 active:brightness-95 border border-black/10 focus:ring-2 focus:ring-sky-400 focus:ring-offset-1'
+      }`}
       style={{
         left, width, top, height: BAR_H,
-        background: c.bg, color: c.text,
+        color: c.text,
       }}
+      title={`${plan.storeRegion} · ${plan.storeName}`}
     >
-      <div className="px-2 py-0.5 flex flex-col justify-center h-full">
-        <div className="text-[11px] font-bold leading-tight truncate flex items-center gap-1">
+      {/* Top half: region color */}
+      <div className="absolute left-0 right-0 top-0 h-1/2" style={{ background: regionColor }} />
+      {/* Bottom half: status color */}
+      <div className="absolute left-0 right-0 bottom-0 h-1/2" style={{ background: c.bg }} />
+
+      {/* Text — centered, overlays both halves */}
+      <div className="relative px-2 flex flex-col justify-center h-full">
+        <div className="text-[11px] font-bold leading-tight truncate flex items-center gap-1 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
           {showAttentionIcon && <span className="opacity-90">⚠</span>}
           <span className="truncate">{labelText}</span>
         </div>
         {width > 90 && (
-          <div className="text-[10px] leading-tight truncate opacity-90 font-medium">{meta}</div>
+          <div className="text-[10px] leading-tight truncate opacity-95 font-medium drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{meta}</div>
         )}
       </div>
     </button>
@@ -785,6 +949,248 @@ function PlanBarTooltip({ plan, x, y }: { plan: Plan; x: number; y: number }) {
       </div>
     </div>
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//   PlanDetailRow — one row per plan: compact left summary + aligned Gantt bar
+//   Rendered as siblings to the group header when showPlanDetails is ON.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PlanDetailRowProps {
+  plan: Plan;
+  rowHeight: number;
+  barLeft: number;
+  barWidth: number;
+  totalW: number;
+  days: Date[];
+  todayIdx: number;
+  selected: boolean;
+  bgColor: string;
+  onClick: () => void;
+  onHover: (x: number, y: number) => void;
+  onLeave: () => void;
+  onOpenPlan: () => void;
+}
+
+function PlanDetailRow({
+  plan, rowHeight, barLeft, barWidth, totalW, days, todayIdx,
+  selected, bgColor, onClick, onHover, onLeave, onOpenPlan,
+}: PlanDetailRowProps) {
+  const [copied, setCopied] = useState(false);
+  const scope = plan.workScope || [];
+  const date = new Date(plan.scheduledDate!);
+  const dayStr = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const timeStr = (plan.workStartTime || plan.workEndTime)
+    ? `${plan.workStartTime || '—'}–${plan.workEndTime || '—'}`
+    : null;
+  const sensors = plan.sensorCount || 0;
+  const cctv = plan.cctvCount || 0;
+  const notesText = [plan.detail, plan.readinessNote].filter(Boolean).join(' · ');
+  const contactLine = [plan.contactPerson, plan.contactPhone].filter(Boolean).join(' · ');
+
+  const copy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(buildWorkSummaryText(plan)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    }).catch(() => {});
+  };
+
+  const rowBg = selected ? '#e0f2fe' : bgColor;
+
+  return (
+    <div
+      id={`work-row-${plan.id}`}
+      onClick={onClick}
+      className={`plan-detail-row group flex items-stretch border-b border-slate-100 cursor-pointer transition-colors ${
+        selected ? 'bg-sky-50 ring-1 ring-sky-300' : 'hover:bg-slate-50'
+      }`}
+      style={{ minHeight: rowHeight, background: rowBg }}
+    >
+      {/* Left fixed: compact one-line plan summary */}
+      <div className="sticky left-0 z-10 flex border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+           style={{ width: LEFT_TOTAL, background: rowBg }}>
+        {/* Date column — vertical layout for readability */}
+        <div style={{ width: LEFT_CUSTOMER }}
+             className="pl-4 pr-3 py-2 flex items-center gap-2 border-r border-slate-200 min-w-0">
+          {/* Date badge — big, bold, dark */}
+          <div className="shrink-0 flex flex-col items-center justify-center px-2.5 py-1 rounded-md bg-slate-800 text-white tabular-nums leading-none shadow-sm min-w-[44px]">
+            <span className="text-[16px] font-extrabold leading-none">{date.getDate()}</span>
+            <span className="text-[9px] uppercase tracking-wider font-semibold opacity-80 mt-0.5">
+              {date.toLocaleDateString('en-US', { month: 'short' })}
+            </span>
+          </div>
+
+          {/* Day + time stack */}
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="text-[12px] font-bold text-slate-700">{dayStr}</span>
+            {timeStr && (
+              <span className="text-[11px] text-slate-500 font-medium tabular-nums whitespace-nowrap truncate" title={timeStr}>
+                🕐 {timeStr}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Summary line + actions */}
+        <div style={{ width: LEFT_SUMMARY }} className="relative px-3 py-1.5 flex items-start gap-2 text-[12px] min-w-0">
+          <div className="min-w-0 flex-1 leading-tight">
+            {/* Line 1: Customer · Site */}
+            <div className="truncate text-[13px]">
+              <span className="font-bold text-slate-900">
+                {plan.customer?.customerName || plan.customer?.customerCode || '—'}
+              </span>
+              <span className="text-slate-600"> · {plan.storeName}{plan.branchName ? ` · ${plan.branchName}` : ''}</span>
+            </div>
+
+            {/* Line 2: Equipment chips + Contact — wrap onto a second line if too long */}
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5 text-[11px] text-slate-600">
+              {sensors > 0 && (
+                <span className="font-semibold text-sky-700 whitespace-nowrap">
+                  📷 {sensors}{plan.sensorModel ? ` x ${plan.sensorModel}` : ''}
+                </span>
+              )}
+              {cctv > 0 && (
+                <span className="font-semibold text-cyan-700 whitespace-nowrap">🎥 {cctv} x CCTV</span>
+              )}
+              {/* Skip INSTALL_CAMERA: it duplicates the sensor count above. Other scopes get label after icon. */}
+              {scope.filter((s) => s !== 'INSTALL_CAMERA').map((s) => (
+                <span key={s}
+                  className="text-slate-700 whitespace-nowrap"
+                  title={s === 'INSTALL_POE' && plan.poeSwitchModel ? plan.poeSwitchModel : undefined}>
+                  {workScopeLabelShort(s)}
+                </span>
+              ))}
+              {contactLine && <span className="text-slate-500 whitespace-nowrap">📞 {contactLine}</span>}
+            </div>
+
+            {/* Line 3: Notes (only if present) */}
+            {notesText && (
+              <div className="mt-0.5 text-[11px] text-slate-700 bg-slate-50 border-l-2 border-amber-400 pl-1.5 pr-1 py-0.5 rounded-r leading-snug line-clamp-2"
+                   title={notesText}>
+                📝 {notesText}
+              </div>
+            )}
+          </div>
+
+          {/* Actions — visible on hover. Absolutely positioned so they don't steal width from text. */}
+          <div className="absolute right-1 top-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity no-print bg-white/95 backdrop-blur-sm rounded px-0.5 py-0.5 shadow-sm border border-slate-200 z-10">
+            <button
+              onClick={(e) => { e.stopPropagation(); onOpenPlan(); }}
+              className="px-1.5 py-0.5 text-[10px] font-medium bg-slate-800 text-white rounded hover:bg-slate-900 whitespace-nowrap"
+              title="Open plan"
+            >↗</button>
+            <button
+              onClick={copy}
+              className={`px-1.5 py-0.5 text-[10px] font-medium rounded border whitespace-nowrap ${
+                copied
+                  ? 'bg-emerald-100 text-emerald-700 border-emerald-300'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              }`}
+              title="Copy summary"
+            >{copied ? '✓' : '📋'}</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Right: single lane with this plan's bar */}
+      <div className="relative" style={{ width: totalW }}>
+        <DayGridBackground days={days} todayIdx={todayIdx} />
+        <div className="relative" style={{ height: rowHeight }}>
+          <GanttPlanBar
+            plan={plan}
+            left={barLeft}
+            width={barWidth}
+            top={6}
+            selected={selected}
+            onClick={onClick}
+            onHover={onHover}
+            onLeave={onLeave}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Short chip text for inline use in the compact plan row (icon + short label)
+function workScopeLabelShort(s: string): string {
+  switch (s) {
+    case 'INSTALL_CAMERA': return '📷 Camera';
+    case 'INSTALL_LAN':    return '🔌 Lan';
+    case 'INSTALL_POE':    return '⚡ POE';
+    case 'CALIBRATION':    return '🎯 Calibrate';
+    case 'TESTING':        return '✓ Test';
+    case 'CLOUD_SETUP':    return '☁ Cloud';
+    case 'MAINTENANCE':    return '🔧 Maint.';
+    default: return s;
+  }
+}
+
+function workScopeLabel(s: string): string {
+  switch (s) {
+    case 'INSTALL_CAMERA': return '📷 Camera';
+    case 'INSTALL_LAN':    return '🔌 LAN';
+    case 'INSTALL_POE':    return '⚡ PoE';
+    case 'CALIBRATION':    return '🎯 Calibration';
+    case 'TESTING':        return '✓ Testing';
+    case 'CLOUD_SETUP':    return '☁ Cloud';
+    case 'MAINTENANCE':    return '🔧 Maint.';
+    default: return s;
+  }
+}
+
+function buildWorkSummaryText(plan: Plan): string {
+  const lines: string[] = [];
+  lines.push('📋 ใบงานติดตั้ง / Installation Work Summary');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  if (plan.scheduledDate) {
+    const d = new Date(plan.scheduledDate);
+    lines.push(`📅 วันที่: ${d.toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}`);
+  }
+  if (plan.workStartTime || plan.workEndTime) {
+    lines.push(`🕐 เวลา: ${plan.workStartTime || '—'} – ${plan.workEndTime || '—'} น.`);
+  }
+  if ((plan.durationDays || 1) > 1) lines.push(`⏱ ระยะเวลา: ${plan.durationDays} วัน`);
+  lines.push('');
+  lines.push(`🏪 ลูกค้า: ${plan.customer?.customerName || plan.customer?.customerCode || '—'}`);
+  lines.push(`📍 สาขา: ${plan.storeName}${plan.branchName ? ` · ${plan.branchName}` : ''}`);
+  if (plan.province) lines.push(`🗺 จังหวัด: ${plan.province} (${plan.storeRegion})`);
+  if (plan.address) lines.push(`🏠 ที่อยู่: ${plan.address}`);
+  lines.push('');
+  if (plan.team) lines.push(`👥 ทีม: ${plan.team.name}`);
+  else if (plan.contractorName) lines.push(`👥 ผู้รับเหมา: ${plan.contractorName}`);
+  else lines.push(`⚠ ยังไม่ได้มอบหมายทีม`);
+  lines.push('');
+  lines.push('🛠 งานที่ต้องทำ:');
+  const scope = plan.workScope || [];
+  if (scope.length === 0) lines.push('  • (ไม่ได้ระบุ)');
+  else scope.forEach((s) => lines.push(`  • ${workScopeLabel(s)}`));
+  lines.push('');
+  if ((plan.sensorCount || 0) > 0) {
+    lines.push(`📷 กล้องนับคน: ${plan.sensorCount} ตัว${plan.sensorModel ? ` (${plan.sensorModel})` : ''}`);
+  }
+  if ((plan.cctvCount || 0) > 0) lines.push(`🎥 CCTV: ${plan.cctvCount} ตัว`);
+  if (plan.poeSwitchModel) lines.push(`⚡ PoE Switch: ${plan.poeSwitchModel}`);
+  lines.push('');
+  lines.push(`📊 สถานะ: ${STATUS_CONFIG[plan.planStatus].label}`);
+  if (plan.contactPerson || plan.contactPhone) {
+    lines.push('');
+    lines.push('📞 ผู้ติดต่อหน้างาน:');
+    if (plan.contactPerson) lines.push(`  ${plan.contactPerson}`);
+    if (plan.contactPhone)  lines.push(`  ${plan.contactPhone}`);
+    if (plan.contactLine)   lines.push(`  LINE: ${plan.contactLine}`);
+  }
+  const notes = [plan.detail, plan.readinessNote].filter(Boolean).join('\n');
+  if (notes) {
+    lines.push('');
+    lines.push('📝 หมายเหตุ:');
+    lines.push(notes);
+  }
+  lines.push('');
+  lines.push('━━━━━━━━━━━━━━━━━━━━');
+  lines.push('DITECH Installation Planner');
+  return lines.join('\n');
 }
 
 function GanttPrintHeader({ rangeStart, rangeEnd, groupBy }: { rangeStart: Date; rangeEnd: Date; groupBy: GroupBy }) {
@@ -841,4 +1247,28 @@ function planSeq(plan: Plan): number {
   let s = 0;
   for (const ch of plan.id) s = (s + ch.charCodeAt(0)) % 9;
   return s + 1;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//   localStorage helpers — persist user preferences across sessions
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PREF_PREFIX = 'ditech.gantt.';
+
+function loadPref<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(PREF_PREFIX + key);
+    if (raw === null) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePref<T>(key: string, value: T): void {
+  try {
+    localStorage.setItem(PREF_PREFIX + key, JSON.stringify(value));
+  } catch {
+    // ignore quota / privacy mode errors
+  }
 }
