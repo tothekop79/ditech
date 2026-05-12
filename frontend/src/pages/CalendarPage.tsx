@@ -405,57 +405,54 @@ function MonthGrid({ year, month, plans, compact, selection, onDayClick, onWeekC
         </h3>
       </button>
 
-      <div className="grid grid-cols-[auto_1fr] border-b border-gray-200 bg-gray-50">
-        <div className="w-8 border-r border-gray-200" />
-        <div className="grid grid-cols-7">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
-            <div key={d} className="px-2 py-1 text-xs font-medium text-gray-500 text-center">{d}</div>
-          ))}
-        </div>
+      <div className="grid grid-cols-[2rem_repeat(7,_1fr)] border-b border-gray-200 bg-gray-50">
+        <div className="border-r border-gray-200" />
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d) => (
+          <div key={d} className="px-2 py-1 text-xs font-medium text-gray-500 text-center">{d}</div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-[auto_1fr]">
-        {/* Week-number column */}
-        <div className="flex flex-col">
-          {Array.from({ length: totalWeeks }).map((_, w) => {
-            const weekStart = new Date(gridStart);
-            weekStart.setDate(gridStart.getDate() + w * 7);
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekStart.getDate() + 6);
-            weekEnd.setHours(23, 59, 59);
-            const isWeekSelected = selection?.type === 'week' && selection.year === year && selection.month === month && selection.weekIdx === w;
-            return (
-              <button key={w}
+      <div>
+        {Array.from({ length: totalWeeks }).map((_, w) => {
+          const weekStart = new Date(gridStart);
+          weekStart.setDate(gridStart.getDate() + w * 7);
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekStart.getDate() + 6);
+          weekEnd.setHours(23, 59, 59);
+          const isWeekSelected = selection?.type === 'week' && selection.year === year && selection.month === month && selection.weekIdx === w;
+          return (
+            <div key={w} className="grid grid-cols-[2rem_repeat(7,_1fr)]">
+              {/* W label — in same grid row as day cells, so heights auto-sync */}
+              <button
                 onClick={() => onWeekClick(weekStart, weekEnd, w)}
                 title={`Click to filter week ${w + 1}`}
-                className={`w-8 ${compact ? 'min-h-[60px]' : 'min-h-[100px]'} border-r border-b border-gray-100 text-[10px] text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition flex items-start justify-center pt-1 ${
+                className={`border-r border-b border-gray-100 text-[10px] text-gray-400 hover:bg-blue-50 hover:text-blue-600 transition flex items-start justify-center pt-1 ${
                   isWeekSelected ? 'bg-blue-100 text-blue-700 font-semibold' : ''
                 }`}>
                 W{w + 1}
               </button>
-            );
-          })}
-        </div>
 
-        {/* Day cells */}
-        <div className="grid grid-cols-7">
-          {Array.from({ length: totalCells }).map((_, i) => {
-            const d = new Date(gridStart);
-            d.setDate(gridStart.getDate() + i);
-            const isOther = d.getMonth() !== month;
-            const isToday = sameDay(d, today);
-            const isSelected = selection?.type === 'day' && sameDay(d, selection.date);
-            const dk = dateKey(d);
-            const dayPlans = plansOnDate(plans, d);
-            return (
-              <DayCell key={dk} dateKey={dk} d={d} isOther={isOther} isToday={isToday}
-                isSelected={isSelected}
-                plans={dayPlans} compact={compact}
-                onDayClick={() => onDayClick(d)}
-                onChipClick={onChipClick} />
-            );
-          })}
-        </div>
+              {/* 7 day cells for this week row */}
+              {Array.from({ length: 7 }).map((_, dayIdx) => {
+                const i = w * 7 + dayIdx;
+                const d = new Date(gridStart);
+                d.setDate(gridStart.getDate() + i);
+                const isOther = d.getMonth() !== month;
+                const isToday = sameDay(d, today);
+                const isSelected = selection?.type === 'day' && sameDay(d, selection.date);
+                const dk = dateKey(d);
+                const dayPlans = plansOnDate(plans, d);
+                return (
+                  <DayCell key={dk} dateKey={dk} d={d} isOther={isOther} isToday={isToday}
+                    isSelected={isSelected}
+                    plans={dayPlans} compact={compact}
+                    onDayClick={() => onDayClick(d)}
+                    onChipClick={onChipClick} />
+                );
+              })}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
