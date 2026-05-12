@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { plansApi } from '../api/plans';
 import { DateRangeFilter, getPresetRange, type DateRange } from '../components/DateRangeFilter';
-import './gantt-print.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //   Types
@@ -172,7 +171,7 @@ export function GanttPage() {
 
   const { data: plans = [], isLoading } = useQuery({
     queryKey: ['plans', 'gantt'],
-    queryFn: () => plansApi.list({ limit: 500 }).then((r: any) => r.data || []),
+    queryFn: () => plansApi.list({ pageSize: 500 }).then((r: any) => r.data || []),
   });
 
   const customerOptions = useMemo(
@@ -308,17 +307,20 @@ export function GanttPage() {
   const collapseAll = () => setCollapsedGroups(new Set(groups.map((g) => g.key)));
 
   const handlePrint = () => {
-    // Force-show plan details for the print so installation teams see everything
-    const wasShowing = showPlanDetails;
-    setShowPlanDetails(true);
-    // Wait a tick for React to render the expanded layout, then print
-    setTimeout(() => {
-      window.print();
-      // Restore previous state after print dialog closes
-      if (!wasShowing) {
-        setTimeout(() => setShowPlanDetails(false), 200);
-      }
-    }, 100);
+    // Open dedicated print route in a new tab. The PrintGanttPage component
+    // there handles its own layout, auto-triggers window.print(), and uses
+    // semantic <table> markup so browser natively repeats <thead>/<tfoot>.
+    const params = new URLSearchParams();
+    if (dateRange.from) params.set('from', dateRange.from.toISOString().slice(0, 10));
+    if (dateRange.to)   params.set('to',   dateRange.to.toISOString().slice(0, 10));
+    params.set('group', groupBy);
+    if (filters.customer)   params.set('customer',   filters.customer);
+    if (filters.department) params.set('department', filters.department);
+    if (filters.region)     params.set('region',     filters.region);
+    if (filters.province)   params.set('province',   filters.province);
+    if (filters.status)     params.set('status',     filters.status);
+    if (filters.team)       params.set('team',       filters.team);
+    window.open(`/gantt/print?${params.toString()}`, '_blank', 'noopener,noreferrer');
   };
 
   if (isLoading) {
@@ -327,8 +329,6 @@ export function GanttPage() {
 
   return (
     <div className="gantt-page bg-[#f1f5f9] min-h-screen pb-12">
-      <GanttPrintHeader rangeStart={rangeStart} rangeEnd={rangeEnd} groupBy={groupBy} />
-
       <div className="max-w-[1800px] mx-auto px-6 pt-6 space-y-4">
         {/* ───── Title + view controls ───── */}
         <header className="flex flex-wrap items-start justify-between gap-4">
@@ -354,8 +354,8 @@ export function GanttPage() {
         </header>
 
         {/* ───── KPI cards + nav buttons ───── */}
-        <div className="grid grid-cols-12 gap-3">
-          <div className="col-span-12 lg:col-span-10 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-10 gap-2">
+        <div className="kpi-strip flex items-center gap-2">
+          <div className="flex gap-2 flex-1 min-w-0 overflow-x-auto">
             <KpiCard icon="📋" iconBg="#3B82F6" label="Plans"        value={kpis.plans}      unit="" />
             <KpiCard icon="👥" iconBg="#8B5CF6" label="Customers"    value={kpis.customers}  unit="" />
             <KpiCard icon="📷" iconBg="#0EA5E9" label="People Cnt."  value={kpis.sensors}    unit="" />
@@ -368,7 +368,7 @@ export function GanttPage() {
             <KpiCard icon="📝" iconBg="#7C3AED" label="With Notes"   value={kpis.withNotes}  unit="" />
           </div>
 
-          <div className="col-span-12 lg:col-span-2 flex items-center justify-end gap-2 no-print">
+          <div className="flex items-center gap-2 no-print shrink-0">
             <button onClick={handlePrint} className="px-3 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 shadow-sm inline-flex items-center gap-1">
               🖨️ Print
             </button>
@@ -461,17 +461,11 @@ export function GanttPage() {
 
           <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide ml-3 pl-3 border-l border-slate-200">Region</span>
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
-            <span className="inline-block w-5 h-4 rounded-sm overflow-hidden flex flex-col">
-              <span className="block h-1/2" style={{ background: REGION_COLORS.BANGKOK }}></span>
-              <span className="block h-1/2 bg-slate-400"></span>
-            </span>
+            <span className="inline-block w-6 h-3 rounded" style={{ background: REGION_COLORS.BANGKOK }}></span>
             BANGKOK
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs text-slate-700">
-            <span className="inline-block w-5 h-4 rounded-sm overflow-hidden flex flex-col">
-              <span className="block h-1/2" style={{ background: REGION_COLORS.UPC }}></span>
-              <span className="block h-1/2 bg-slate-400"></span>
-            </span>
+            <span className="inline-block w-6 h-3 rounded" style={{ background: REGION_COLORS.UPC }}></span>
             UPC (ต่างจังหวัด)
           </span>
 
@@ -484,12 +478,6 @@ export function GanttPage() {
             Weekend
           </span>
         </section>
-
-        {/* Print-only footer */}
-        <footer className="hidden print:flex items-center justify-between mt-4 pt-3 border-t border-slate-300 text-xs text-slate-600">
-          <span>DITECH Installation Planner v1.0</span>
-          <span>Generated · {new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-        </footer>
       </div>
 
       {hoveredBar && <PlanBarTooltip plan={hoveredBar.plan} x={hoveredBar.x} y={hoveredBar.y} />}
@@ -503,15 +491,15 @@ export function GanttPage() {
 
 function KpiCard({ icon, iconBg, label, value, unit }: { icon: string; iconBg: string; label: string; value: number; unit: string }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-sm px-2.5 py-2 flex items-center gap-2">
-      <div className="w-8 h-8 rounded-md flex items-center justify-center text-white text-sm font-bold shrink-0"
+    <div className="kpi-card bg-white border border-slate-200 rounded-lg shadow-sm px-2 py-1.5 flex items-center gap-2 shrink-0" style={{ minWidth: 110 }}>
+      <div className="w-7 h-7 rounded-md flex items-center justify-center text-white text-sm font-bold shrink-0"
            style={{ background: iconBg }}>
         {icon}
       </div>
       <div className="min-w-0">
         <div className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 truncate leading-tight">{label}</div>
         <div className="flex items-baseline gap-1">
-          <span className="text-lg font-bold text-slate-900 leading-none tabular-nums">{value}</span>
+          <span className="text-base font-bold text-slate-900 leading-none tabular-nums">{value}</span>
           {unit && <span className="text-[10px] text-slate-500">{unit}</span>}
         </div>
       </div>
@@ -701,7 +689,7 @@ function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, s
   return (
     <>
       {/* ─── Group header row ─── */}
-      <div className="flex items-stretch border-b border-slate-200 hover:bg-slate-50 transition-colors"
+      <div className="group-header-row flex items-stretch border-b border-slate-200 hover:bg-slate-50 transition-colors"
            style={{ background: bgColor }}>
         {/* Left fixed */}
         <div className="sticky left-0 z-20 flex border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
@@ -820,8 +808,8 @@ function DayGridBackground({ days, todayIdx }: { days: Date[]; todayIdx: number 
             <div key={i}
               className={`border-r ${
                 isToday ? 'bg-amber-50/60 border-amber-200'
-                : sun ? 'bg-slate-100/70 border-slate-200'
-                : we ? 'bg-slate-50/80 border-slate-200'
+                : sun ? 'bg-slate-200/80 border-slate-300'
+                : we ? 'bg-slate-100 border-slate-200'
                 : 'border-slate-100'
               }`}
               style={{ width: DAY_W }}
@@ -879,6 +867,9 @@ function GanttPlanBar({ plan, left, width, top, selected, onClick, onHover, onLe
   const meta = `P${planSeq(plan)} · ${plan.sensorCount || 0} sensor${(plan.sensorCount || 0) === 1 ? '' : 's'}`;
   const regionColor = REGION_COLORS[plan.storeRegion] || REGION_COLORS._default;
 
+  // Reserve left padding only when bar is wide enough to fit the dot + text
+  const showDot = width >= 28;
+
   return (
     <button
       onClick={onClick}
@@ -892,23 +883,36 @@ function GanttPlanBar({ plan, left, width, top, selected, onClick, onHover, onLe
       }`}
       style={{
         left, width, top, height: BAR_H,
-        color: c.text,
+        background: regionColor,
+        color: '#FFFFFF',
       }}
-      title={`${plan.storeRegion} · ${plan.storeName}`}
+      title={`${plan.storeRegion} · ${plan.storeName} · ${c.label}`}
     >
-      {/* Top half: region color */}
-      <div className="absolute left-0 right-0 top-0 h-1/2" style={{ background: regionColor }} />
-      {/* Bottom half: status color */}
-      <div className="absolute left-0 right-0 bottom-0 h-1/2" style={{ background: c.bg }} />
+      {/* Status dot — left side, r=5px (10px diameter), white ring */}
+      {showDot && (
+        <span
+          className="absolute rounded-full"
+          style={{
+            left: 4, top: '50%', transform: 'translateY(-50%)',
+            width: 10, height: 10,
+            background: c.bg,
+            boxShadow: '0 0 0 1.5px #FFFFFF, 0 1px 2px rgba(0,0,0,0.15)',
+          }}
+          aria-label={c.label}
+        />
+      )}
 
-      {/* Text — centered, overlays both halves */}
-      <div className="relative px-2 flex flex-col justify-center h-full">
-        <div className="text-[11px] font-bold leading-tight truncate flex items-center gap-1 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">
+      {/* Text — padded right of the dot */}
+      <div
+        className="flex flex-col justify-center h-full"
+        style={{ paddingLeft: showDot ? 20 : 8, paddingRight: 8 }}
+      >
+        <div className="text-[11px] font-bold leading-tight truncate flex items-center gap-1 drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">
           {showAttentionIcon && <span className="opacity-90">⚠</span>}
           <span className="truncate">{labelText}</span>
         </div>
         {width > 90 && (
-          <div className="text-[10px] leading-tight truncate opacity-95 font-medium drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]">{meta}</div>
+          <div className="text-[10px] leading-tight truncate opacity-95 font-medium drop-shadow-[0_1px_1px_rgba(0,0,0,0.25)]">{meta}</div>
         )}
       </div>
     </button>
@@ -1191,22 +1195,6 @@ function buildWorkSummaryText(plan: Plan): string {
   lines.push('━━━━━━━━━━━━━━━━━━━━');
   lines.push('DITECH Installation Planner');
   return lines.join('\n');
-}
-
-function GanttPrintHeader({ rangeStart, rangeEnd, groupBy }: { rangeStart: Date; rangeEnd: Date; groupBy: GroupBy }) {
-  return (
-    <div className="hidden print:flex items-start justify-between px-6 pt-4 pb-3 border-b-2 border-slate-800 mb-3">
-      <div>
-        <div className="text-2xl font-extrabold text-slate-900 tracking-tight">DITECH · Installation Planner</div>
-        <div className="text-sm text-slate-600 mt-0.5">Installation Schedule</div>
-      </div>
-      <div className="text-right text-xs text-slate-700">
-        <div><span className="font-semibold">Date Range:</span> {dateRangeLabel(rangeStart, rangeEnd)}</div>
-        <div><span className="font-semibold">Grouped by:</span> {groupBy}</div>
-        <div><span className="font-semibold">Generated:</span> {new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-      </div>
-    </div>
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

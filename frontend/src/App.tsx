@@ -9,6 +9,7 @@ import { EventsListPage } from './pages/EventsListPage';
 import { Layout } from './components/Layout';
 import { CalendarPage } from './pages/CalendarPage';
 import { GanttPage } from './pages/GanttPage';
+import { PrintGanttPage } from './pages/PrintGanttPage';
 import { MapPage } from './pages/MapPage';
 import { CapacityPage } from './pages/CapacityPage';
 import { AlertsPage } from './pages/AlertsPage';
@@ -35,34 +36,43 @@ export function App() {
     );
   }
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/calendar" replace />} />
-        <Route path="/calendar" element={<CalendarPage />} />
-        <Route path="/gantt" element={<GanttPage />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/capacity" element={<CapacityPage />} />
-        <Route path="/alerts" element={<AlertsPage />} />
-        <Route path="/import" element={<ImportPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/notify" element={<NotifyPage />} />
-        <Route path="/command-center" element={<CommandCenterPage />} />
-        <Route path="/command-wall" element={<CommandWallPage />} />
-        <Route path="/users" element={<UsersPage />} />
-        <Route path="/teams" element={<TeamsPage />} />
-        <Route path="/provinces" element={<ProvincesPage />} />
-        <Route path="/departments" element={<DepartmentsPage />} />
-        <Route path="/customers" element={<CustomersPage />} />
-        <Route path="/plans" element={<PlansListPage />} />
-        <Route path="/plans/:id" element={<PlanDetailPage />} />
-        <Route path="/events" element={<EventsListPage />} />
-        <Route path="/events/new" element={<NewEventWizard />} />
-        <Route path="/events/:id" element={<EventDetailPage />} />
-        <Route path="/designs/:id" element={<DesignEditorPage />} />
-        <Route path="/designs/by-plan/:planId" element={<DesignEditorPage />} />
-        <Route path="/designs/by-event/:eventId" element={<DesignEditorPage />} />
-        <Route path="*" element={<Navigate to="/calendar" replace />} />
-      </Routes>
-    </Layout>
+    <Routes>
+      {/* Print route — rendered WITHOUT the Layout (no nav, no sidebar)
+          so the PDF output is clean. Requires login (only reachable from app). */}
+      <Route path="/gantt/print" element={<PrintGanttPage />} />
+
+      {/* All other authenticated routes use the standard Layout */}
+      <Route path="*" element={
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Navigate to="/calendar" replace />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/gantt" element={<GanttPage />} />
+            <Route path="/map" element={<MapPage />} />
+            <Route path="/capacity" element={<CapacityPage />} />
+            <Route path="/alerts" element={<AlertsPage />} />
+            <Route path="/import" element={<ImportPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/notify" element={<NotifyPage />} />
+            <Route path="/command-center" element={<CommandCenterPage />} />
+            <Route path="/command-wall" element={<CommandWallPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/teams" element={<TeamsPage />} />
+            <Route path="/provinces" element={<ProvincesPage />} />
+            <Route path="/departments" element={<DepartmentsPage />} />
+            <Route path="/customers" element={<CustomersPage />} />
+            <Route path="/plans" element={<PlansListPage />} />
+            <Route path="/plans/:id" element={<PlanDetailPage />} />
+            <Route path="/events" element={<EventsListPage />} />
+            <Route path="/events/new" element={<NewEventWizard />} />
+            <Route path="/events/:id" element={<EventDetailPage />} />
+            <Route path="/designs/:id" element={<DesignEditorPage />} />
+            <Route path="/designs/by-plan/:planId" element={<DesignEditorPage />} />
+            <Route path="/designs/by-event/:eventId" element={<DesignEditorPage />} />
+            <Route path="*" element={<Navigate to="/calendar" replace />} />
+          </Routes>
+        </Layout>
+      } />
+    </Routes>
   );
 }
