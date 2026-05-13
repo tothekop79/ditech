@@ -11,11 +11,11 @@ interface Props {
   onResize: (sensorId: string, coverageWidth: number, coverageDepth: number) => void;
 }
 
-function shapeForMounting(mountingType: string): { anchorMode: 'center' | 'back_edge' | 'front_edge' } {
+function shapeForMounting(mountingType: string): { policy: 'center' | 'dynamic_tilt' } {
   switch (mountingType) {
     case 'bracket':
-    case 'tilt_bracket': return { anchorMode: 'back_edge' };
-    default:             return { anchorMode: 'center' };
+    case 'tilt_bracket': return { policy: 'dynamic_tilt' };
+    default:             return { policy: 'center' };
   }
 }
 
@@ -30,13 +30,17 @@ export function SensorTransformLayer({ sensors, selectedSensorId, scalePxPerMete
 
   const wPx = s.coverageWidth * scalePxPerMeter;
   const dPx = s.coverageDepth * scalePxPerMeter;
-  const inferred = shapeForMounting(s.mountingType);
-  const anchorMode = s.anchorMode || inferred.anchorMode;
-
-  let frontY = -dPx / 2;
-  let backY = dPx / 2;
-  if (anchorMode === 'back_edge') { frontY = -dPx; backY = 0; }
-  if (anchorMode === 'front_edge') { frontY = 0; backY = dPx; }
+  // C1.10b - handle positions derive from policy + tiltAngle.
+  // Polygon is in local cover coords (near at y=0, far at y=depth)
+  // shifted by -anchorY so the sensor sits at origin per policy.
+  // Handles must therefore sit at (0 - anchorY) and (dPx - anchorY).
+  const { policy } = shapeForMounting(s.mountingType);
+  const tiltFactor = Math.max(0, Math.min(1, (s.tiltAngle || 0) / 45));
+  const anchorY = policy === 'dynamic_tilt'
+    ? (dPx / 2) * (1 - tiltFactor)
+    : dPx / 2;
+  const frontY = 0   - anchorY;
+  const backY  = dPx - anchorY;
 
   const rotateRadius = 38;  // distance of rotation handle from sensor
   const handleColor = '#fcb813';
@@ -199,7 +203,7 @@ function ResizeHandle({ x, y, dim, sensor, scalePxPerMeter, onResize, flip, colo
         } else {
           // depth direction
           newD = (Math.abs(localY) * 2) / scalePxPerMeter;
-          // for back_edge anchor with flip=true, behaviour same since we use absolute distance
+          // for dynamic_tilt anchor with flip=true, behaviour same since we use absolute distance
         }
 
         newW = Math.max(0.5, Math.min(50, newW));
