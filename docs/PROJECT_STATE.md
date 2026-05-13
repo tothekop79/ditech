@@ -4,11 +4,11 @@
 
 - ✅ **System WORKING** — backend healthy, frontend + DB + Redis + Telegram all green
 - ✅ **C1.x coverage suite (C1.1 – C1.10) COMPLETE** — verified end-to-end May 13 audit
-- ✅ **Gantt redesign + print route** shipped (executive KPI dashboard, print-ready PDF)
-- 🧹 **Housekeeping**: Gantt `.bak.*` files untracked in `frontend/src/pages/`, 3 minor mods uncommitted
+- ✅ **Gantt redesign + print route + legend row** shipped (executive KPI dashboard, print-ready PDF)
+- ✅ **Working tree clean** as of May 13 — all `.bak` cruft removed, `.gitignore` tightened
 - ⏭️ **Next**: C1.11 (IN/OUT arrows), C1.12 (label de-clutter), C2 (export PDF/PNG + polygon zones)
 
-Latest commit: `fa1ae31` "fix(gantt): use 'limit' instead of 'pageSize'"
+Latest commit: `0daff27` "chore: remove tracked .bak files + tighten .gitignore pattern"
 
 ## Stack & Server
 
@@ -25,9 +25,12 @@ Latest commit: `fa1ae31` "fix(gantt): use 'limit' instead of 'pageSize'"
 ## Git history (recent)
 
 ```
-fa1ae31  fix(gantt): use 'limit' instead of 'pageSize' (pagination)        ← HEAD = origin/main
+0daff27  chore: remove tracked .bak files + tighten .gitignore pattern    ← HEAD = origin/main
+1ef37e8  feat(gantt-print): add legend row + clamp range to today
+b6143be  docs: relocate PROJECT_STATE.md to docs/ + refresh for May 13 audit
+fa1ae31  fix(gantt): use 'limit' instead of 'pageSize' (pagination)
 6885145  feat(print): dedicated /gantt/print route, semantic table
-9833fd3  chore: remove tracked .bak files, ignore future backups
+9833fd3  chore: remove tracked .bak files, ignore future backups          (incomplete — see lesson #12)
 870f484  feat(gantt): complete UX overhaul + frontend pagination fix
 5383aee  fix(calendar): align week labels with day cells (single grid)
 4f7ebb8  feat(date-filter): Next 7/30/90 days presets
@@ -125,7 +128,7 @@ E2E verified May 11 commit notes: G6 @ 3.5m base 12×3.5 → tilt 30° gives 6.6
 - `bracket` → `rectangle`, anchor = `center` (editable to `near_edge`)
 - `tilt_bracket` → `tilt_projection`, anchor = `near_edge` (editable to `center`)
 
-## 🖨️ Print / Export PDF (commit `6885145`, May 12 2026)
+## 🖨️ Print / Export PDF (commits `6885145` + `1ef37e8`, May 12–13 2026)
 
 ### What works
 - `/gantt/print` dedicated route renders Gantt as semantic `<table>`
@@ -136,14 +139,17 @@ E2E verified May 11 commit notes: G6 @ 3.5m base 12×3.5 → tilt 30° gives 6.6
 - Month/Week/Day rows repeat on every page
 - Group header (e.g. *BKK TEAM 2 · 20 plans · 49 sensors*) stays with first row
 - Plan rows do not split across pages (`page-break-inside: avoid`)
+- Legend row at end of table (STATUS chips + REGION swatches), `page-break-inside: avoid`
+- Range start clamps to today (no wasted columns showing past days)
 - App nav/sidebar hidden in print
 - Print button in `GanttPage` opens `/gantt/print?...` in new tab
 
 ### Files
-- `frontend/src/pages/PrintGanttPage.tsx` (527 lines)
-- `frontend/src/pages/print-gantt.css` (300 lines)
+- `frontend/src/pages/PrintGanttPage.tsx` (563 lines, +36 in `1ef37e8`)
+- `frontend/src/pages/print-gantt.css` (367 lines, +67 in `1ef37e8`)
 - `frontend/src/pages/GanttPage.tsx` — `handlePrint` opens new tab
 - `frontend/src/App.tsx` — `/gantt/print` route registered OUTSIDE the `Layout` wrapper
+- Removed (`1ef37e8`): obsolete `frontend/src/pages/gantt-print.css` (187 lines, superseded)
 
 ### 🚨 Critical lesson — do NOT repeat this mistake
 
@@ -182,19 +188,9 @@ scales the page to A4 automatically.
 - ✅ Calendar view with week-label alignment
 - ✅ Telegram notifications configured
 
-## Pending (small / non-blocking)
+## Pending
 
-### Working-tree clutter (not on git)
-```
-modified:   frontend/src/pages/PrintGanttPage.tsx
-deleted:    frontend/src/pages/gantt-print.css
-modified:   frontend/src/pages/print-gantt.css
-
-Untracked: frontend/src/pages/GanttPage.tsx.bak.{dot,kpi,print,rowbreak,weekend,wrap}
-Untracked: frontend/src/pages/gantt-print.css.bak.{flow,kpi,print,rowbreak,weekend,wrap}
-```
-**Action**: decide whether to commit the 3 mods (review diff first), and delete `.bak.*` files
-(`.gitignore` should already cover them after commit `9833fd3` — verify).
+*(none as of May 13 EOD — working tree clean, all open items committed and pushed)*
 
 ## Roadmap
 
@@ -264,6 +260,21 @@ Untracked: frontend/src/pages/gantt-print.css.bak.{flow,kpi,print,rowbreak,weeke
     engine to re-layout the entire table, often collapsing narrow columns to character-per-line
     slivers. Keep print rules minimal (hide nav, remove shadows). Let screen styles pass
     through unchanged — Chrome scales to A4 automatically. See Print/Export PDF section above.
+
+### From May 13 session (housekeeping)
+12. **`.gitignore` does NOT support inline comments.** Writing
+    `*.bak.*    # catch *.bak.intent style` is parsed as a single pattern of the entire
+    line including the `#` and comment text — it matches nothing. Comments must be on
+    their own line. Always verify a new rule with `git check-ignore -v <sample-path>`
+    immediately after adding it. Caught in commit `0daff27` after `*.bak.*` rule silently
+    no-op'd; fixed by moving the comment to its own line above the pattern.
+
+13. **`git rm --cached` is what `chore: remove tracked .bak files` should have been.**
+    Commit `9833fd3` claimed to "remove tracked .bak files and ignore future backups"
+    but only updated `.gitignore` — the 7 tracked `.bak` files survived in git index
+    from initial commit `e71ad57` until they were finally removed in `0daff27` on May 13.
+    Lesson: when a commit title says "remove tracked X", run `git ls-files | grep X`
+    afterward to verify. `.gitignore` rules apply only to *untracked* files.
 
 ## File location quick-reference
 
@@ -348,3 +359,4 @@ curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq
 6. **Read `git status` after `git add`** — empty "Changes to be committed" = stop, do not commit.
 7. **Always `npx prisma validate`** after schema edits.
 8. **Update `_PROJECT_STATE.md` AT END of every session** — even short ones. Stale docs cost real time.
+9. **Verify `.gitignore` rules with `git check-ignore -v`** after every edit. Patterns that look right may silently no-op.
