@@ -195,6 +195,7 @@ scales the page to A4 automatically.
 ## Roadmap
 
 ### Priority 1 — Coverage UX next
+- **C1.10b** ✅ — Anchor as continuous function of tilt (replaces near_edge enum value)
 - **C1.11** — IN/OUT arrows for Entrance counting line (visual direction indicator)
 - **C1.12** — Multi-sensor label auto de-clutter (avoid overlapping `-53px` labels)
 
@@ -275,6 +276,38 @@ scales the page to A4 automatically.
     from initial commit `e71ad57` until they were finally removed in `0daff27` on May 13.
     Lesson: when a commit title says "remove tracked X", run `git ls-files | grep X`
     afterward to verify. `.gitignore` rules apply only to *untracked* files.
+
+### From May 13 evening session (C1.10b — anchor as continuous tilt function)
+14. **Type drift is silent under `as any` casts.** `frontend/src/api/designs.ts`
+    had `AnchorMode = 'center' | 'back_edge' | 'front_edge'` while
+    `CoverageRectLayer.tsx` declared its own local `AnchorMode = 'center' | 'near_edge'`
+    and `SensorSettingsPanel.tsx` used `'near_edge'` literals. All bypassed the canonical
+    type via `(s as any).anchorMode`. Backend Zod was the only honest source of truth.
+    Lesson: when a feature commit adds a new union member, `grep -n "type FooMode"`
+    across the whole frontend on the same day. `(x as any)` is a deferred bug, not a fix.
+
+15. **`docker exec wc -l < /app/...` redirects on host, not container.**
+    The `<` is parsed by the host shell before docker runs. When parity-checking,
+    use `docker exec <c> md5sum /app/<f>` (no redirect) or `docker exec <c> sh -c 'wc -l /app/<f>'`.
+
+16. **DB defaults to user `postgres`; this project uses `ditech`.** Stock `psql -U postgres`
+    fails with FATAL no-role. Always grep `docker-compose.yml` or `pg_dump` for
+    POSTGRES_USER before running data-audit queries.
+
+17. **"Patch without commit" is a real state.** Two earlier `python3` patches + `docker cp`
+    successfully modified disk + container but the user never ran `git commit`.
+    The next session opened with `git status` showing 1-file dirty working tree and
+    no AnchorMode commit anywhere in the log. Worked out fine because the patches
+    were dead-ends, but it could just as easily have looked like the work was lost.
+    Lesson: end every patch sequence with `git log --oneline -3` and confirm the
+    expected hash is at HEAD before moving on.
+
+18. **Continuous-anchor formula is cleaner than enum branching.** 4-case `if/else`
+    on (coverageMode × anchorMode) collapsed to ONE polygon-shift formula:
+        anchorY = (depth/2) * (1 - clamp(tilt/45, 0, 1))
+    File `CoverageRectLayer.tsx` shrank from 363 → ~295 lines without losing any
+    user-visible behaviour. Whenever an enum has values that interpolate, suspect
+    that the enum is the wrong abstraction.
 
 ## File location quick-reference
 
