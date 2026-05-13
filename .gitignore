@@ -42,6 +42,8 @@ _backups/
 .bak/
 *.bak
 *.bak[0-9]*
+# catch *.bak.intent style (e.g. file.tsx.bak.dot)
+*.bak.*
 
 # Uploads
 backend/uploads/
