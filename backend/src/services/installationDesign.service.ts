@@ -479,13 +479,17 @@ export const installationDesignService = {
       // nearEdgeRatio is normally recomputed below; allow explicit override too
       if ('nearEdgeRatio' in data) updateData.nearEdgeRatio = data.nearEdgeRatio;
 
-      // Re-interpolate coverage if model, height, tilt, or mode changed and override is false
+      // Re-interpolate coverage if model, height, tilt, or mode changed and override is false.
+      // C1.10d#2 — Also support an explicit `recomputeCoverage: true` flag so that
+      // "Reset to Model Defaults" works even when coverageOverride is already false
+      // and no other field changed. The flag is transient (not persisted).
       const willOverride = data.coverageOverride ?? existing.coverageOverride;
       const modelChanged = 'cameraModelId' in data && data.cameraModelId !== existing.cameraModelId;
       const heightChanged = 'mountingHeight' in data && data.mountingHeight !== existing.mountingHeight;
       const tiltChanged = 'tiltAngle' in data && data.tiltAngle !== existing.tiltAngle;
       const modeChanged = 'coverageMode' in data && data.coverageMode !== existing.coverageMode;
-      if (!willOverride && (modelChanged || heightChanged || tiltChanged || modeChanged)) {
+      const recomputeRequested = (data as any).recomputeCoverage === true;
+      if (!willOverride && (modelChanged || heightChanged || tiltChanged || modeChanged || recomputeRequested)) {
         const result = await computeCoverageForSensor(
           data.cameraModelId ?? existing.cameraModelId,
           data.mountingHeight ?? existing.mountingHeight,

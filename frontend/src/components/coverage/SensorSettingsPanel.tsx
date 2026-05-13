@@ -143,10 +143,15 @@ export function SensorSettingsPanel({ editor }: Props) {
           <div>
             <div className="flex items-center justify-between mb-0.5">
               <label className="text-[10px] uppercase tracking-wider text-ditech-text-muted">Coverage size (m)</label>
-              {s.coverageOverride && (
-                <button onClick={() => updateSensorImmediate(s.id, { coverageOverride: false })}
-                  className="text-[10px] text-blue-600 hover:underline">↺ Reset</button>
-              )}
+              {/* C1.10d#2 — Always-visible reset. Clears manual override (if any) AND
+                  forces backend to recompute from current model + height + tilt + mode. */}
+              <button
+                onClick={() => updateSensorImmediate(s.id, { coverageOverride: false, recomputeCoverage: true })}
+                className="text-[10px] text-blue-600 hover:underline"
+                title="Recalculate coverage from selected camera model, mounting height, tilt angle, and coverage mode"
+              >
+                ↺ Reset to Model Defaults
+              </button>
             </div>
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">

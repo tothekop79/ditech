@@ -133,6 +133,9 @@ export interface CreateSensorDTO {
 export type UpdateSensorDTO = Partial<CreateSensorDTO> & {
   status?: 'PASS' | 'WARNING' | 'FAIL';
   obstructionPass?: boolean | null;
+  // C1.10d#2 — Transient: tells backend to recompute coverage from current
+  // model + height + tilt + mode. Not persisted.
+  recomputeCoverage?: boolean;
 };
 
 export interface CreateZoneDTO {

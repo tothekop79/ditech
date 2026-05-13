@@ -83,6 +83,10 @@ export const createSensorSchema = z.object({
   obstructionData: z.record(z.any()).nullable().optional(),
   showAsImage: z.boolean().default(false),
   note: z.string().nullable().optional(),
+  // C1.10d#2 — Transient flag: client requests backend to recompute
+  // coverageWidth/Depth/nearEdgeRatio from current model + height + tilt + mode.
+  // NOT persisted to DB; consumed by service layer recompute trigger only.
+  recomputeCoverage: z.boolean().optional(),
 });
 
 export const updateSensorSchema = createSensorSchema.partial();
