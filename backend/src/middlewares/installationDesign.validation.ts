@@ -57,7 +57,7 @@ export const sensorFunctionEnum = z.enum([
 export const mountingTypeEnum = z.enum([
   'embedded', 'surface', 'bracket', 'tilt_bracket',
 ]);
-export const anchorModeEnum = z.enum(['center', 'back_edge', 'front_edge', 'near_edge']);
+export const anchorModeEnum = z.enum(['center', 'dynamic_tilt']);
 
 export const createSensorSchema = z.object({
   cameraModelId: z.string().uuid(),
