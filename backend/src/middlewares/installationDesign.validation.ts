@@ -73,6 +73,13 @@ export const createSensorSchema = z.object({
   coverageDepth: z.number().positive().optional(),
   coverageOverride: z.boolean().default(false),
   anchorMode: anchorModeEnum.default('center'),
+  // C1.10c - fields previously silent-dropped by Zod
+  color: z.string().nullable().optional(),
+  nearEdgeRatio: z.number().min(0.05).max(1.0).optional(),
+  coverageMode: z.enum(['rectangle', 'tilt_projection']).optional(),
+  showLabels: z.boolean().optional(),
+  showDimensions: z.boolean().optional(),
+  showDirectionArrow: z.boolean().optional(),
   obstructionData: z.record(z.any()).nullable().optional(),
   showAsImage: z.boolean().default(false),
   note: z.string().nullable().optional(),

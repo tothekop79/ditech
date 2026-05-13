@@ -474,6 +474,10 @@ export const installationDesignService = {
       if ('showLabels' in data) updateData.showLabels = data.showLabels;
       if ('showDimensions' in data) updateData.showDimensions = data.showDimensions;
       if ('showDirectionArrow' in data) updateData.showDirectionArrow = data.showDirectionArrow;
+      // C1.10c - newly whitelisted user fields
+      if ('color' in data) updateData.color = data.color;
+      // nearEdgeRatio is normally recomputed below; allow explicit override too
+      if ('nearEdgeRatio' in data) updateData.nearEdgeRatio = data.nearEdgeRatio;
 
       // Re-interpolate coverage if model, height, tilt, or mode changed and override is false
       const willOverride = data.coverageOverride ?? existing.coverageOverride;
