@@ -38,13 +38,14 @@ function defaultCoverageMode(s: any): 'rectangle' | 'tilt_projection' {
   return s.mountingType === 'tilt_bracket' ? 'tilt_projection' : 'rectangle';
 }
 
-// ── Anchor mode default (C1.10) ──
-// Per behavior matrix: anchor follows coverage mode unless user overrides
-//   - tilt_projection mode → near_edge
-//   - rectangle mode → center
-function defaultAnchorMode(s: any): 'center' | 'near_edge' {
+// ── Derived anchor policy (C1.10b) ──
+// Pure function of mountingType + coverageMode. No user override.
+//   bracket/tilt_bracket + tilt_projection → 'dynamic_tilt'
+//   everything else                        → 'center'
+function derivedAnchorMode(s: any): 'center' | 'dynamic_tilt' {
   const mode = s.coverageMode ?? defaultCoverageMode(s);
-  return mode === 'tilt_projection' ? 'near_edge' : 'center';
+  const isBracket = s.mountingType === 'bracket' || s.mountingType === 'tilt_bracket';
+  return (isBracket && mode === 'tilt_projection') ? 'dynamic_tilt' : 'center';
 }
 
 export function SensorSettingsPanel({ editor }: Props) {
@@ -231,7 +232,8 @@ export function SensorSettingsPanel({ editor }: Props) {
                   const newMount = e.target.value as any;
                   // C1.10 — auto-update coverageMode + anchorMode when mounting changes
                   const newCovMode = newMount === 'tilt_bracket' ? 'tilt_projection' : 'rectangle';
-                  const newAnchor = newCovMode === 'tilt_projection' ? 'near_edge' : 'center';
+                  const isBracket = newMount === 'bracket' || newMount === 'tilt_bracket';
+                  const newAnchor = (isBracket && newCovMode === 'tilt_projection') ? 'dynamic_tilt' : 'center';
                   updateSensorImmediate(s.id, {
                     mountingType: newMount,
                     coverageMode: newCovMode,
@@ -269,7 +271,8 @@ export function SensorSettingsPanel({ editor }: Props) {
                 onChange={(e) => {
                   const newMode = e.target.value as any;
                   // C1.10 — auto-update anchor to default for new mode
-                  const newAnchor = newMode === 'tilt_projection' ? 'near_edge' : 'center';
+                  const isBracket = s.mountingType === 'bracket' || s.mountingType === 'tilt_bracket';
+                  const newAnchor = (isBracket && newMode === 'tilt_projection') ? 'dynamic_tilt' : 'center';
                   updateSensorImmediate(s.id, {
                     coverageMode: newMode,
                     anchorMode: newAnchor,
@@ -283,37 +286,31 @@ export function SensorSettingsPanel({ editor }: Props) {
             </Row>
 
             <Row label="Sensor position">
-              {/* C1.10 — editable for bracket/tilt_bracket, read-only otherwise */}
-              {(s.mountingType === 'bracket' || s.mountingType === 'tilt_bracket') ? (
-                <select
-                  value={s.anchorMode ?? defaultAnchorMode(s)}
-                  onChange={(e) => updateSensorImmediate(s.id, { anchorMode: e.target.value as any })}
-                  className="w-full px-1.5 py-1 text-xs border border-slate-300 rounded bg-white"
-                >
-                  <option value="center">⊙ At center of rectangle</option>
-                  <option value="near_edge">📍 At near edge (camera)</option>
-                </select>
-              ) : (
-                <div className="w-full px-1.5 py-1 text-[11px] rounded border flex items-center gap-1.5 bg-sky-50 border-sky-200 text-sky-800">
-                  <span>⊙</span><span className="font-medium">At center</span>
-                </div>
-              )}
+              {/* C1.10b — read-only badge derived from mounting + coverage mode */}
+              {(() => {
+                const policy = derivedAnchorMode(s);
+                const isDynamic = policy === 'dynamic_tilt';
+                return (
+                  <div className={`w-full px-1.5 py-1 text-[11px] rounded border flex items-center gap-1.5 ${
+                    isDynamic
+                      ? 'bg-amber-50 border-amber-200 text-amber-800'
+                      : 'bg-sky-50 border-sky-200 text-sky-800'
+                  }`}>
+                    <span>{isDynamic ? '📐' : '⊙'}</span>
+                    <span className="font-medium">
+                      {isDynamic ? 'Dynamic by tilt' : 'Center of coverage'}
+                    </span>
+                  </div>
+                );
+              })()}
             </Row>
           </div>
 
-          {/* Helper text per anchor mode (C1.10) */}
+          {/* Helper text per policy (C1.10b) */}
           <div className="text-[10px] text-slate-600 italic px-1 -mt-1">
-            {(() => {
-              const anchor = s.anchorMode ?? defaultAnchorMode(s);
-              if (s.mountingType === 'embedded' || s.mountingType === 'surface') {
-                return s.mountingType === 'embedded'
-                  ? '💡 Embedded sensors are normally centered in top-view coverage.'
-                  : '💡 Surface-mounted sensors are normally centered. Adjust mounting to bracket for outward views.';
-              }
-              return anchor === 'near_edge'
-                ? '📍 Sensor placed at near edge. Coverage projects outward from camera.'
-                : '⊙ Sensor placed at the center of the coverage area.';
-            })()}
+            {derivedAnchorMode(s) === 'dynamic_tilt'
+              ? '📐 Sensor position shifts from center toward the near edge as tilt angle increases.'
+              : '⊙ Sensor placed at the center of the coverage area.'}
           </div>
 
           {/* Display toggles */}
