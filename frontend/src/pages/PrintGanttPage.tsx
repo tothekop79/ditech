@@ -216,7 +216,12 @@ export function PrintGanttPage() {
   // Default range: next 30 days
   const defaultStart = startOfDay(new Date());
   const defaultEnd = new Date(defaultStart); defaultEnd.setDate(defaultEnd.getDate() + 29);
-  const rangeStart = fromStr ? startOfDay(new Date(fromStr)) : defaultStart;
+
+  // Clamp rangeStart to TODAY — don't waste columns showing past days.
+  // If the URL says from=2026-05-11 but today is 2026-05-12, start at 05-12.
+  const today = startOfDay(new Date());
+  const requestedStart = fromStr ? startOfDay(new Date(fromStr)) : defaultStart;
+  const rangeStart = requestedStart < today ? today : requestedStart;
   const rangeEnd = toStr ? startOfDay(new Date(toStr)) : defaultEnd;
   const days = useMemo(() => enumerateDays(rangeStart, rangeEnd), [rangeStart, rangeEnd]);
   const weeks = useMemo(() => weekSpans(days), [days]);
@@ -296,7 +301,6 @@ export function PrintGanttPage() {
 
   // total columns = 2 (left) + N (timeline days)
   const totalCols = 2 + days.length;
-  const today = startOfDay(new Date());
   const todayIdx = days.findIndex((d) => isSameDay(d, today));
 
   return (
@@ -400,6 +404,36 @@ export function PrintGanttPage() {
               ))}
             </Fragment>
           ))}
+
+          {/* Legend — appears once at end of table (last page) */}
+          <tr className="pg-legend-row">
+            <td colSpan={totalCols}>
+              <div className="pg-legend">
+                <div className="pg-legend-group">
+                  <span className="pg-legend-label">STATUS</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.DRAFT }}>DRAFT</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.CONFIRMED }}>CONFIRMED</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.IN_PROGRESS }}>IN PROGRESS</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.COMPLETED }}>COMPLETED</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.CANCELLED }}>CANCELLED</span>
+                  <span className="pg-legend-chip" style={{ background: STATUS_COLOR.ATTENTION }}>DELAYED / ATTENTION</span>
+                </div>
+                <div className="pg-legend-group">
+                  <span className="pg-legend-label">REGION</span>
+                  <span className="pg-legend-swatch" style={{ background: '#06B6D4' }}></span>
+                  <span className="pg-legend-text">BANGKOK</span>
+                  <span className="pg-legend-swatch" style={{ background: '#FB923C' }}></span>
+                  <span className="pg-legend-text">UPC (ต่างจังหวัด)</span>
+                </div>
+                <div className="pg-legend-group pg-legend-right">
+                  <span className="pg-legend-divider">|</span>
+                  <span className="pg-legend-text">Today: {new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span className="pg-legend-swatch pg-legend-weekend"></span>
+                  <span className="pg-legend-text">Weekend</span>
+                </div>
+              </div>
+            </td>
+          </tr>
         </tbody>
 
         <tfoot>

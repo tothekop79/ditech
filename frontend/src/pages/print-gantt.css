@@ -246,6 +246,73 @@
   border-top: 0.5pt solid #94a3b8 !important;
   padding: 3pt 0 !important;
 }
+
+/* ─── Legend (last row of tbody, only shows once) ─── */
+.pg-legend-row {
+  page-break-inside: avoid;
+  break-inside: avoid;
+}
+.pg-legend-row > td {
+  border: none !important;
+  border-top: 0.5pt solid #cbd5e1 !important;
+  padding: 6pt 4pt !important;
+  background: white !important;
+}
+.pg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14pt;
+  font-size: 7.5pt;
+  line-height: 1;
+}
+.pg-legend-group {
+  display: flex;
+  align-items: center;
+  gap: 4pt;
+  flex-wrap: wrap;
+}
+.pg-legend-right {
+  margin-left: auto;
+}
+.pg-legend-label {
+  font-size: 7pt;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-right: 2pt;
+}
+.pg-legend-chip {
+  display: inline-block;
+  padding: 2pt 6pt;
+  font-size: 7pt;
+  font-weight: 700;
+  color: white;
+  border-radius: 2pt;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pg-legend-swatch {
+  display: inline-block;
+  width: 10pt;
+  height: 10pt;
+  border-radius: 2pt;
+  vertical-align: middle;
+}
+.pg-legend-swatch.pg-legend-weekend {
+  background: #e2e8f0;
+  border: 0.5pt solid #cbd5e1;
+}
+.pg-legend-text {
+  font-size: 7.5pt;
+  color: #334155;
+}
+.pg-legend-divider {
+  color: #cbd5e1;
+  margin: 0 4pt;
+}
 .pg-pf-row {
   display: table; width: 100%;
   font-size: 7pt; color: #64748b;
