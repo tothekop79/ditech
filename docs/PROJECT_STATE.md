@@ -8,7 +8,7 @@
 - ✅ **Working tree clean** as of May 13 — all `.bak` cruft removed, `.gitignore` tightened
 - ⏭️ **Next**: C1.11 (IN/OUT arrows), C1.12 (label de-clutter), C2 (export PDF/PNG + polygon zones)
 
-Latest commit: `0daff27` "chore: remove tracked .bak files + tighten .gitignore pattern"
+Latest commit: `a8ce7d9` "fix(C1.10c): backend accepts color + display flag + coverageMode fields"
 
 ## Stack & Server
 
@@ -196,8 +196,36 @@ scales the page to A4 automatically.
 
 ### Priority 1 — Coverage UX next
 - **C1.10b** ✅ — Anchor as continuous function of tilt (replaces near_edge enum value)
+- **C1.10c** ✅ — Zod + whitelist for color / coverageMode / showLabels / showDimensions
+                  / showDirectionArrow / nearEdgeRatio (fixed UI snap-back for these 6 fields)
+- **C1.10d** ⏭️ NEXT — Fix remaining cache/recompute issues (4 known bugs, see below)
 - **C1.11** — IN/OUT arrows for Entrance counting line (visual direction indicator)
 - **C1.12** — Multi-sensor label auto de-clutter (avoid overlapping `-53px` labels)
+
+#### C1.10d — Known bugs to fix
+1. **`mountingHeight` snap-back in browser** (curl PATCH persists OK; frontend cache discards).
+   Likely `useDesignEditor.ts` merge-on-success pattern doesn't include the recomputed
+   `coverageWidth` / `coverageDepth` fields that backend returns when height changes.
+2. **`coverageDepth` doesn't recompute when `coverageMode` changes via API**
+   (rectangle ↔ tilt_projection). Recompute trigger fires (logged) but `coverageOverride`
+   may be `true` and short-circuiting it. Audit `coverageOverride` lifecycle:
+   when is it set, when reset.
+3. **`anchorMode` in DB doesn't auto-update when `coverageMode` changes.**
+   Frontend derives the policy in UI but doesn't push the derived value back to backend.
+   Either push from FE or recompute on backend in the same place coverage is recomputed.
+4. **Trapezoid Near/Far ratio input only moves the Near edge.**
+   Likely a UX expectation gap, not a code bug — backend stores `nearEdgeRatio` =
+   nearWidth/farWidth, and `farWidth` is recomputed from `tilt + base`. Decide:
+   should Far be independently editable, or is "near/far ratio" the right knob at all?
+
+Additional tech debt (gluing onto C1.10d):
+- `UpdateSensorDTO` in `frontend/src/api/designs.ts` missing `color`, `coverageMode`,
+  `nearEdgeRatio`, `showLabels`, `showDimensions`, `showDirectionArrow` (currently uses
+  `(s as any)` casts in 3 places). Now that backend Zod accepts them, frontend type can
+  finally include them too.
+- `FunctionColorSet` missing `icon` / `text` / `tint` fields used in `SensorListPanel`
+  + `SensorSettingsPanel` (TS2339).
+- `NodeJS` namespace import missing in `useDesignEditor.ts:68`.
 
 ### Priority 2 — Export / editing
 - **C2.1** — Export PDF/PNG of floor plan with sensors + zones overlay
@@ -308,6 +336,61 @@ scales the page to A4 automatically.
     File `CoverageRectLayer.tsx` shrank from 363 → ~295 lines without losing any
     user-visible behaviour. Whenever an enum has values that interpolate, suspect
     that the enum is the wrong abstraction.
+
+### From May 13 late session (C1.10b + C1.10c — anchor redesign + Zod gap fix)
+
+19. **`200 OK` is not proof of save with default Zod.** A `z.object({...})` schema
+    strips unknown keys silently and the API returns `success: true` because the
+    *recognised* part succeeded. Service-layer field whitelists run AFTER Zod,
+    so a field missing from Zod will never reach them no matter how many `if ('x' in data)`
+    branches exist. Always assert the response echoes the field the request sent,
+    not just the status code. Caught during C1.10b smoke testing when `color`,
+    `coverageMode`, `showLabels`, `showDimensions`, `showDirectionArrow`, and
+    `nearEdgeRatio` were all returning success but never persisting. Fixed in
+    `installationDesign.validation.ts` (commit `a8ce7d9`).
+
+20. **Type drift is silent under `as any` casts.** Canonical `AnchorMode` in
+    `api/designs.ts` had `'back_edge' | 'front_edge'` while `CoverageRectLayer`
+    declared its own local `'center' | 'near_edge'` and `SensorSettingsPanel`
+    used `'near_edge'` literals — all bypassing canonical via `(s as any).anchorMode`.
+    Backend Zod was the only honest source of truth. When a feature commit adds
+    a new union member, `grep -n "type FooMode"` across the whole frontend the
+    same day. `(x as any)` is a deferred bug, not a fix.
+
+21. **`docker exec wc -l < /app/...` redirects on the host, not in the container.**
+    The `<` is parsed by the host shell before docker runs. When parity-checking,
+    use `docker exec <c> md5sum /app/<f>` (no redirect) or
+    `docker exec <c> sh -c 'wc -l /app/<f>'`. Burned ~10 minutes in the C1.10b
+    session before figuring this out — and ironically lesson #15 had just been
+    written warning about exactly this trap.
+
+22. **DB defaults to user `postgres`; this project uses `ditech`.** Stock
+    `psql -U postgres` fails with FATAL no-role. Always
+    `grep POSTGRES_USER docker-compose.yml` before running data-audit queries.
+
+23. **"Patch without commit" is a real state.** A python heredoc + docker cp can
+    successfully modify disk + container without producing a git commit if the
+    operator forgets the final `git commit`. The next session opened with a
+    dirty working tree containing a stale, dead-end patch. End every patch
+    sequence with `git log --oneline -3` and confirm the expected hash is at
+    HEAD before moving on. Worked out fine this time because the patch was a
+    dead-end, but could have looked like work was lost.
+
+24. **Continuous formula > enum branching.** 4-case `if/else` on
+    (coverageMode × anchorMode) collapsed to ONE polygon-shift formula:
+        anchorY = (depth/2) * (1 - clamp(tilt/45, 0, 1))
+    `CoverageRectLayer.tsx` shrank from 363 → ~295 lines without losing any
+    user-visible behaviour. Whenever an enum has values that interpolate,
+    suspect that the enum is the wrong abstraction.
+
+25. **Multi-line `str_replace` patterns can mismatch over a single missing
+    blank line.** A python heredoc `str_replace` with an exact 6-line pattern
+    failed because the file had a blank line between two of those lines that
+    the pattern did not include. The assert said 0 matches; the operator
+    didn't re-check and ran `docker cp` + `git commit` on a half-patched file.
+    Lesson: prefer single-line `str_replace` or content-anchored line-slicing
+    over multi-line exact-text patterns. If multi-line is unavoidable,
+    `xxd` the source bytes to see exactly what's between your anchor lines.
 
 ## File location quick-reference
 
