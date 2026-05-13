@@ -81,9 +81,6 @@ backend-script.py
 # Container build context
 .dockerignore.bak
 
-# Prisma generated
-backend/prisma/migrations/
-
 # Data import
 *.xlsx
 *.xlsm
