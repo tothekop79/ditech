@@ -61,13 +61,49 @@ export function useDesignEditor({ designId }: UseDesignEditorOptions) {
   const updateSensor = useMutation({
     mutationFn: ({ sensorId, dto }: { sensorId: string; dto: UpdateSensorDTO }) =>
       designsApi.sensors.update(designId, sensorId, dto),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['design', designId] }),
+    // C1.10d#1 — Field-scoped merge of server response into cache.
+    //   Goal: do NOT clobber optimistic updates of fields the user is still
+    //   actively editing. The DB-stale echo of mountingHeight (e.g. 3.5)
+    //   used to overwrite the user's optimistic 3, causing RealtimeNumber's
+    //   useEffect to resync input="3.5" on top of live keystrokes.
+    //   Fix: merge only the fields that were in the mutation's dto, plus the
+    //   server-recomputed coverage fields when a coverage-affecting field
+    //   (mountingHeight, tiltAngle, coverageMode, cameraModelId) was changed.
+    //   Direct invalidateQueries() previously caused the same family of races.
+    //   See PROJECT_STATE.md lesson #4 (cache merge pattern).
+    onSuccess: (serverSensor: any, { sensorId, dto }) => {
+      qc.setQueryData(['design', designId], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          sensors: (old.sensors ?? []).map((s: any) => {
+            if (s.id !== sensorId) return s;
+            const patch: any = {};
+            // Echo back only the fields we asked to change.
+            for (const k of Object.keys(dto)) patch[k] = serverSensor[k];
+            // Server-recomputed coverage side-effects (see service.ts L488).
+            const recomputeKeys = ['mountingHeight', 'tiltAngle', 'coverageMode', 'cameraModelId'];
+            if (recomputeKeys.some((k) => k in dto)) {
+              patch.coverageWidth = serverSensor.coverageWidth;
+              patch.coverageDepth = serverSensor.coverageDepth;
+              patch.nearEdgeRatio = serverSensor.nearEdgeRatio;
+            }
+            return { ...s, ...patch };
+          }),
+        };
+      });
+    },
   });
 
   // ── Debounced sensor update (for sliders/sticky inputs) ──
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const updateSensorDebounced = useCallback((sensorId: string, dto: UpdateSensorDTO, delay = 300) => {
-    const key = sensorId;
+    // C1.10d#1 — Key by sensorId + sorted dto keys so that updates to DIFFERENT
+    // fields of the SAME sensor don't cancel each other's pending PATCHes.
+    // Before: keying by sensorId alone meant ObstructionPanel re-firing
+    // {obstructionData} would clearTimeout({mountingHeight}) before it ever
+    // hit the network — user-typed mountingHeight never persisted.
+    const key = `${sensorId}:${Object.keys(dto).sort().join(',')}`;
     if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
 
     // Optimistic update — apply to cache immediately for instant UI feedback
