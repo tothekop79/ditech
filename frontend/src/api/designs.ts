@@ -9,6 +9,7 @@ export type Point = { x: number; y: number };
 export type SensorFunction = 'entrance' | 'engagement' | 'heatmap' | 'cctv' | 'passerby' | 'zone';
 export type MountingType = 'embedded' | 'surface' | 'bracket' | 'tilt_bracket';
 export type AnchorMode = 'center' | 'dynamic_tilt';
+export type CoverageMode = 'rectangle' | 'tilt_projection';
 export type ZoneType = 'entrance_line' | 'engagement_area' | 'heatmap_area' | 'walking_area' | 'obstruction';
 export type DesignStatus = 'PASS' | 'WARNING' | 'FAIL';
 
@@ -38,6 +39,12 @@ export interface SensorPlacement {
   showAsImage: boolean;
   status: 'PASS' | 'WARNING' | 'FAIL';
   note: string | null;
+  // C1.8 — Coverage rendering options (added in backend, now reflected here
+  // to remove (s as any) casts in SensorSettingsPanel — PROJECT_STATE roadmap L229-232)
+  coverageMode: CoverageMode;
+  showLabels: boolean;
+  showDimensions: boolean;
+  showDirectionArrow: boolean;
   cameraModel?: Pick<CameraModel, 'id' | 'displayName' | 'iconColor' | 'imageUrl'>;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +135,11 @@ export interface CreateSensorDTO {
   obstructionData?: any;
   showAsImage?: boolean;
   note?: string | null;
+  // C1.8 — Coverage rendering options
+  coverageMode?: CoverageMode;
+  showLabels?: boolean;
+  showDimensions?: boolean;
+  showDirectionArrow?: boolean;
 }
 
 export type UpdateSensorDTO = Partial<CreateSensorDTO> & {
