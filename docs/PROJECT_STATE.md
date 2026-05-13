@@ -1,0 +1,350 @@
+# DITECH Installation Planner — Current State (May 13, 2026)
+
+## 📌 TL;DR
+
+- ✅ **System WORKING** — backend healthy, frontend + DB + Redis + Telegram all green
+- ✅ **C1.x coverage suite (C1.1 – C1.10) COMPLETE** — verified end-to-end May 13 audit
+- ✅ **Gantt redesign + print route** shipped (executive KPI dashboard, print-ready PDF)
+- 🧹 **Housekeeping**: Gantt `.bak.*` files untracked in `frontend/src/pages/`, 3 minor mods uncommitted
+- ⏭️ **Next**: C1.11 (IN/OUT arrows), C1.12 (label de-clutter), C2 (export PDF/PNG + polygon zones)
+
+Latest commit: `fa1ae31` "fix(gantt): use 'limit' instead of 'pageSize'"
+
+## Stack & Server
+
+- **Server:** root@ditech-planer (192.168.1.120), user `ditech`
+- **Path:** `/home/ditech/ditech-planner`
+- **GitHub:** https://github.com/tothekop79/ditech.git
+- **Containers (all up):** `ditech-planner-backend-1`, `ditech-planner-frontend-1`, `postgres`, `redis`
+- **Backend:** Node.js + Express + Prisma 5 + PostgreSQL + Redis + BullMQ. Port 5000. Entry `src/server.ts`, tsx watch
+- **Frontend:** Vite + React + TypeScript + Tailwind + react-konva@18 + konva@9. Port 3000
+- **PDF gen:** Puppeteer-core + Chromium 147 + Handlebars + Sarabun (Google Font)
+- **Health endpoint:** `http://localhost:5000/health` → `{status:ok, db:ok, redis:ok, telegram:configured}`
+- **Test creds:** `admin@ditech.co.th` / `Admin123!`
+
+## Git history (recent)
+
+```
+fa1ae31  fix(gantt): use 'limit' instead of 'pageSize' (pagination)        ← HEAD = origin/main
+6885145  feat(print): dedicated /gantt/print route, semantic table
+9833fd3  chore: remove tracked .bak files, ignore future backups
+870f484  feat(gantt): complete UX overhaul + frontend pagination fix
+5383aee  fix(calendar): align week labels with day cells (single grid)
+4f7ebb8  feat(date-filter): Next 7/30/90 days presets
+7e7d209  fix(backend): raise pagination cap 100 → 1000
+5547cfe  feat(gantt): executive redesign — KPI cards + sticky timeline + PDF export
+8ec8acd  feat(C1.9):  tilt projection — recompute on tilt/mode change       ← C1.x re-applies start
+3e46aaa  feat(C1.8):  whitelist coverage display fields in sensor update()
+4d42078  feat(C1.10): allow 'near_edge' anchor mode in Zod validation
+55b00b2  fix: restore service + validation files that were truncated         ← old project_state HEAD
+babbb65  restore: recover designs.ts + useDesignEditor.ts (were 0 bytes)
+ffd74f0  fix: don't ignore frontend coverage components folder
+6e7f223  feat: C1.8-C1.10 coverage rendering + tilt + anchor (truncated)
+ca64b71  chore(backend): add sharp dep
+2f16774  feat(coverage): C1.1 + C1.2 schema + backend CRUD APIs              ← recovery base
+```
+
+## Verified file inventory (May 13 audit — host == container)
+
+### Backend
+```
+src/services/installationDesign.service.ts      591 lines
+src/middlewares/installationDesign.validation.ts 124 lines   anchorModeEnum has 4 values incl. 'near_edge'
+src/utils/tiltProjection.ts                     128 lines   TILT_RATIO_TABLE + applyTiltProjection()
+prisma/schema.prisma                            (current — all C1.x columns present, see below)
+```
+
+### Frontend — `src/components/coverage/` (14 files, 4337 lines total)
+```
+CameraModelsModal.tsx         145
+CoverageRectLayer.tsx         363   4-case geometry (rect|tilt × center|near_edge)
+CoverageSummaryBar.tsx        286
+DesignCanvas.tsx              320
+FloorPlanLayer.tsx             70
+MeasureTool.tsx               297
+ObstructionPanel.tsx          952
+SensorListPanel.tsx           153
+SensorMarkerLayer.tsx         231   marker icons + labels at -53px
+SensorSettingsPanel.tsx       568   anchor dropdown, tilt slider, display toggles
+SensorTransformLayer.tsx      228
+ZoneLayer.tsx                 109
+```
+Plus: `api/designs.ts` 226, `hooks/useDesignEditor.ts` 389 (merge-on-success cache pattern)
+
+### Schema — SensorPlacement fields (C1.x additions)
+```prisma
+tiltAngle          Float    @default(0)         // pitch tilt for bracket mount
+coverageWidth      Float                        // m (= farWidth when tilt_projection)
+coverageDepth      Float                        // m
+anchorMode         String   @default("center")  // center | back_edge | front_edge | near_edge
+nearEdgeRatio      Float    @default(0.47)      // near/far ratio for tilt trapezoid
+coverageMode       String   @default("rectangle")  // rectangle | tilt_projection
+showLabels         Boolean  @default(true)
+showDimensions     Boolean  @default(true)
+showDirectionArrow Boolean  @default(true)
+```
+
+## C1.x Coverage Suite — DONE ✅
+
+### C1.10 — `near_edge` anchor (commit `4d42078`)
+Zod `anchorModeEnum` now: `['center', 'back_edge', 'front_edge', 'near_edge']`.
+Frontend Sensor Position dropdown for tilt_bracket no longer 400s.
+
+### C1.8 — Coverage display field whitelist (commit `3e46aaa`)
+`sensor.update()` now accepts and persists 4 fields previously silent-dropped:
+`coverageMode`, `showLabels`, `showDimensions`, `showDirectionArrow`.
+Insertion point: `installationDesign.service.ts` lines 473–476 (after `'status' in data`).
+
+### C1.9 — Tilt projection (commit `8ec8acd`)
+`tiltProjection.ts` (128 lines) with `TILT_RATIO_TABLE` + linear interpolation + clamp [0,45].
+`computeCoverageForSensor()` extended to 4 args:
+`(cameraModelId, mountingHeight, coverageMode, tiltAngle)` returning `{width, depth, nearEdgeRatio?}`.
+Recompute trigger now reacts to `tiltChanged || modeChanged` (in addition to model/height).
+Storage convention: `coverageWidth = farWidth`, `nearEdgeRatio = nearWidth/farWidth`.
+
+Tilt ratio table (linear interpolation between rows, clamp [0°, 45°]):
+```
+tilt | nearW  | farW   | depth
+  0° | 1.00x  | 1.00x  | 1.00x
+ 15° | 0.80x  | 1.05x  | 1.20x
+ 30° | 0.55x  | 1.10x  | 1.55x
+ 45° | 0.40x  | 1.20x  | 1.90x
+```
+E2E verified May 11 commit notes: G6 @ 3.5m base 12×3.5 → tilt 30° gives 6.6m near × 13.2m far × 5.4m depth.
+
+### Geometry — 4 cases frontend handles:
+```
+(rectangle,        center)     sensor at CENTER, symmetric rect
+(rectangle,        near_edge)  rect projects forward, sensor at back
+(tilt_projection,  near_edge)  trapezoid forward, narrow at sensor   ← default for tilt_bracket
+(tilt_projection,  center)     trapezoid centered, sensor at centroid
+```
+
+### Defaults (encoded in `SensorSettingsPanel.tsx`):
+- `embedded` / `surface` → coverageMode = `rectangle`, anchor = `center` (read-only)
+- `bracket` → `rectangle`, anchor = `center` (editable to `near_edge`)
+- `tilt_bracket` → `tilt_projection`, anchor = `near_edge` (editable to `center`)
+
+## 🖨️ Print / Export PDF (commit `6885145`, May 12 2026)
+
+### What works
+- `/gantt/print` dedicated route renders Gantt as semantic `<table>`
+- Browser-native `<thead>` repeat on every page (no JS hacks)
+- `<tfoot>` repeats footer on every page
+- Page header (DITECH + Date Range + Generated) repeats
+- KPI strip repeats on every page
+- Month/Week/Day rows repeat on every page
+- Group header (e.g. *BKK TEAM 2 · 20 plans · 49 sensors*) stays with first row
+- Plan rows do not split across pages (`page-break-inside: avoid`)
+- App nav/sidebar hidden in print
+- Print button in `GanttPage` opens `/gantt/print?...` in new tab
+
+### Files
+- `frontend/src/pages/PrintGanttPage.tsx` (527 lines)
+- `frontend/src/pages/print-gantt.css` (300 lines)
+- `frontend/src/pages/GanttPage.tsx` — `handlePrint` opens new tab
+- `frontend/src/App.tsx` — `/gantt/print` route registered OUTSIDE the `Layout` wrapper
+
+### 🚨 Critical lesson — do NOT repeat this mistake
+
+**Do NOT override widths or font-sizes inside `@media print`.**
+
+When you change column widths or font-sizes in print rules, Chrome's print engine
+RE-LAYOUTS the entire table and collapses narrow columns to slivers (each character
+ends up on its own line).
+
+The fix that finally worked: keep `@media print` minimal — only hide app chrome
+and remove shadows. Let screen widths/sizes pass through to print unchanged. Chrome
+scales the page to A4 automatically.
+
+### URL examples
+```
+/gantt/print?from=2026-05-11&to=2026-06-10&group=team
+/gantt/print?from=2026-05-01&to=2026-05-31&group=customer&region=BANGKOK
+```
+
+### Test procedure
+1. Navigate to `/gantt`
+2. Click **Print** button → new tab opens
+3. Print dialog appears after ~600ms
+4. Save as PDF
+
+## What works (verified May 13)
+
+- ✅ `GET/POST/PATCH/DELETE /api/designs` + sensors + zones
+- ✅ Floor plan upload + image-dim detection (sharp)
+- ✅ Sensor CRUD: drag, edit all fields incl. coverageMode/showFlags
+- ✅ Tilt slider → backend recomputes trapezoid (tested via curl: 200 + correct dims)
+- ✅ Anchor dropdown → `near_edge` accepted, persisted, rendered
+- ✅ Photos, communication logs, status history
+- ✅ Document generation (Work Permit, Installation Confirm) — Handlebars + Puppeteer
+- ✅ Gantt page (executive redesign + print route)
+- ✅ Calendar view with week-label alignment
+- ✅ Telegram notifications configured
+
+## Pending (small / non-blocking)
+
+### Working-tree clutter (not on git)
+```
+modified:   frontend/src/pages/PrintGanttPage.tsx
+deleted:    frontend/src/pages/gantt-print.css
+modified:   frontend/src/pages/print-gantt.css
+
+Untracked: frontend/src/pages/GanttPage.tsx.bak.{dot,kpi,print,rowbreak,weekend,wrap}
+Untracked: frontend/src/pages/gantt-print.css.bak.{flow,kpi,print,rowbreak,weekend,wrap}
+```
+**Action**: decide whether to commit the 3 mods (review diff first), and delete `.bak.*` files
+(`.gitignore` should already cover them after commit `9833fd3` — verify).
+
+## Roadmap
+
+### Priority 1 — Coverage UX next
+- **C1.11** — IN/OUT arrows for Entrance counting line (visual direction indicator)
+- **C1.12** — Multi-sensor label auto de-clutter (avoid overlapping `-53px` labels)
+
+### Priority 2 — Export / editing
+- **C2.1** — Export PDF/PNG of floor plan with sensors + zones overlay
+- **C2.2** — Polygon edit handles for zones (currently rectangle only? verify ZoneLayer)
+
+### Priority 3 — Reports & analytics
+- Reports redesign (KPI cards + recharts)
+- Equipment master table (dropdown for `sensorModel`/`poeSwitchModel`)
+- Dashboard map (Google Maps pins per branch with status color)
+
+### Priority 4 — Workflow modules
+- Mobile checklist module (tablet-friendly Installer view)
+- Notification rules UI (email/LINE beyond current Telegram)
+- Document workflow: DRAFT → FINALIZED → SIGNED with signature capture
+
+## 🚨 LESSONS LEARNED
+
+### From May 11 session (file truncation recovery)
+1. **`.gitignore` catch-all `coverage/`** silently ignored every coverage component for entire C1.x.
+   Fix: `/coverage/` + `backend/coverage/` + `frontend/coverage/` (commit `ffd74f0`).
+   Always run `git check-ignore -v <path>` if `git add` doesn't add expected files.
+
+2. **`docker cp` can truncate to 0 bytes** when tsx-watch / vite-watch reloads concurrently.
+   Mitigation: write to `/tmp` first, `wc -l` verify, then `docker cp`. ALWAYS `wc -l` after.
+
+3. **Regex patches fail silently** when pattern doesn't match. Prefer direct `str.replace()` with
+   exact text from `grep -A` output. Dry-run on mock file first when regex is unavoidable.
+
+4. **TanStack Query `onSuccess: invalidateQueries` causes cache snap-back** if backend strips
+   fields. Already mitigated in `useDesignEditor.ts` (merge-into-cache pattern).
+
+5. **Backend `update()` uses explicit field whitelist** at `installationDesign.service.ts`
+   lines 456–476. Adding a new sensor field = +1 line in that block (per field).
+
+6. **Frontend container has NO python3** — use sh + node for patches.
+
+7. **Schema patches**: brace-walking, not `[^}]*` regex (fails on nested braces).
+   Always `npx prisma validate` after.
+
+### From May 13 session (audit-before-patch)
+8. **Project state files go stale fast.** `_PROJECT_STATE.md` (May 11 evening) was already
+   outdated by ~30 min: C1.8/C1.9/C1.10 were committed later that night without state update.
+   The May 13 plan was to "re-apply C1.10" — but C1.10 was already on git.
+   **Rule**: always `git log --oneline -20` + `wc -l <file>` + container parity check
+   BEFORE trusting any "current state" doc. Verify reality first, plan second.
+
+9. **No-op commits hide real changes.** When `git add <file>` produces no diff vs HEAD,
+   the next `git commit` may pick up *other* uncommitted/staged work and push that under
+   your commit message. After May 13 "C1.10 re-apply": `git add` returned silent (file already
+   matched HEAD), then `git commit` packaged unrelated Gantt mod as `fa1ae31` and pushed it.
+   **Rule**: after `git add`, ALWAYS read `git status` output — if "Changes to be committed"
+   section is empty, do NOT proceed to `git commit`.
+
+10. **A pristine pre-state check costs almost nothing.** Adding 3 lines of grep + wc
+    before any patch caught the "already applied" case in <10 seconds, saving from
+    overwriting working code with a duplicate commit.
+
+### From May 12 session (print/export work)
+11. **`@media print` should ONLY hide app chrome — never restyle widths or font-sizes.**
+    Overriding column widths or font-sizes inside `@media print` triggers Chrome's print
+    engine to re-layout the entire table, often collapsing narrow columns to character-per-line
+    slivers. Keep print rules minimal (hide nav, remove shadows). Let screen styles pass
+    through unchanged — Chrome scales to A4 automatically. See Print/Export PDF section above.
+
+## File location quick-reference
+
+### Backend
+- `src/services/installationDesign.service.ts` (591) — main service. Sensor update whitelist at ~L456–476.
+  `computeCoverageForSensor()` at L50. Recompute trigger block at L478–497.
+- `src/middlewares/installationDesign.validation.ts` (124) — Zod schemas. `anchorModeEnum` at L60.
+- `src/middlewares/validation.middleware.ts` — generic `validate()` factory.
+- `src/routes/installationDesign.routes.ts` — routes wire schema + service.
+- `src/utils/cameraCoverage.ts` — base `interpolateCoverage()`.
+- `src/utils/tiltProjection.ts` (128) — `TILT_RATIO_TABLE` + `applyTiltProjection()` + interpolation.
+- `prisma/schema.prisma` — SensorPlacement has all C1.x columns (see Schema section above).
+
+### Frontend
+- `src/api/designs.ts` (226) — CoverageMode + AnchorMode types incl. `near_edge`
+- `src/hooks/useDesignEditor.ts` (389) — merge-on-success pattern (lines ~64)
+- `src/components/coverage/*.tsx` — 14 files, see inventory above
+
+### Document generation (stable, untouched May 11+)
+- `src/services/document.service.ts`, `pdf.service.ts`, `document-defaults.ts`
+- Templates: `templates/work-permit.html`, `templates/installation-confirm.html`
+
+## Recovery pattern (if files get truncated again)
+
+```bash
+cd /home/ditech/ditech-planner
+
+# 1. Find 0-byte source files
+docker exec ditech-planner-backend-1 sh -c \
+  'find /app/src -name "*.ts" | while read f; do
+     s=$(wc -l < "$f"); [ "$s" -lt 5 ] && echo "$f: $s lines";
+   done'
+
+# 2. Restore from known-good commit
+git log --oneline -- <broken-file>
+git show <commit>:<broken-file> > /tmp/restored.ts
+wc -l /tmp/restored.ts            # MUST be > 0
+
+# 3. Copy back (sudo for host)
+sudo cp /tmp/restored.ts <host-path>
+sudo chown ditech:docker <host-path>
+docker cp /tmp/restored.ts <container>:<app-path>
+
+# 4. Parity check
+wc -l <host-path> && docker exec <container> wc -l <app-path>
+
+# 5. Test via API + commit immediately
+```
+
+## Useful one-liners
+
+```bash
+# Health
+curl -s http://localhost:5000/health | jq .
+
+# Backend log tail
+docker compose logs -f backend --tail=20
+
+# 0-byte scan
+docker exec ditech-planner-backend-1 sh -c \
+  'find /app/src -name "*.ts" | while read f; do
+     s=$(wc -l < "$f"); [ "$s" -lt 5 ] && echo "$f: $s";
+   done'
+
+# Container vs host parity for a file
+diff <(wc -l <host-path>) <(docker exec ditech-planner-backend-1 wc -l <app-path>)
+
+# Quick auth + curl helper
+TOKEN=$(curl -s -X POST http://localhost:5000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@ditech.co.th","password":"Admin123!"}' | jq -r .data.token)
+curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq .
+```
+
+## Key principles for future patches
+
+1. **Verify before patching** — `wc -l`, `grep`, `git log` first. If reality ≠ doc, trust reality.
+2. **One feature at a time** — easier to bisect, easier to roll back.
+3. **Commit before patching** — rollback = `git checkout HEAD -- <file>`.
+4. **No batch deploys** — never `docker cp` multiple files without verifying each.
+5. **Direct string replacement > regex** when grep output of actual code is available.
+6. **Read `git status` after `git add`** — empty "Changes to be committed" = stop, do not commit.
+7. **Always `npx prisma validate`** after schema edits.
+8. **Update `_PROJECT_STATE.md` AT END of every session** — even short ones. Stale docs cost real time.
