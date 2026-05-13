@@ -12,7 +12,7 @@ interface Props {
 }
 
 type CoverageMode = 'rectangle' | 'tilt_projection';
-type AnchorMode = 'center' | 'near_edge';
+type AnchorMode = 'center' | 'dynamic_tilt';
 
 /**
  * Default coverage mode based on mounting type.
@@ -25,14 +25,36 @@ function defaultCoverageMode(s: SensorPlacement): CoverageMode {
 }
 
 /**
- * Default anchor mode (C1.10).
- *   - tilt_projection mode → near_edge
- *   - rectangle mode → center
- * Override allowed for bracket / tilt_bracket mounting types.
+ * Derived anchor policy (C1.10b).
+ *
+ *   bracket/tilt_bracket + tilt_projection → 'dynamic_tilt'
+ *   everything else                        → 'center'
+ *
+ * No user override — anchorMode in DB is recomputed from these inputs.
  */
-function defaultAnchorMode(s: SensorPlacement): AnchorMode {
+function derivedAnchorMode(s: SensorPlacement): AnchorMode {
   const mode = ((s as any).coverageMode as CoverageMode) || defaultCoverageMode(s);
-  return mode === 'tilt_projection' ? 'near_edge' : 'center';
+  const isBracket = s.mountingType === 'bracket' || s.mountingType === 'tilt_bracket';
+  return (isBracket && mode === 'tilt_projection') ? 'dynamic_tilt' : 'center';
+}
+
+/**
+ * sensorAnchorY = (depth / 2) * (1 - tiltFactor)
+ *
+ * Local coverage coords: near edge at y=0, far edge at y=depth.
+ *   tilt 0°  → anchorY = depth/2  (sensor at center)
+ *   tilt 45° → anchorY = 0        (sensor at near edge)
+ *
+ * Center policy ignores tilt and always returns depth/2.
+ */
+function computeSensorAnchorY(
+  depthPx: number,
+  tiltAngle: number,
+  policy: AnchorMode,
+): number {
+  if (policy !== 'dynamic_tilt') return depthPx / 2;
+  const tiltFactor = Math.max(0, Math.min(1, (tiltAngle || 0) / 45));
+  return (depthPx / 2) * (1 - tiltFactor);
 }
 
 export function CoverageRectLayer({
@@ -58,9 +80,8 @@ export function CoverageRectLayer({
         const coverageMode: CoverageMode =
           ((s as any).coverageMode as CoverageMode) || defaultCoverageMode(s);
 
-        // C1.10 — anchor mode now user-controllable for bracket/tilt_bracket
-        const anchorMode: AnchorMode =
-          ((s as any).anchorMode as AnchorMode) || defaultAnchorMode(s);
+        // C1.10b — anchorMode is derived, not user-controlled
+        const anchorMode: AnchorMode = derivedAnchorMode(s);
 
         // Per-sensor display flags (C1.8.2) — fall back to global if not set
         const sShowLabels = (s as any).showLabels !== false && showLabels;
@@ -72,102 +93,48 @@ export function CoverageRectLayer({
         const nearEdgeRatio = s.nearEdgeRatio ?? 0.47;
         const isDashed = s.functionType === 'cctv';
 
-        // ── 4-case Per-mode/anchor geometry (sensor at LOCAL ORIGIN 0,0) ──
-        // C1.10:
-        //   (rectangle, center)        → symmetric rect around sensor
-        //   (rectangle, near_edge)     → rect projects forward from sensor (rect bracket)
-        //   (tilt_projection, near_edge) → trapezoid projects forward
-        //   (tilt_projection, center)  → trapezoid centered on sensor
-        let polygonPoints: number[];
-        let centerLineStart: { x: number; y: number };
-        let centerLineEnd: { x: number; y: number };
-        let widthFarLabelPos: { x: number; y: number };
-        let widthNearLabelPos: { x: number; y: number } | null;
-        let depthLabelPos: { x: number; y: number };
-        let arrowTipY: number;
-        let arrowBaseY: number;
+        // ── C1.10b: Unified geometry ──
+        // Build polygon in "local cover" coords where near edge is at y=0
+        // and far edge is at y=depth. Then shift down by -anchorY so that
+        // the SENSOR (at origin 0,0) sits where the policy says it should:
+        //   center        → anchorY = depth/2 (sensor at midpoint)
+        //   dynamic_tilt  → anchorY = (depth/2)(1 - tiltFactor)
+        //                   tilt 0°  → anchorY = depth/2  (center)
+        //                   tilt 45° → anchorY = 0        (near edge)
+        const isTilt = coverageMode === 'tilt_projection';
+        const halfW    = wPx / 2;
+        const nearHalf = isTilt ? (wPx * nearEdgeRatio) / 2 : halfW;
+        const farHalf  = halfW;
 
-        if (coverageMode === 'tilt_projection') {
-          // ── TILT PROJECTION ──
-          const nearHalf = (wPx * nearEdgeRatio) / 2;
-          const farHalf = wPx / 2;
+        const anchorY = computeSensorAnchorY(dPx, (s as any).tiltAngle ?? 0, anchorMode);
 
-          if (anchorMode === 'near_edge') {
-            // Sensor at narrow edge center → (0, 0); coverage forward (+Y)
-            polygonPoints = [
-              -nearHalf, 0,
-               nearHalf, 0,
-               farHalf,  dPx,
-              -farHalf,  dPx,
-            ];
-            centerLineStart = { x: 0, y: 0 };
-            centerLineEnd   = { x: 0, y: dPx };
-            widthFarLabelPos  = { x: 0, y: dPx + 12 };
-            widthNearLabelPos = { x: -nearHalf - 40, y: 0 };  // left of narrow edge
-            depthLabelPos     = { x: farHalf + 14, y: dPx / 2 };
-            arrowTipY = dPx;
-            arrowBaseY = dPx - 12;
-          } else {
-            // anchor = center: shift polygon so its CENTROID is near (0, 0)
-            // Trapezoid centroid Y = dPx * (nearHalf + 2*farHalf) / (3 * (nearHalf + farHalf))
-            // For visualization, use simpler "vertical midpoint" = dPx / 2
-            const dy = -dPx / 2;
-            polygonPoints = [
-              -nearHalf, 0 + dy,
-               nearHalf, 0 + dy,
-               farHalf,  dPx + dy,
-              -farHalf,  dPx + dy,
-            ];
-            centerLineStart = { x: 0, y: dy };
-            centerLineEnd   = { x: 0, y: dPx + dy };
-            widthFarLabelPos  = { x: 0, y: dPx + dy + 12 };
-            widthNearLabelPos = { x: -nearHalf - 40, y: dy };
-            depthLabelPos     = { x: farHalf + 14, y: dy + dPx / 2 };
-            arrowTipY = dPx + dy;
-            arrowBaseY = dPx + dy - 12;
-          }
-        } else {
-          // ── TOP VIEW RECTANGLE ──
-          const halfW = wPx / 2;
+        // Local cover polygon (near at y=0, far at y=depth), then translate by -anchorY
+        const polygonPoints: number[] = [
+          -nearHalf, 0       - anchorY,
+           nearHalf, 0       - anchorY,
+           farHalf,  dPx     - anchorY,
+          -farHalf,  dPx     - anchorY,
+        ];
 
-          if (anchorMode === 'near_edge') {
-            // Rect projects forward from sensor (camera at back edge)
-            polygonPoints = [
-              -halfW, 0,
-               halfW, 0,
-               halfW, dPx,
-              -halfW, dPx,
-            ];
-            centerLineStart = { x: 0, y: 0 };
-            centerLineEnd   = { x: 0, y: dPx };
-            widthFarLabelPos  = { x: 0, y: dPx + 12 };
-            widthNearLabelPos = null;  // no separate "near" for rectangle
-            depthLabelPos     = { x: halfW + 14, y: dPx / 2 };
-            arrowTipY = dPx;
-            arrowBaseY = dPx - 12;
-          } else {
-            // anchor = center: symmetric rectangle
-            const halfD = dPx / 2;
-            polygonPoints = [
-              -halfW, -halfD,
-               halfW, -halfD,
-               halfW,  halfD,
-              -halfW,  halfD,
-            ];
-            centerLineStart = { x: 0, y: -halfD };
-            centerLineEnd   = { x: 0, y:  halfD };
-            widthFarLabelPos  = { x: 0, y: halfD + 12 };
-            widthNearLabelPos = null;
-            depthLabelPos     = { x: halfW + 14, y: 0 };
-            arrowTipY = halfD;
-            arrowBaseY = halfD - 12;
-          }
-        }
+        // Center line from near-mid to far-mid
+        const centerLineStart = { x: 0, y: 0   - anchorY };
+        const centerLineEnd   = { x: 0, y: dPx - anchorY };
 
-        // C1.10 — badge text based on anchor mode (not coverage mode)
+        // Labels relative to the new positions
+        const widthFarLabelPos  = { x: 0, y: dPx - anchorY + 12 };
+        const widthNearLabelPos = isTilt
+          ? { x: -nearHalf - 40, y: 0 - anchorY }
+          : null;
+        const depthLabelPos     = { x: farHalf + 14, y: dPx / 2 - anchorY };
+
+        // Direction arrow at the far edge
+        const arrowTipY  = dPx - anchorY;
+        const arrowBaseY = arrowTipY - 12;
+
+        // C1.10b — badge text based on derived policy
         const sensorPositionHint =
-          anchorMode === 'near_edge'
-            ? 'Sensor at near edge'
+          anchorMode === 'dynamic_tilt'
+            ? 'Dynamic by tilt'
             : 'Sensor at center';
 
         return (

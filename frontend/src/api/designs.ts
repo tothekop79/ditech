@@ -8,7 +8,7 @@ export type Point = { x: number; y: number };
 
 export type SensorFunction = 'entrance' | 'engagement' | 'heatmap' | 'cctv' | 'passerby' | 'zone';
 export type MountingType = 'embedded' | 'surface' | 'bracket' | 'tilt_bracket';
-export type AnchorMode = 'center' | 'back_edge' | 'front_edge';
+export type AnchorMode = 'center' | 'dynamic_tilt';
 export type ZoneType = 'entrance_line' | 'engagement_area' | 'heatmap_area' | 'walking_area' | 'obstruction';
 export type DesignStatus = 'PASS' | 'WARNING' | 'FAIL';
 
