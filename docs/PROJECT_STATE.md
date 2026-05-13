@@ -25,7 +25,14 @@ Latest commit: `a8ce7d9` "fix(C1.10c): backend accepts color + display flag + co
 ## Git history (recent)
 
 ```
-0daff27  chore: remove tracked .bak files + tighten .gitignore pattern    ← HEAD = origin/main
+a8ce7d9  fix(C1.10c): backend accepts color + display flag + coverageMode fields  ← HEAD = origin/main
+b1c76c4  fix(C1.10b): complete SensorTransformLayer migration to dynamic_tilt
+599014f  docs: log C1.10b session + 5 lessons learned
+eb78d34  feat(C1.10b): replace anchor dropdown with read-only policy badge
+6f692c0  feat(C1.10b): unify coverage geometry with dynamic tilt anchor
+15ec4b8  feat(C1.10b): collapse anchorMode to policy enum 'center' | 'dynamic_tilt'
+881bcb0  docs: log May 13 housekeeping session + 2 new lessons
+0daff27  chore: remove tracked .bak files + tighten .gitignore pattern
 1ef37e8  feat(gantt-print): add legend row + clamp range to today
 b6143be  docs: relocate PROJECT_STATE.md to docs/ + refresh for May 13 audit
 fa1ae31  fix(gantt): use 'limit' instead of 'pageSize' (pagination)
