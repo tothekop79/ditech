@@ -63,6 +63,20 @@ export function ObstructionPanel({ sensor, scenarioType, ceilingHeight, onChange
   const initialTilt = existing.cameraTilt ?? sensor.tiltAngle ?? 0;
   const [tilt, setTilt] = useState<number>(initialTilt);
 
+  // C1.10d#3.5 — Sync external sensor.tiltAngle changes back into local tilt state.
+  // Without this, when user edits "Tilt angle (°)" in SensorSettingsPanel, the
+  // local tilt here stays stale; ObstructionPanel's next save (via computeResult
+  // useEffect at L200, deps include [tilt]) writes cameraTilt=staleTilt, AND the
+  // L83-88 sync useEffect notices tilt (stale) !== sensor.tiltAngle (new) and
+  // pushes staleTilt back via onChangeTilt → overwriting the user's edit.
+  // 'tilt' is intentionally NOT in deps (avoids infinite loop with L83-88).
+  useEffect(() => {
+    if (sensor.tiltAngle !== undefined && sensor.tiltAngle !== tilt) {
+      setTilt(sensor.tiltAngle);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sensor.tiltAngle]);
+
   const [hasHanging, setHasHanging] = useState<boolean>(existing.hasHangingObstr ?? true);
   const [obstrKind, setObstrKind] = useState<ObstructionKind>(existing.obstructionKind ?? 'door_header');
   const [hangingDrop, setHangingDrop] = useState<string>(String(existing.hangingDrop ?? 0.5));
@@ -261,7 +275,7 @@ export function ObstructionPanel({ sensor, scenarioType, ceilingHeight, onChange
               <label className="text-[10px] text-ditech-text-muted">Tilt (outward)</label>
               <span className="text-[10px] font-mono font-semibold">{tilt}°</span>
             </div>
-            <input type="range" min={0} max={60} step={1} value={tilt}
+            <input type="range" min={0} max={45} step={1} value={tilt}
               onChange={(e) => setTilt(parseInt(e.target.value))}
               className="w-full" />
             <div className="flex justify-between text-[8px] text-ditech-text-muted mt-0.5">
