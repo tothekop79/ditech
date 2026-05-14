@@ -306,3 +306,4 @@ upsert-*.sh
 /users.ts.b64
 /wire-frontend.sh
 /xiaomi-import-ready-v2.xlsx
+backups/
