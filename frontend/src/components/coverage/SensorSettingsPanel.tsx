@@ -298,6 +298,7 @@ export function SensorSettingsPanel({ editor }: Props) {
               >
                 <option value="rectangle">▭ Top View Rectangle</option>
                 <option value="tilt_projection">△ Tilt Projection</option>
+                <option value="cone">▽ Cone (CCTV)</option>
               </select>
             </Row>
 

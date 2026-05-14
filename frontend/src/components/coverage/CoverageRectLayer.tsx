@@ -11,7 +11,7 @@ interface Props {
   selectedSensorId?: string | null;
 }
 
-type CoverageMode = 'rectangle' | 'tilt_projection';
+type CoverageMode = 'rectangle' | 'tilt_projection' | 'cone';
 type AnchorMode = 'center' | 'dynamic_tilt';
 
 /**
@@ -91,7 +91,9 @@ export function CoverageRectLayer({
         const sShowArrow = (s as any).showDirectionArrow !== false && showDirectionArrow;
 
         const nearEdgeRatio = s.nearEdgeRatio ?? 0.47;
-        const isDashed = s.functionType === 'cctv';
+        // C1.10e — Cone uses solid outline (shape is distinct enough);
+        // dashed remains for legacy rectangle-mode CCTV.
+        const isDashed = s.functionType === 'cctv' && coverageMode !== 'cone';
 
         // ── C1.10b: Unified geometry ──
         // Build polygon in "local cover" coords where near edge is at y=0
@@ -102,27 +104,40 @@ export function CoverageRectLayer({
         //                   tilt 0°  → anchorY = depth/2  (center)
         //                   tilt 45° → anchorY = 0        (near edge)
         const isTilt = coverageMode === 'tilt_projection';
+        const isCone = coverageMode === 'cone';
         const halfW    = wPx / 2;
         const nearHalf = isTilt ? (wPx * nearEdgeRatio) / 2 : halfW;
         const farHalf  = halfW;
 
-        const anchorY = computeSensorAnchorY(dPx, (s as any).tiltAngle ?? 0, anchorMode);
+        // C1.10e — Cone mode: sensor IS the apex, no anchor offset needed.
+        // Other modes use derived anchor policy (center / dynamic_tilt).
+        const anchorY = isCone
+          ? 0
+          : computeSensorAnchorY(dPx, (s as any).tiltAngle ?? 0, anchorMode);
 
-        // Local cover polygon (near at y=0, far at y=depth), then translate by -anchorY
-        const polygonPoints: number[] = [
-          -nearHalf, 0       - anchorY,
-           nearHalf, 0       - anchorY,
-           farHalf,  dPx     - anchorY,
-          -farHalf,  dPx     - anchorY,
-        ];
+        // C1.10e — Cone is a triangle (apex + 2 base corners). Other modes
+        // are 4-point trapezoid/rectangle (near edge + far edge).
+        const polygonPoints: number[] = isCone
+          ? [
+              0,         0   - anchorY,   // apex (camera position)
+              +farHalf,  dPx - anchorY,   // far-right
+              -farHalf,  dPx - anchorY,   // far-left
+            ]
+          : [
+              -nearHalf, 0       - anchorY,
+               nearHalf, 0       - anchorY,
+               farHalf,  dPx     - anchorY,
+              -farHalf,  dPx     - anchorY,
+            ];
 
-        // Center line from near-mid to far-mid
+        // Center line from near-mid (or apex for cone) to far-mid
         const centerLineStart = { x: 0, y: 0   - anchorY };
         const centerLineEnd   = { x: 0, y: dPx - anchorY };
 
         // Labels relative to the new positions
         const widthFarLabelPos  = { x: 0, y: dPx - anchorY + 12 };
-        const widthNearLabelPos = isTilt
+        // No "near" label for cone (apex has zero width)
+        const widthNearLabelPos = (isTilt && !isCone)
           ? { x: -nearHalf - 40, y: 0 - anchorY }
           : null;
         const depthLabelPos     = { x: farHalf + 14, y: dPx / 2 - anchorY };
@@ -208,13 +223,21 @@ function DimensionLabels({
   stroke: string;
 }) {
   const isTilt = mode === 'tilt_projection';
+  const isCone = mode === 'cone';
   const farW = coverageWidth;
-  const nearW = isTilt ? coverageWidth * nearEdgeRatio : null;
+  // C1.10e — Cone has no near edge (apex has zero width)
+  const nearW = (isTilt && !isCone) ? coverageWidth * nearEdgeRatio : null;
   const depth = coverageDepth;
 
-  const labelFar = isTilt ? `Far ${farW.toFixed(1)}m` : `${farW.toFixed(1)}m`;
+  const labelFar = isTilt
+    ? `Far ${farW.toFixed(1)}m`
+    : isCone
+      ? `Base ${farW.toFixed(1)}m`
+      : `${farW.toFixed(1)}m`;
   const labelNear = nearW != null ? `Near ${nearW.toFixed(1)}m` : null;
-  const labelDepth = isTilt ? `Depth ${depth.toFixed(1)}m` : `${depth.toFixed(1)}m`;
+  const labelDepth = (isTilt || isCone)
+    ? `Depth ${depth.toFixed(1)}m`
+    : `${depth.toFixed(1)}m`;
 
   return (
     <>

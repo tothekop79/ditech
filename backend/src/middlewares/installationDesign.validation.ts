@@ -76,7 +76,7 @@ export const createSensorSchema = z.object({
   // C1.10c - fields previously silent-dropped by Zod
   color: z.string().nullable().optional(),
   nearEdgeRatio: z.number().min(0.05).max(1.0).optional(),
-  coverageMode: z.enum(['rectangle', 'tilt_projection']).optional(),
+  coverageMode: z.enum(['rectangle', 'tilt_projection', 'cone']).optional(),
   showLabels: z.boolean().optional(),
   showDimensions: z.boolean().optional(),
   showDirectionArrow: z.boolean().optional(),
