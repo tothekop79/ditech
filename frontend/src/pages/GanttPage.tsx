@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { plansApi } from '../api/plans';
 import { DateRangeFilter, getPresetRange, type DateRange } from '../components/DateRangeFilter';
+import { buildDateColorMap, collectPlanDateKeys, dateKey, type DateColor } from '../utils/dateColor';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //   Types
@@ -124,7 +125,7 @@ function getISOWeek(d: Date): number {
 const DAY_W = 44;
 const ROW_H = 64;
 const BAR_H = 28;
-const LEFT_CUSTOMER = 160;  // narrower — just for team/customer name
+const LEFT_CUSTOMER = 200;  // wider — date badge + day-of-week + work time line
 const LEFT_SUMMARY = 420;   // wider — holds long plan details line
 const LEFT_TOTAL = LEFT_CUSTOMER + LEFT_SUMMARY;
 
@@ -230,8 +231,7 @@ export function GanttPage() {
       const entry = buckets.get(key) || { label, subtitle, plans: [] };
       entry.plans.push(p);
       buckets.set(key, entry);
-    }
-    const rows: GroupRow[] = Array.from(buckets.entries()).map(([key, v]) => {
+    }    const rows: GroupRow[] = Array.from(buckets.entries()).map(([key, v]) => {
       const totals = {
         plans: v.plans.length,
         sensors: v.plans.reduce((s, p) => s + (p.sensorCount || 0), 0),
@@ -273,6 +273,12 @@ export function GanttPage() {
       sensors, cctv, lanJobs, unassigned, withNotes,
       inProgress, completed, attention,
     };
+  }, [filteredPlans]);
+
+  // ─── Date Color Banding: build map of dateKey → color for each plan date ──
+  const dateColorMap = useMemo(() => {
+    const keys = collectPlanDateKeys(filteredPlans);
+    return buildDateColorMap(keys);
   }, [filteredPlans]);
 
   const activeChips = useMemo(() => {
@@ -435,6 +441,7 @@ export function GanttPage() {
             onToggleGroup={toggleGroup}
             selectedPlanId={selectedPlanId}
             showPlanDetails={showPlanDetails}
+            dateColorMap={dateColorMap}
             onBarClick={(plan) => {
               setSelectedPlanId(plan.id);
               // Scroll detail row into view
@@ -534,9 +541,10 @@ interface GanttTableProps {
   onBarClick: (plan: Plan) => void;
   onBarHover: (bar: { plan: Plan; x: number; y: number } | null) => void;
   onOpenPlan: (plan: Plan) => void;
+  dateColorMap: Map<string, DateColor>;
 }
 
-function GanttTable({ days, groups, collapsedGroups, onToggleGroup, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan }: GanttTableProps) {
+function GanttTable({ days, groups, collapsedGroups, onToggleGroup, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan, dateColorMap }: GanttTableProps) {
   const totalW = days.length * DAY_W;
   const weeks = useMemo(() => weekSpans(days), [days]);
   const todayIdx = days.findIndex((d) => isSameDay(d, new Date()));
@@ -625,6 +633,7 @@ function GanttTable({ days, groups, collapsedGroups, onToggleGroup, selectedPlan
               onBarHover={onBarHover}
               onOpenPlan={onOpenPlan}
               todayIdx={todayIdx}
+              dateColorMap={dateColorMap}
             />
           ))
         )}
@@ -650,9 +659,10 @@ interface GroupRowProps {
   onBarHover: (bar: { plan: Plan; x: number; y: number } | null) => void;
   onOpenPlan: (plan: Plan) => void;
   todayIdx: number;
+  dateColorMap: Map<string, DateColor>;
 }
 
-function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan, todayIdx }: GroupRowProps) {
+function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, selectedPlanId, showPlanDetails, onBarClick, onBarHover, onOpenPlan, todayIdx, dateColorMap }: GroupRowProps) {
   const rangeStart = days[0];
   const bgColor = groupIndex % 2 === 0 ? '#ffffff' : '#f8fafc';
 
@@ -759,36 +769,124 @@ function GanttGroupRow({ group, groupIndex, days, totalW, collapsed, onToggle, s
       </div>
 
       {/* ─── Per-plan rows (only when expanded + showPlanDetails) ─── */}
-      {!collapsed && showPlanDetails && sortedPlans.map((plan) => {
-        const scheduled = startOfDay(new Date(plan.scheduledDate!));
-        const startOffset = Math.max(0, daysBetween(rangeStart, scheduled));
-        const dur = Math.max(1, plan.durationDays || 1);
-        const endIdx = Math.min(days.length - 1, startOffset + dur - 1);
-        const startIdx = Math.min(days.length - 1, startOffset);
-        const widthDays = Math.max(1, endIdx - startIdx + 1);
-        const barLeft = startIdx * DAY_W + 3;
-        const barWidth = widthDays * DAY_W - 6;
+      {!collapsed && showPlanDetails && (() => {
+        // Build (header, plan, plan, header, plan, ...) sequence with date groups.
+        // We compute plans-per-date once so the header can show "N plans" count.
+        const plansByDate = new Map<string, Plan[]>();
+        for (const p of sortedPlans) {
+          const k = dateKey(new Date(p.scheduledDate!));
+          if (!plansByDate.has(k)) plansByDate.set(k, []);
+          plansByDate.get(k)!.push(p);
+        }
 
-        return (
-          <PlanDetailRow
-            key={plan.id}
-            plan={plan}
-            rowHeight={PLAN_ROW_H}
-            barLeft={barLeft}
-            barWidth={barWidth}
-            totalW={totalW}
-            days={days}
-            todayIdx={todayIdx}
-            selected={selectedPlanId === plan.id}
-            bgColor={bgColor}
-            onClick={() => onBarClick(plan)}
-            onHover={(x, y) => onBarHover({ plan, x, y })}
-            onLeave={() => onBarHover(null)}
-            onOpenPlan={() => onOpenPlan(plan)}
-          />
-        );
-      })}
+        const elements: React.ReactNode[] = [];
+        let lastDateKey: string | null = null;
+
+        sortedPlans.forEach((plan) => {
+          const scheduled = startOfDay(new Date(plan.scheduledDate!));
+          const startOffset = Math.max(0, daysBetween(rangeStart, scheduled));
+          const dur = Math.max(1, plan.durationDays || 1);
+          const endIdx = Math.min(days.length - 1, startOffset + dur - 1);
+          const startIdx = Math.min(days.length - 1, startOffset);
+          const widthDays = Math.max(1, endIdx - startIdx + 1);
+          const barLeft = startIdx * DAY_W + 3;
+          const barWidth = widthDays * DAY_W - 6;
+
+          // Insert Date Group Header if this plan starts a new date group
+          const planDateKey = dateKey(scheduled);
+          if (planDateKey !== lastDateKey) {
+            const count = plansByDate.get(planDateKey)?.length ?? 1;
+            elements.push(
+              <DateGroupHeaderRow
+                key={`dgh-${planDateKey}`}
+                date={scheduled}
+                planCount={count}
+                totalW={totalW}
+                dateColorMap={dateColorMap}
+                days={days}
+                todayIdx={todayIdx}
+              />
+            );
+            lastDateKey = planDateKey;
+          }
+
+          elements.push(
+            <PlanDetailRow
+              key={plan.id}
+              plan={plan}
+              rowHeight={PLAN_ROW_H}
+              barLeft={barLeft}
+              barWidth={barWidth}
+              totalW={totalW}
+              days={days}
+              todayIdx={todayIdx}
+              selected={selectedPlanId === plan.id}
+              bgColor={bgColor}
+              dateColorMap={dateColorMap}
+              onClick={() => onBarClick(plan)}
+              onHover={(x, y) => onBarHover({ plan, x, y })}
+              onLeave={() => onBarHover(null)}
+              onOpenPlan={() => onOpenPlan(plan)}
+            />
+          );
+        });
+
+        return elements;
+      })()}
     </>
+  );
+}
+
+/**
+ * Date Group Header — appears on the left side only, before the first plan
+ * of each date. Shows "Fri 15 May · 3 plans" with pastel background and
+ * a colored left border matching the date palette.
+ *
+ * The right-side (timeline) area renders an EMPTY row of the same height
+ * so the next plan row's Gantt bar still lines up with the date column
+ * in the timeline header (alignment is preserved).
+ */
+const DATE_HEADER_H = 30;
+
+function DateGroupHeaderRow({ date, planCount, totalW, dateColorMap, days, todayIdx }: {
+  date: Date; planCount: number; totalW: number;
+  dateColorMap: Map<string, DateColor>; days: Date[]; todayIdx: number;
+}) {
+  const color = dateColorMap.get(dateKey(date));
+  const dayLabel = date.toLocaleDateString('en-US', { weekday: 'short' });
+  const dateLabel = date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+
+  // Full pastel band + colored left border
+  const leftStyle: React.CSSProperties = {
+    width: LEFT_TOTAL,
+    background: color?.bg ?? '#f1f5f9',
+    borderLeft: color ? `4px solid ${color.border}` : '4px solid #cbd5e1',
+  };
+
+  return (
+    <div className="flex items-stretch border-b border-slate-200" style={{ minHeight: DATE_HEADER_H }}>
+      {/* Left fixed area — date label + plan count, both on left (count next to label) */}
+      <div className="sticky left-0 z-10 flex items-center gap-2 pl-4 pr-4 border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
+           style={leftStyle}>
+        <span className="text-[13px] font-bold tabular-nums tracking-tight"
+              style={{ color: color?.text ?? '#334155' }}>
+          {dayLabel} {dateLabel}
+        </span>
+        <span className="shrink-0 text-[12px] font-bold tabular-nums px-2.5 py-0.5 rounded-md"
+              style={{
+                background: 'white',
+                color: color?.text ?? '#475569',
+                border: `1px solid ${color?.border ?? '#cbd5e1'}`,
+              }}>
+          {planCount} {planCount === 1 ? 'plan' : 'plans'}
+        </span>
+      </div>
+
+      {/* Right (timeline) area — EMPTY spacer with day grid so columns align */}
+      <div className="relative" style={{ width: totalW, height: DATE_HEADER_H }}>
+        <DayGridBackground days={days} todayIdx={todayIdx} />
+      </div>
+    </div>
   );
 }
 
@@ -970,6 +1068,7 @@ interface PlanDetailRowProps {
   todayIdx: number;
   selected: boolean;
   bgColor: string;
+  dateColorMap: Map<string, DateColor>;
   onClick: () => void;
   onHover: (x: number, y: number) => void;
   onLeave: () => void;
@@ -978,7 +1077,7 @@ interface PlanDetailRowProps {
 
 function PlanDetailRow({
   plan, rowHeight, barLeft, barWidth, totalW, days, todayIdx,
-  selected, bgColor, onClick, onHover, onLeave, onOpenPlan,
+  selected, bgColor, dateColorMap, onClick, onHover, onLeave, onOpenPlan,
 }: PlanDetailRowProps) {
   const [copied, setCopied] = useState(false);
   const scope = plan.workScope || [];
@@ -992,6 +1091,8 @@ function PlanDetailRow({
   const notesText = [plan.detail, plan.readinessNote].filter(Boolean).join(' · ');
   const contactLine = [plan.contactPerson, plan.contactPhone].filter(Boolean).join(' · ');
 
+  // Date color from shared palette
+  const planColor = dateColorMap.get(dateKey(date));
   const copy = (e: React.MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard?.writeText(buildWorkSummaryText(plan)).then(() => {
@@ -1014,25 +1115,32 @@ function PlanDetailRow({
       {/* Left fixed: compact one-line plan summary */}
       <div className="sticky left-0 z-10 flex border-r border-slate-300 shadow-[2px_0_6px_-2px_rgba(15,23,42,0.12)]"
            style={{ width: LEFT_TOTAL, background: rowBg }}>
-        {/* Date column — vertical layout for readability */}
+        {/* Date column — professional: white bg, no color tint, just badge + time */}
         <div style={{ width: LEFT_CUSTOMER }}
-             className="pl-4 pr-3 py-2 flex items-center gap-2 border-r border-slate-200 min-w-0">
-          {/* Date badge — big, bold, dark */}
-          <div className="shrink-0 flex flex-col items-center justify-center px-2.5 py-1 rounded-md bg-slate-800 text-white tabular-nums leading-none shadow-sm min-w-[44px]">
-            <span className="text-[16px] font-extrabold leading-none">{date.getDate()}</span>
-            <span className="text-[9px] uppercase tracking-wider font-semibold opacity-80 mt-0.5">
+             className="pl-3 pr-3 py-2 flex items-center gap-3 border-r border-slate-200 min-w-0">
+          {/* Date badge — filled muted bg from palette + colored border, dark text */}
+          <div className="shrink-0 flex flex-col items-center justify-center px-1.5 py-1 rounded-md tabular-nums leading-none"
+               style={{
+                 width: 46,
+                 background: planColor?.bg ?? '#f1f5f9',
+                 border: planColor ? `1.5px solid ${planColor.border}` : '1.5px solid #cbd5e1',
+               }}>
+            <span className="text-[17px] font-extrabold leading-none text-slate-900">{date.getDate()}</span>
+            <span className="text-[8px] uppercase tracking-wider font-bold mt-0.5"
+                  style={{ color: planColor?.text ?? '#475569' }}>
               {date.toLocaleDateString('en-US', { month: 'short' })}
+            </span>
+            <span className="text-[8px] uppercase tracking-wider font-semibold text-slate-500 mt-0.5">
+              {dayStr}
             </span>
           </div>
 
-          {/* Day + time stack */}
+          {/* Time row — standalone, full-line, never truncated */}
           <div className="flex flex-col leading-tight min-w-0">
-            <span className="text-[12px] font-bold text-slate-700">{dayStr}</span>
-            {timeStr && (
-              <span className="text-[11px] text-slate-500 font-medium tabular-nums whitespace-nowrap truncate" title={timeStr}>
-                🕐 {timeStr}
-              </span>
-            )}
+            <span className={`text-[12px] font-semibold tabular-nums whitespace-nowrap ${timeStr ? 'text-slate-700' : 'text-slate-400 italic'}`}
+                  title={timeStr || 'No time set'}>
+              🕐 {timeStr || 'Time: —'}
+            </span>
           </div>
         </div>
 
