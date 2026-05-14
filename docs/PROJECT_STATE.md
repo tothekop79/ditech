@@ -1,14 +1,16 @@
-# DITECH Installation Planner — Current State (May 13, 2026)
+# DITECH Installation Planner — Current State (May 14, 2026)
 
 ## 📌 TL;DR
 
 - ✅ **System WORKING** — backend healthy, frontend + DB + Redis + Telegram all green
-- ✅ **C1.x coverage suite (C1.1 – C1.10) COMPLETE** — verified end-to-end May 13 audit
-- ✅ **Gantt redesign + print route + legend row** shipped (executive KPI dashboard, print-ready PDF)
-- ✅ **Working tree clean** as of May 13 — all `.bak` cruft removed, `.gitignore` tightened
-- ⏭️ **Next**: C1.11 (IN/OUT arrows), C1.12 (label de-clutter), C2 (export PDF/PNG + polygon zones)
+- ✅ **C1.x coverage suite COMPLETE through C1.10f** — verified end-to-end May 14
+- ✅ **Batch 1 (May 13–14) shipped 10 commits** — sensor cache fix, ratio override, tilt sync, cone CCTV mode, collapsible KPI bar, migration baseline squash, Gantt UX polish
+- ✅ **Prisma migrations rebaselined** — single baseline covers all 25 tables
+- ✅ **Gantt UX polish (May 14 afternoon, commit `571ba09`)** — Date Color Banding (left-side only), Date Group Header per date, always-visible work time, pagination silent regression hotfix
+- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones)
+- ⏭️ **Branch state**: `fix/sensor-cache-merge` is 11 commits ahead of `main` (`5aa19bc`). PR/merge pending.
 
-Latest commit: `a8ce7d9` "fix(C1.10c): backend accepts color + display flag + coverageMode fields"
+Latest commit: `571ba09` "feat(gantt): date color banding + group header + work time + pagination fix"
 
 ## Stack & Server
 
@@ -25,7 +27,19 @@ Latest commit: `a8ce7d9` "fix(C1.10c): backend accepts color + display flag + co
 ## Git history (recent)
 
 ```
-a8ce7d9  fix(C1.10c): backend accepts color + display flag + coverageMode fields  ← HEAD = origin/main
+571ba09  feat(gantt): date color banding + group header + work time + pagination fix  ← HEAD = origin/fix/sensor-cache-merge
+0732195  chore: ignore backups folder
+7d04799  feat(designs): C1.10f collapsible KPI summary bar
+3f71770  feat(designs): C1.10e cone coverage mode for CCTV
+161066c  fix(designs): unify tilt input across SensorSettingsPanel + ObstructionPanel
+f0fd845  feat(designs): C1.10d#3 advanced trapezoid ratio override
+829e202  chore: squash Prisma migrations into baseline                            ← Batch 1 (May 13–14)
+08aad6f  chore: track Prisma migrations in git
+7296ca3  chore: align frontend UpdateSensorDTO with backend Zod
+c33180f  fix(designs): reset sensor coverage to model defaults
+98190de  fix(designs): isolate sensor update mutations per field
+5aa19bc  docs: refresh git history block with C1.10b/c commits                   ← origin/main, ↑ Batch 1 above
+a8ce7d9  fix(C1.10c): backend accepts color + display flag + coverageMode fields
 b1c76c4  fix(C1.10b): complete SensorTransformLayer migration to dynamic_tilt
 599014f  docs: log C1.10b session + 5 lessons learned
 eb78d34  feat(C1.10b): replace anchor dropdown with read-only policy badge
@@ -88,10 +102,14 @@ coverageWidth      Float                        // m (= farWidth when tilt_proje
 coverageDepth      Float                        // m
 anchorMode         String   @default("center")  // center | back_edge | front_edge | near_edge
 nearEdgeRatio      Float    @default(0.47)      // near/far ratio for tilt trapezoid
-coverageMode       String   @default("rectangle")  // rectangle | tilt_projection
+coverageMode       String   @default("rectangle")  // rectangle | tilt_projection | cone (C1.10e)
 showLabels         Boolean  @default(true)
 showDimensions     Boolean  @default(true)
 showDirectionArrow Boolean  @default(true)
+// C1.10d#3 — Manual trapezoid ratio override (tilt_projection only)
+ratioOverride      Boolean  @default(false)
+farWidthRatio      Float?                          // multiplier 0.1-3.0, nullable
+depthRatio         Float?                          // multiplier 0.1-3.5, nullable
 ```
 
 ## C1.x Coverage Suite — DONE ✅
@@ -99,6 +117,53 @@ showDirectionArrow Boolean  @default(true)
 ### C1.10 — `near_edge` anchor (commit `4d42078`)
 Zod `anchorModeEnum` now: `['center', 'back_edge', 'front_edge', 'near_edge']`.
 Frontend Sensor Position dropdown for tilt_bracket no longer 400s.
+
+### C1.10d#1 — Isolate sensor update mutations (commit `98190de`)
+Fixed two related bugs causing `mountingHeight` snap-back:
+1. Debounce timers were keyed by `sensorId` only → ObstructionPanel's redundant PATCH cancelled the user's mountingHeight PATCH. Fix: key by `sensorId + sorted(dto.keys)`.
+2. `onSuccess` merged the FULL server response → DB still held old value → overwrote user's optimistic update. Fix: merge only fields that were in the dto, plus server-recomputed coverageWidth/coverageDepth/nearEdgeRatio when mountingHeight/tiltAngle/coverageMode/cameraModelId changed.
+
+### C1.10d#2 — Reset to model defaults (commit `c33180f`)
+"↺ Reset to Model Defaults" button (always visible). Sends `{coverageOverride: false, recomputeCoverage: true}`. New transient `recomputeCoverage` flag — never persisted, just triggers service-layer recompute.
+
+### C1.10d#3 — Manual trapezoid ratio override (commit `f0fd845`)
+3 new SensorPlacement columns: `ratioOverride`, `farWidthRatio`, `depthRatio`. When `ratioOverride=true` AND `coverageMode='tilt_projection'`, service bypasses tilt lookup: `width = base.W * farWidthRatio`, `depth = base.D * depthRatio`. Mode-change safety: switching away from tilt_projection auto-clears `ratioOverride` but keeps ratio values. UI: Basic/Advanced toggle (localStorage `ditech-designer-advanced-mode`).
+
+### C1.10d#3.5 — Unify tilt inputs (commit `161066c`)
+Fixed SensorSettingsPanel tilt edits being overwritten by stale ObstructionPanel local state. Added prop→state resync useEffect. ObstructionPanel slider max 60→45 to align with backend TILT_MAX=45.
+
+### C1.10e — Cone coverage mode for CCTV (commit `3f71770`)
+Third `coverageMode` value: isosceles triangle, apex at sensor, base of `coverageWidth` at distance `coverageDepth`. No migration (String enum, lesson #32). Cone forces `anchorY=0`. Labels: 'Base Xm' + 'Depth Xm'.
+
+### C1.10f — Collapsible KPI summary bar (commit `7d04799`)
+Chevron toggle in CoverageSummaryBar. Collapsed state via localStorage `ditech-designer-kpi-collapsed`.
+
+### Gantt UX — Date Color Banding + Group Header (commit `571ba09`, May 14 afternoon)
+
+New shared util `frontend/src/utils/dateColor.ts` (70 lines) used by BOTH `GanttPage.tsx` and `PrintGanttPage.tsx`:
+- 7-color soft pastel palette (blue, emerald, amber, purple, cyan, rose, indigo)
+- `dateKey(d)` returns YYYY-MM-DD
+- `buildDateColorMap()` is deterministic by sorted-date index
+- Dates with NO plans get NO color
+
+**Date Color Banding scope = LEFT SIDE ONLY** (most important design rule):
+- ✅ Date badge: filled muted palette.bg + colored palette.border + dark text
+- ✅ Date Group Header: full pastel band + 4px colored left border
+- ❌ Plan row background: pure white
+- ❌ Timeline columns: NO tint
+- ❌ Gantt bars: completely unchanged
+
+**Date Badge** — 3-line stack (46px): day-num (17px extrabold) / MONTH (8px) / DOW (8px).
+
+**Date Group Header** — `Fri 15 May  [3 plans]` before first plan of each date.
+
+**Work time always visible** — `🕐 22:00–02:00` or `🕐 Time: —` (italic fallback). LEFT_CUSTOMER widened 160 to 200px.
+
+**Bar alignment safety**: bars positioned per-row, not per-group. See lesson #37.
+
+**Pagination hotfix in same commit**: GanttPage was using `{ pageSize: 500 }` but backend uses `limit`. Plans like Terminal 21 Asok and Central Westgate silently dropped. Fixed to `{ limit: 1000 }`. See lesson #33.
+
+Files: `GanttPage.tsx` (1370), `PrintGanttPage.tsx` (639), `print-gantt.css` (444), `utils/dateColor.ts` (70 NEW).
 
 ### C1.8 — Coverage display field whitelist (commit `3e46aaa`)
 `sensor.update()` now accepts and persists 4 fields previously silent-dropped:
@@ -122,13 +187,19 @@ tilt | nearW  | farW   | depth
 ```
 E2E verified May 11 commit notes: G6 @ 3.5m base 12×3.5 → tilt 30° gives 6.6m near × 13.2m far × 5.4m depth.
 
-### Geometry — 4 cases frontend handles:
+### Geometry — 5 cases frontend handles:
 ```
 (rectangle,        center)     sensor at CENTER, symmetric rect
 (rectangle,        near_edge)  rect projects forward, sensor at back
 (tilt_projection,  near_edge)  trapezoid forward, narrow at sensor   ← default for tilt_bracket
 (tilt_projection,  center)     trapezoid centered, sensor at centroid
+(cone,             apex)       isosceles triangle, sensor IS apex    ← CCTV (C1.10e)
 ```
+
+When `ratioOverride=true` AND `coverageMode='tilt_projection'` (C1.10d#3), the
+service bypasses the tilt lookup table and uses `farWidth = baseWidth × farWidthRatio`,
+`depth = baseDepth × depthRatio`. Mode change away from `tilt_projection` auto-clears
+`ratioOverride` (ratios themselves remain in DB).
 
 ### Defaults (encoded in `SensorSettingsPanel.tsx`):
 - `embedded` / `surface` → coverageMode = `rectangle`, anchor = `center` (read-only)
@@ -189,6 +260,15 @@ scales the page to A4 automatically.
 - ✅ Sensor CRUD: drag, edit all fields incl. coverageMode/showFlags
 - ✅ Tilt slider → backend recomputes trapezoid (tested via curl: 200 + correct dims)
 - ✅ Anchor dropdown → `near_edge` accepted, persisted, rendered
+- ✅ **mountingHeight no longer snaps back** (C1.10d#1, commit `98190de`)
+- ✅ **Reset to Model Defaults button** recomputes coverage from spec (C1.10d#2)
+- ✅ **Advanced trapezoid ratio override** (C1.10d#3) — manual multipliers
+- ✅ **Cone coverage mode** for CCTV (C1.10e)
+- ✅ **Collapsible KPI summary bar** (C1.10f)
+- ✅ **Tilt input unified** (C1.10d#3.5)
+- ✅ **Prisma migrations rebaselined** — clean baseline restored
+- ✅ **Gantt Date Color Banding + Group Header** (commit `571ba09`)
+- ✅ **Gantt pagination** — loads up to 1000 plans (verified: DB has 120)
 - ✅ Photos, communication logs, status history
 - ✅ Document generation (Work Permit, Installation Confirm) — Handlebars + Puppeteer
 - ✅ Gantt page (executive redesign + print route)
@@ -197,7 +277,21 @@ scales the page to A4 automatically.
 
 ## Pending
 
-*(none as of May 13 EOD — working tree clean, all open items committed and pushed)*
+### Branch merge
+`fix/sensor-cache-merge` is **11 commits ahead** of `main`. PR/merge pending.
+
+### Commit 5 of Batch 1
+**feat: label visibility + draggable labels** — 3 new columns (`showCoverage`, `labelOffsetX`, `labelOffsetY`), Konva drag handlers, UI toggle.
+
+### C1.10d#4 (deferred from May 13)
+Trapezoid Near/Far ratio UX decision. Bugs #1-#3 closed. #4 reclassified as UX gap.
+
+### Other tech debt (rolled over)
+- ObstructionPanel still fires redundant PATCHes on mountingHeight keystroke
+- `FunctionColorSet` missing icon/text/tint fields (TS2339)
+- `NodeJS` namespace import missing in `useDesignEditor.ts:68`
+- `(s as any).coverageMode` casts remain in `SensorSettingsPanel.tsx`
+- Server-local `.git/info/exclude` blocks `*.sql` — need `git add -f`
 
 ## Roadmap
 
@@ -398,6 +492,36 @@ Additional tech debt (gluing onto C1.10d):
     Lesson: prefer single-line `str_replace` or content-anchored line-slicing
     over multi-line exact-text patterns. If multi-line is unavoidable,
     `xxd` the source bytes to see exactly what's between your anchor lines.
+
+### From May 13–14 (Batch 1: C1.10d/e/f)
+
+26. **Git ignores stack from multiple sources.** `.gitignore`, `.git/info/exclude`, `core.excludesfile` all stack. Server's `.git/info/exclude` blocks `*.sql`. Always `git check-ignore -v <file>` after edit. (Commits `08aad6f` + `829e202`)
+
+27. **`prisma migrate status "up to date"` ≠ schema-DB sync.** It only verifies `_prisma_migrations` matches disk files, NOT that migrations describe actual DB. After `db push` workflows, init migration may miss tables. Use `prisma migrate diff --from-migrations --to-schema-datasource`. (Commit `829e202`)
+
+28. **tsx watch HMR in Docker bind mount is unreliable for backend.** chokidar misses events under bind mount; Node holds stale modules. Force `docker compose restart backend` after every backend patch. (Commit `f0fd845`)
+
+29. **Zod field addition alone does not persist.** Adding to Zod makes it validate, but field never reaches Prisma unless service-layer whitelist also has it. `grep -n "in data) updateData"`. (Commit `f0fd845`)
+
+30. **Two components editing same value need prop to state resync.** When A's local state initialized from `props.X` but B changes the prop, A stays stale. Fix: `useEffect(() => { if (prop !== local) setLocal(prop); }, [prop])`. (Commit `161066c`)
+
+31. **UI ranges must match backend constraints.** ObstructionPanel slider max=60 vs backend TILT_MAX=45 — values > 45 had no effect but appeared editable. (Commit `161066c`)
+
+32. **String enums safer than Postgres enums for fast iteration.** `coverageMode = String` made adding 'cone' zero-migration. Postgres enums need `ALTER TYPE ADD VALUE`. (Commit `3f71770`)
+
+### From May 14 afternoon (Gantt UX + pagination)
+
+33. **Pagination param regression silent across re-deploys.** `fa1ae31` fixed pageSize→limit. Later refactor re-introduced pageSize. Bug invisible until DB plan count > 50. `diff <(grep plansApi.list a) <(grep plansApi.list b)` catches drift. (Commit `571ba09`)
+
+34. **Plan missing diagnostic order: SQL first, UI last.** (1) SELECT WHERE → (2) SELECT COUNT → (3) curl API → (4) Browser Network → (5) UI code last. May 14 nearly rolled back UI before SQL proved data intact.
+
+35. **Prisma tables = PascalCase singular + quoted camelCase.** Always `\dt` first. `"InstallationPlan"` not `plans`.
+
+36. **Date Color Banding must be LEFT side only.** Tinting timeline columns or row backgrounds turns schedule into calendar app. Palette to badge + group header only.
+
+37. **Bar alignment survives row-injection IF bars are position-per-row.** `barLeft = startIdx * DAY_W` is row-relative, not group-relative. Header rows above don't shift bar columns.
+
+38. **Make it more professional = strip backgrounds, keep borders.** Polish loop: full pastel band → header-only → white+border (too subtle) → filled muted badge + pastel header (final). When user says too playful, strip row-level fills; keep palette on small chrome.
 
 ## File location quick-reference
 

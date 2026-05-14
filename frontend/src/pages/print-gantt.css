@@ -159,6 +159,47 @@
 }
 .pg-group-stats { font-size: 8pt; color: #cbd5e1; margin-left: 8pt; }
 
+/* ─── Date Group Header row (left side only) ─── */
+.pg-date-header-row {
+  page-break-inside: avoid;
+  break-inside: avoid;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+.pg-date-header-row > td {
+  border: none !important;
+  border-bottom: 0.4pt solid #e2e8f0 !important;
+  padding: 0 !important;
+}
+.pg-date-header-row > td:first-child {
+  padding: 4pt 8pt !important;
+  border-left-width: 3pt !important;
+  border-left-style: solid !important;
+}
+.pg-dgh-content {
+  display: flex;
+  align-items: center;
+  gap: 6pt;
+}
+.pg-dgh-label {
+  font-size: 10pt;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.pg-dgh-count {
+  flex-shrink: 0;
+  font-size: 9pt;
+  font-weight: 700;
+  padding: 1pt 6pt;
+  border-radius: 3pt;
+  border: 0.4pt solid;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pg-dgh-spacer {
+  background: white !important;
+}
+
 .pg-plan-row {
   page-break-inside: avoid;
   break-inside: avoid;
@@ -177,9 +218,45 @@
   border-radius: 2pt;
   white-space: nowrap;
 }
+/* 3-line stacked badge — date / month / day-of-week */
+.pg-date-badge-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 46pt;
+  padding: 2pt 3pt;
+  line-height: 1;
+}
+.pg-db-num {
+  font-size: 13pt;
+  font-weight: 800;
+  line-height: 1;
+}
+.pg-db-mon {
+  font-size: 6.5pt;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  margin-top: 1.5pt;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.pg-db-dow {
+  font-size: 6.5pt;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  margin-top: 1pt;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
 .pg-time {
   font-size: 7pt; color: #475569;
   margin-top: 2pt; font-weight: 600;
+}
+.pg-time-empty {
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 500;
 }
 
 .pg-plan-row > td.pg-col-detail {

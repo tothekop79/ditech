@@ -76,13 +76,24 @@ export const createSensorSchema = z.object({
   // C1.10c - fields previously silent-dropped by Zod
   color: z.string().nullable().optional(),
   nearEdgeRatio: z.number().min(0.05).max(1.0).optional(),
-  coverageMode: z.enum(['rectangle', 'tilt_projection']).optional(),
+  coverageMode: z.enum(['rectangle', 'tilt_projection', 'cone']).optional(),
   showLabels: z.boolean().optional(),
   showDimensions: z.boolean().optional(),
   showDirectionArrow: z.boolean().optional(),
   obstructionData: z.record(z.any()).nullable().optional(),
   showAsImage: z.boolean().default(false),
   note: z.string().nullable().optional(),
+  // C1.10d#2 — Transient flag: client requests backend to recompute
+  // coverageWidth/Depth/nearEdgeRatio from current model + height + tilt + mode.
+  // NOT persisted to DB; consumed by service layer recompute trigger only.
+  recomputeCoverage: z.boolean().optional(),
+  // C1.10d#3 — Manual trapezoid ratio override (tilt_projection only).
+  // When ratioOverride=true AND coverageMode='tilt_projection', the service
+  // bypasses the tilt lookup table and uses these multipliers of base coverage.
+  // farWidthRatio/depthRatio are nullable so user can clear them.
+  ratioOverride: z.boolean().optional(),
+  farWidthRatio: z.number().min(0.1).max(3.0).nullable().optional(),
+  depthRatio: z.number().min(0.1).max(3.5).nullable().optional(),
 });
 
 export const updateSensorSchema = createSensorSchema.partial();

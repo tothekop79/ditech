@@ -19,6 +19,7 @@ import { useEffect, useMemo, Fragment } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { plansApi } from '../api/plans';
+import { buildDateColorMap, collectPlanDateKeys, dateKey, type DateColor } from '../utils/dateColor';
 import './print-gantt.css';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +254,12 @@ export function PrintGanttPage() {
   // ─── Group plans ──────────────────────────────────────────────────────────
   const groups = useMemo(() => groupPlans(filteredPlans, groupBy), [filteredPlans, groupBy]);
 
+  // ─── Date Color Banding: build map of dateKey → color for each plan date ──
+  const dateColorMap = useMemo(() => {
+    const keys = collectPlanDateKeys(filteredPlans);
+    return buildDateColorMap(keys);
+  }, [filteredPlans]);
+
   // ─── KPI totals ───────────────────────────────────────────────────────────
   const kpis = useMemo(() => {
     const customers = new Set(filteredPlans.map((p) => p.customer?.id).filter(Boolean));
@@ -376,7 +383,8 @@ export function PrintGanttPage() {
             {days.map((d, i) => {
               const isToday = isSameDay(d, today);
               return (
-                <th key={i} className={`pg-day-cell ${isToday ? 'pg-today' : ''} ${isSunday(d) ? 'pg-sun' : isWeekend(d) ? 'pg-sat' : ''}`}>
+                <th key={i}
+                    className={`pg-day-cell ${isToday ? 'pg-today' : ''} ${isSunday(d) ? 'pg-sun' : isWeekend(d) ? 'pg-sat' : ''}`}>
                   <div className="pg-day-num">{d.getDate()}</div>
                   <div className="pg-day-dow">{d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3).toUpperCase()}</div>
                 </th>
@@ -398,10 +406,63 @@ export function PrintGanttPage() {
                 </td>
               </tr>
 
-              {/* Plan rows */}
-              {g.plans.map((p) => (
-                <PlanRow key={p.id} plan={p} days={days} rangeStart={rangeStart} todayIdx={todayIdx} />
-              ))}
+              {/* Plan rows — with date group headers inserted before each new date */}
+              {(() => {
+                // Pre-count plans per date for this group
+                const planCountByDate = new Map<string, number>();
+                for (const p of g.plans) {
+                  if (!p.scheduledDate) continue;
+                  const k = dateKey(new Date(p.scheduledDate));
+                  planCountByDate.set(k, (planCountByDate.get(k) ?? 0) + 1);
+                }
+
+                const out: React.ReactNode[] = [];
+                let lastKey: string | null = null;
+
+                for (const p of g.plans) {
+                  if (p.scheduledDate) {
+                    const k = dateKey(new Date(p.scheduledDate));
+                    if (k !== lastKey) {
+                      const color = dateColorMap.get(k);
+                      const d = new Date(p.scheduledDate);
+                      const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short' });
+                      const dateLabel = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+                      const count = planCountByDate.get(k) ?? 1;
+                      out.push(
+                        <tr key={`dgh-${k}`} className="pg-date-header-row">
+                          <td colSpan={2}
+                              style={{
+                                background: color?.bg ?? '#f1f5f9',
+                                borderLeft: `3pt solid ${color?.border ?? '#cbd5e1'}`,
+                              }}>
+                            <div className="pg-dgh-content">
+                              <span className="pg-dgh-label"
+                                    style={{ color: color?.text ?? '#334155' }}>
+                                {dayLabel} {dateLabel}
+                              </span>
+                              <span className="pg-dgh-count"
+                                    style={{
+                                      background: 'white',
+                                      color: color?.text ?? '#475569',
+                                      borderColor: color?.border ?? '#cbd5e1',
+                                    }}>
+                                {count} {count === 1 ? 'plan' : 'plans'}
+                              </span>
+                            </div>
+                          </td>
+                          {/* Timeline area = empty spacer; preserves bar alignment */}
+                          <td colSpan={days.length} className="pg-dgh-spacer"></td>
+                        </tr>
+                      );
+                      lastKey = k;
+                    }
+                  }
+                  out.push(
+                    <PlanRow key={p.id} plan={p} days={days} rangeStart={rangeStart} todayIdx={todayIdx} dateColorMap={dateColorMap} />
+                  );
+                }
+                return out;
+              })()}
             </Fragment>
           ))}
 
@@ -456,8 +517,9 @@ export function PrintGanttPage() {
 //   Plan row — 1 plan per <tr>, left side = details, right side = timeline cells
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PlanRow({ plan, days, rangeStart, todayIdx }: {
+function PlanRow({ plan, days, rangeStart, todayIdx, dateColorMap }: {
   plan: Plan; days: Date[]; rangeStart: Date; todayIdx: number;
+  dateColorMap: Map<string, DateColor>;
 }) {
   const sched = plan.scheduledDate ? startOfDay(new Date(plan.scheduledDate)) : null;
   const dur = Math.max(1, plan.durationDays || 1);
@@ -469,6 +531,9 @@ function PlanRow({ plan, days, rangeStart, todayIdx }: {
   const sitePart = [plan.storeName, plan.branchName].filter(Boolean).join(' · ');
   const dateBadge = sched ? `${dayOfMonth(plan.scheduledDate)} ${dayOfWeek(plan.scheduledDate)} ${shortMonth(plan.scheduledDate)}` : '—';
   const timeStr = (plan.workStartTime || plan.workEndTime) ? timeRange(plan.workStartTime, plan.workEndTime) : '';
+
+  // Date color for this plan (used for badge + left date cell background)
+  const planColor = sched ? dateColorMap.get(dateKey(sched)) : null;
 
   // Build work summary chips
   const chips: string[] = [];
@@ -488,12 +553,25 @@ function PlanRow({ plan, days, rangeStart, todayIdx }: {
   const barColor = REGION_COLOR(plan.storeRegion);
   const statusColor = STATUS_COLOR[plan.planStatus] || '#94A3B8';
 
+  // Date badge styling — filled muted bg + colored border + dark text (professional)
+  const badgeStyle: React.CSSProperties | undefined = planColor
+    ? { background: planColor.bg, color: '#0f172a', border: `1pt solid ${planColor.border}` }
+    : undefined;
+
   return (
     <tr className="pg-plan-row">
-      {/* Left column 1 — Date / Time */}
+      {/* Left column 1 — Date badge (3-line) + standalone time */}
       <td className="pg-col-date">
-        <div className="pg-date-badge">{dateBadge}</div>
-        {timeStr && <div className="pg-time">🕐 {timeStr}</div>}
+        {sched ? (
+          <div className="pg-date-badge pg-date-badge-stack" style={badgeStyle}>
+            <span className="pg-db-num">{dayOfMonth(plan.scheduledDate)}</span>
+            <span className="pg-db-mon">{shortMonth(plan.scheduledDate)}</span>
+            <span className="pg-db-dow">{dayOfWeek(plan.scheduledDate).toUpperCase()}</span>
+          </div>
+        ) : (
+          <div className="pg-date-badge" style={badgeStyle}>—</div>
+        )}
+        <div className={`pg-time ${timeStr ? '' : 'pg-time-empty'}`}>🕐 {timeStr || 'Time: —'}</div>
       </td>
 
       {/* Left column 2 — Plan details */}
@@ -510,7 +588,7 @@ function PlanRow({ plan, days, rangeStart, todayIdx }: {
         )}
       </td>
 
-      {/* Timeline cells */}
+      {/* Timeline cells — clean, no date color tint */}
       {days.map((d, i) => {
         const isToday = i === todayIdx;
         const inBar = startIdx >= 0 && i >= startIdx && i <= endIdx;
