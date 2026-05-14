@@ -11,6 +11,18 @@ type BottomTab = 'kpi' | 'devices';
 export function CoverageSummaryBar({ editor }: Props) {
   const { design, recalcDesign, setSelectedSensorId } = editor;
   const [activeTab, setActiveTab] = useState<BottomTab>('kpi');
+
+  // C1.10f — Collapsible KPI summary (per-browser preference)
+  // localStorage key: 'ditech-designer-kpi-collapsed' = 'true' | 'false'
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    return localStorage.getItem('ditech-designer-kpi-collapsed') === 'true';
+  });
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem('ditech-designer-kpi-collapsed', String(next));
+  };
+
   const sensors = design?.sensors ?? [];
 
   const fmt = (p: number | null | undefined) =>
@@ -56,10 +68,21 @@ export function CoverageSummaryBar({ editor }: Props) {
             <span>{recalcDesign.isPending ? '⟳' : '↻'}</span>
             <span>Recalc</span>
           </button>
+
+          {/* C1.10f — Collapse/expand toggle */}
+          <button
+            onClick={toggleCollapsed}
+            className="px-2 py-1 bg-white border border-ditech-border-strong rounded hover:bg-slate-50 inline-flex items-center gap-1 text-xs"
+            title={collapsed ? 'Expand summary' : 'Collapse summary'}
+            aria-expanded={!collapsed}
+          >
+            <span className="text-[11px]">{collapsed ? '▲' : '▼'}</span>
+          </button>
         </div>
       </div>
 
-      {/* Tab content */}
+      {/* Tab content — hidden when collapsed (C1.10f) */}
+      {!collapsed && (
       <div className="flex-1 overflow-hidden">
         {activeTab === 'kpi' && (
           <KpiTab
@@ -81,6 +104,7 @@ export function CoverageSummaryBar({ editor }: Props) {
           />
         )}
       </div>
+      )}
     </div>
   );
 }
