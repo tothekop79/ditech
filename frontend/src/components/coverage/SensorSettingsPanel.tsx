@@ -51,6 +51,17 @@ function derivedAnchorMode(s: any): 'center' | 'dynamic_tilt' {
 export function SensorSettingsPanel({ editor }: Props) {
   const { selectedSensor, updateSensorDebounced, updateSensorImmediate, deleteSensor } = editor;
 
+  // C1.10d#3 — Advanced mode toggle (per-browser, not per-design)
+  // localStorage key: 'ditech-designer-advanced-mode' = 'true' | 'false'
+  const [advancedMode, setAdvancedMode] = useState<boolean>(() => {
+    return localStorage.getItem('ditech-designer-advanced-mode') === 'true';
+  });
+  const toggleAdvancedMode = () => {
+    const next = !advancedMode;
+    setAdvancedMode(next);
+    localStorage.setItem('ditech-designer-advanced-mode', String(next));
+  };
+
   const camerasQuery = useQuery({
     queryKey: ['camera-models'],
     queryFn: () => cameraModelsApi.list({ isActive: true }),
@@ -316,6 +327,90 @@ export function SensorSettingsPanel({ editor }: Props) {
             {derivedAnchorMode(s) === 'dynamic_tilt'
               ? '📐 Sensor position shifts from center toward the near edge as tilt angle increases.'
               : '⊙ Sensor placed at the center of the coverage area.'}
+          </div>
+
+          {/* C1.10d#3 — Advanced ratio override (per-browser toggle, tilt_projection only) */}
+          <div className="border-t border-slate-200 pt-2">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[10px] uppercase tracking-wider text-ditech-text-muted">
+                Coverage detail
+              </label>
+              <div className="flex gap-0 text-[10px] border border-slate-300 rounded overflow-hidden">
+                <button
+                  onClick={() => { if (advancedMode) toggleAdvancedMode(); }}
+                  className={`px-2 py-0.5 ${!advancedMode ? 'bg-blue-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Basic
+                </button>
+                <button
+                  onClick={() => { if (!advancedMode) toggleAdvancedMode(); }}
+                  className={`px-2 py-0.5 border-l border-slate-300 ${advancedMode ? 'bg-blue-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+                >
+                  Advanced
+                </button>
+              </div>
+            </div>
+
+            {advancedMode && ((s as any).coverageMode ?? defaultCoverageMode(s)) !== 'tilt_projection' && (
+              <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 italic">
+                ⚠️ Manual ratio override is available only in <strong>Tilt Projection</strong> mode.
+                Switch coverage mode above to use it.
+              </div>
+            )}
+
+            {advancedMode && ((s as any).coverageMode ?? defaultCoverageMode(s)) === 'tilt_projection' && (
+              <div className="space-y-1.5">
+                {/* Override toggle */}
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={(s as any).ratioOverride === true}
+                    onChange={(e) => updateSensorImmediate(s.id, { ratioOverride: e.target.checked } as any)}
+                    className="w-3 h-3"
+                  />
+                  <span className="font-medium">Override ratios manually</span>
+                </label>
+
+                {/* Status badge */}
+                <div className={`text-[10px] px-1.5 py-0.5 rounded inline-block ${
+                  (s as any).ratioOverride === true
+                    ? 'bg-orange-100 text-orange-800 border border-orange-300'
+                    : 'bg-sky-100 text-sky-800 border border-sky-300'
+                }`}>
+                  {(s as any).ratioOverride === true
+                    ? '🔧 Manual override active'
+                    : '↻ Auto from tilt angle'}
+                </div>
+
+                {/* Ratio inputs — only shown when override is ON */}
+                {(s as any).ratioOverride === true && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <Row label="Far width ×">
+                      <RealtimeNumber
+                        value={(s as any).farWidthRatio ?? 1.0}
+                        min={0.1} max={3.0} step={0.05}
+                        onChange={(v) => updateSensorDebounced(s.id, { farWidthRatio: v } as any, 250)}
+                      />
+                    </Row>
+                    <Row label="Depth ×">
+                      <RealtimeNumber
+                        value={(s as any).depthRatio ?? 1.0}
+                        min={0.1} max={3.5} step={0.05}
+                        onChange={(v) => updateSensorDebounced(s.id, { depthRatio: v } as any, 250)}
+                      />
+                    </Row>
+                  </div>
+                )}
+
+                {/* Hint when override is on but values are still default */}
+                {(s as any).ratioOverride === true
+                  && ((s as any).farWidthRatio == null || (s as any).depthRatio == null) && (
+                  <div className="text-[10px] text-slate-600 italic">
+                    💡 Ratios default to 1.0 (no effect). Adjust above to override the tilt lookup.
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Display toggles */}

@@ -47,12 +47,21 @@ const designInclude = {
  * Compute coverage rectangle (width × depth in meters) from camera model + height.
  * Uses linear interpolation on the model's coverage table.
  */
-async function computeCoverageForSensor(
-  cameraModelId: string,
-  mountingHeight: number,
-  coverageMode?: string,
-  tiltAngle?: number,
-): Promise<{ width: number; depth: number; nearEdgeRatio?: number }> {
+async function computeCoverageForSensor(opts: {
+  cameraModelId: string;
+  mountingHeight: number;
+  coverageMode?: string;
+  tiltAngle?: number;
+  // C1.10d#3 — Manual ratio override (tilt_projection only)
+  ratioOverride?: boolean;
+  farWidthRatio?: number | null;
+  depthRatio?: number | null;
+}): Promise<{ width: number; depth: number; nearEdgeRatio?: number }> {
+  const {
+    cameraModelId, mountingHeight, coverageMode, tiltAngle,
+    ratioOverride, farWidthRatio, depthRatio,
+  } = opts;
+
   const model = await prisma.cameraModel.findUnique({
     where: { id: cameraModelId },
     select: { coverageTable: true, minHeight: true, maxHeight: true },
@@ -65,6 +74,16 @@ async function computeCoverageForSensor(
   }
 
   const base = interpolateCoverage(mountingHeight, table);
+
+  // C1.10d#3 — Manual ratio override path (tilt_projection only).
+  // User-supplied multipliers replace the tilt lookup table. nearEdgeRatio
+  // is NOT recomputed here — caller preserves the persisted DB value.
+  if (ratioOverride === true && coverageMode === 'tilt_projection') {
+    return {
+      width: base.width * (farWidthRatio ?? 1.0),
+      depth: base.depth * (depthRatio ?? 1.0),
+    };
+  }
 
   // Apply tilt projection — return trapezoid with width = far edge (max)
   // and nearEdgeRatio so the frontend can render the near edge as
@@ -394,12 +413,16 @@ export const installationDesignService = {
       // Auto-compute coverage if not provided or override is false
       let { coverageWidth, coverageDepth } = data;
       if (!data.coverageOverride || coverageWidth == null || coverageDepth == null) {
-        const result = await computeCoverageForSensor(
-          data.cameraModelId,
-          data.mountingHeight ?? 3.5,
-          data.coverageMode,
-          data.tiltAngle,
-        );
+        const result = await computeCoverageForSensor({
+          cameraModelId: data.cameraModelId,
+          mountingHeight: data.mountingHeight ?? 3.5,
+          coverageMode: data.coverageMode,
+          tiltAngle: data.tiltAngle,
+          // C1.10d#3 — pass override fields if user set them at create time
+          ratioOverride: data.ratioOverride,
+          farWidthRatio: data.farWidthRatio,
+          depthRatio: data.depthRatio,
+        });
         coverageWidth = result.width;
         coverageDepth = result.depth;
         // Capture trapezoid ratio for tilt_projection mode
@@ -478,6 +501,13 @@ export const installationDesignService = {
       if ('color' in data) updateData.color = data.color;
       // nearEdgeRatio is normally recomputed below; allow explicit override too
       if ('nearEdgeRatio' in data) updateData.nearEdgeRatio = data.nearEdgeRatio;
+      // C1.10d#3 — Persist ratio override fields (otherwise they get lost despite
+      // computeCoverageForSensor receiving them — silent bug caught by smoke test).
+      // Note: ratioOverride may also be SET by the mode-change safety branch
+      // below; that assignment runs AFTER this whitelist and wins.
+      if ('ratioOverride' in data) updateData.ratioOverride = data.ratioOverride;
+      if ('farWidthRatio' in data) updateData.farWidthRatio = data.farWidthRatio;
+      if ('depthRatio' in data) updateData.depthRatio = data.depthRatio;
 
       // Re-interpolate coverage if model, height, tilt, or mode changed and override is false.
       // C1.10d#2 — Also support an explicit `recomputeCoverage: true` flag so that
@@ -489,13 +519,49 @@ export const installationDesignService = {
       const tiltChanged = 'tiltAngle' in data && data.tiltAngle !== existing.tiltAngle;
       const modeChanged = 'coverageMode' in data && data.coverageMode !== existing.coverageMode;
       const recomputeRequested = (data as any).recomputeCoverage === true;
-      if (!willOverride && (modelChanged || heightChanged || tiltChanged || modeChanged || recomputeRequested)) {
-        const result = await computeCoverageForSensor(
-          data.cameraModelId ?? existing.cameraModelId,
-          data.mountingHeight ?? existing.mountingHeight,
-          data.coverageMode ?? existing.coverageMode,
-          data.tiltAngle ?? existing.tiltAngle,
-        );
+
+      // C1.10d#3 — Ratio change detection
+      const ratioOverrideChanged = 'ratioOverride' in data
+        && (data as any).ratioOverride !== (existing as any).ratioOverride;
+      const ratioFieldsChanged = (['farWidthRatio', 'depthRatio'] as const).some(
+        (k) => k in data && (data as any)[k] !== (existing as any)[k]
+      );
+
+      // C1.10d#3 — Mode-change safety: if user switches AWAY from tilt_projection
+      // while ratioOverride was true, auto-clear ratioOverride. We keep
+      // farWidthRatio/depthRatio in DB so user can toggle back without re-entering.
+      const willMode = data.coverageMode ?? existing.coverageMode;
+      const willRatioOverride = 'ratioOverride' in data
+        ? (data as any).ratioOverride
+        : (existing as any).ratioOverride;
+      if (willMode !== 'tilt_projection' && willRatioOverride === true) {
+        (updateData as any).ratioOverride = false;
+      }
+
+      if (!willOverride && (
+        modelChanged || heightChanged || tiltChanged || modeChanged ||
+        recomputeRequested || ratioOverrideChanged || ratioFieldsChanged
+      )) {
+        // Effective ratioOverride: updateData (set above if mode-safety cleared) takes
+        // precedence; otherwise use incoming data or fall back to existing.
+        const effectiveRatioOverride = 'ratioOverride' in updateData
+          ? (updateData as any).ratioOverride
+          : ('ratioOverride' in data ? (data as any).ratioOverride : (existing as any).ratioOverride);
+
+        const result = await computeCoverageForSensor({
+          cameraModelId: data.cameraModelId ?? existing.cameraModelId,
+          mountingHeight: data.mountingHeight ?? existing.mountingHeight,
+          coverageMode: data.coverageMode ?? existing.coverageMode,
+          tiltAngle: data.tiltAngle ?? existing.tiltAngle,
+          // C1.10d#3
+          ratioOverride: effectiveRatioOverride,
+          farWidthRatio: 'farWidthRatio' in data
+            ? (data as any).farWidthRatio
+            : (existing as any).farWidthRatio,
+          depthRatio: 'depthRatio' in data
+            ? (data as any).depthRatio
+            : (existing as any).depthRatio,
+        });
         updateData.coverageWidth = result.width;
         updateData.coverageDepth = result.depth;
         if (result.nearEdgeRatio !== undefined) {

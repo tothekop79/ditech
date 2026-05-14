@@ -82,7 +82,7 @@ export function useDesignEditor({ designId }: UseDesignEditorOptions) {
             // Echo back only the fields we asked to change.
             for (const k of Object.keys(dto)) patch[k] = serverSensor[k];
             // Server-recomputed coverage side-effects (see service.ts L488).
-            const recomputeKeys = ['mountingHeight', 'tiltAngle', 'coverageMode', 'cameraModelId', 'recomputeCoverage'];
+            const recomputeKeys = ['mountingHeight', 'tiltAngle', 'coverageMode', 'cameraModelId', 'recomputeCoverage', 'ratioOverride', 'farWidthRatio', 'depthRatio'];
             if (recomputeKeys.some((k) => k in dto)) {
               patch.coverageWidth = serverSensor.coverageWidth;
               patch.coverageDepth = serverSensor.coverageDepth;

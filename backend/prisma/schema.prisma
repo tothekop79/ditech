@@ -678,6 +678,19 @@ model SensorPlacement {
   showLabels         Boolean  @default(true)
   showDimensions     Boolean  @default(true)
   showDirectionArrow Boolean  @default(true)
+
+  // C1.10d#3 — Manual trapezoid ratio override (tilt_projection only).
+  // When ratioOverride=true AND coverageMode='tilt_projection', the service
+  // bypasses the tilt lookup table and uses these multipliers of the base
+  // coverage (from camera spec table at current mountingHeight):
+  //   farWidth = baseWidth * farWidthRatio
+  //   depth    = baseDepth * depthRatio
+  //   nearEdgeRatio above already stores nearWidth/farWidth (reused).
+  // When ratioOverride=false, applyTiltProjection(tilt) runs as before.
+  ratioOverride  Boolean @default(false)
+  farWidthRatio  Float?  // multiplier of base width (~0.5-2.0)
+  depthRatio     Float?  // multiplier of base depth (~0.5-2.5)
+
   obstructionPass    Boolean?
   obstructionNote    String?
 

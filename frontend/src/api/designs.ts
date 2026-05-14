@@ -45,6 +45,10 @@ export interface SensorPlacement {
   showLabels: boolean;
   showDimensions: boolean;
   showDirectionArrow: boolean;
+  // C1.10d#3 — Manual trapezoid ratio override (tilt_projection only)
+  ratioOverride: boolean;
+  farWidthRatio: number | null;
+  depthRatio: number | null;
   cameraModel?: Pick<CameraModel, 'id' | 'displayName' | 'iconColor' | 'imageUrl'>;
   createdAt: string;
   updatedAt: string;
@@ -140,6 +144,10 @@ export interface CreateSensorDTO {
   showLabels?: boolean;
   showDimensions?: boolean;
   showDirectionArrow?: boolean;
+  // C1.10d#3 — Manual trapezoid ratio override
+  ratioOverride?: boolean;
+  farWidthRatio?: number | null;
+  depthRatio?: number | null;
 }
 
 export type UpdateSensorDTO = Partial<CreateSensorDTO> & {
