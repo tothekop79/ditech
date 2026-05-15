@@ -1,4 +1,4 @@
-# DITECH Installation Planner — Current State (May 14, 2026)
+# DITECH Installation Planner — Current State (May 15, 2026)
 
 ## 📌 TL;DR
 
@@ -7,10 +7,12 @@
 - ✅ **Batch 1 (May 13–14) shipped 10 commits** — sensor cache fix, ratio override, tilt sync, cone CCTV mode, collapsible KPI bar, migration baseline squash, Gantt UX polish
 - ✅ **Prisma migrations rebaselined** — single baseline covers all 25 tables
 - ✅ **Gantt UX polish (May 14 afternoon, commit `571ba09`)** — Date Color Banding (left-side only), Date Group Header per date, always-visible work time, pagination silent regression hotfix
+- ✅ **May 15 — Event Reports bug fix shipped (commit `92eb2db`, merged to main)** — engine had hard-coded "3 Days" / "Day 3" strings rendering wrong for any event ≠ 3 days. ALSTOM 2-day event now correctly shows "(2 Days)".
+- 🔍 **May 15 audit revealed** — Event Reports feature was already fully built (backend + frontend) but not reflected in earlier PROJECT_STATE. See "Event Reports infrastructure" section below.
 - ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones)
-- ⏭️ **Branch state**: `fix/sensor-cache-merge` is 11 commits ahead of `main` (`5aa19bc`). PR/merge pending.
+- ⏭️ **Branch state**: `fix/sensor-cache-merge` was merged via PR #1. `main` now at `92eb2db`.
 
-Latest commit: `571ba09` "feat(gantt): date color banding + group header + work time + pagination fix"
+Latest commit: `92eb2db` "fix(engine): replace hard-coded '3 Days' with dynamic len(EVENT_DATES)"
 
 ## Stack & Server
 
@@ -27,7 +29,10 @@ Latest commit: `571ba09` "feat(gantt): date color banding + group header + work 
 ## Git history (recent)
 
 ```
-571ba09  feat(gantt): date color banding + group header + work time + pagination fix  ← HEAD = origin/fix/sensor-cache-merge
+92eb2db  fix(engine): replace hard-coded '3 Days' with dynamic len(EVENT_DATES) ← HEAD = origin/main (May 15)
+a85ab9a  Merge pull request #1 from tothekop79/fix/sensor-cache-merge          ← Batch 1 merged
+792e62b  docs(state): May 14 update — Batch 1 + Gantt UX + 13 new lessons
+571ba09  feat(gantt): date color banding + group header + work time + pagination fix
 0732195  chore: ignore backups folder
 7d04799  feat(designs): C1.10f collapsible KPI summary bar
 3f71770  feat(designs): C1.10e cone coverage mode for CCTV
@@ -253,6 +258,87 @@ scales the page to A4 automatically.
 3. Print dialog appears after ~600ms
 4. Save as PDF
 
+## Event Reports infrastructure (documented May 15)
+
+⚠️ **This feature already existed before May 15 but was not in PROJECT_STATE.md until now.** May 15 session began by attempting to build Event Reports from scratch (per PROJECT_STATE.md) before discovering the full implementation already on disk. See lesson #45.
+
+### Backend
+```
+src/services/eventReport.service.ts             521 lines  CRUD + rawdata mgmt + _config builder + Python spawn + Telegram dispatch + per-report snapshot
+src/services/rawdataNormalizer.service.ts                  Header normalization on uploaded rawdata
+src/services/rawdataFiles.service.ts                       Source file merging (CaptureRecordsDetails-*.xlsx → Rawdata.xlsx)
+src/queues/eventReport.queue.ts                            BullMQ queue + worker (concurrency=1)
+src/routes/event.routes.ts                                 /events/:id/{generate,reports,reports/:rid/{html,xlsx},rawdata-status,verify}
+python-engine/dashboard_engine.py             3820 lines  Actual report generator, spawned per run, v4
+```
+
+**Engine contract:**
+- Reads `_config` sheet (built by Node from DB before each run) — encodes event dates, gates, zones, activities, parameters
+- Reads `Rawdata.xlsx` sheets (merged from `rawdata-source/CaptureRecordsDetails-*.xlsx`)
+- Outputs `Dashboard.html` + `Dashboard.xlsx` to event dir
+- Profiles: simple, standard, full
+- Pure file-in/file-out — zero DB dependency from Python (good — see lesson #48)
+
+### Frontend
+```
+src/api/events.ts                              EventReport type + generate() + reports() + report(reportId)
+src/components/events/ReportsList.tsx          Auto-polling list (3s while QUEUED/RUNNING)
+src/components/events/RawdataUploader.tsx      Upload CaptureRecordsDetails files
+src/components/events/RawdataFilesPanel.tsx    List uploaded files per day with status
+src/components/events/EventConfigEditor.tsx    Edit event days/gates/zones/activities/parameters
+src/components/events/EditEventModal.tsx       Edit event base details
+src/components/events/EventStatusBadge.tsx     Both event + report status badges
+src/pages/EventDetailPage.tsx                  Overview/Config/Plans/Reports tabs
+```
+
+### File layout on disk
+```
+/app/uploads/events/<eventId>/
+    Rawdata.xlsx                          ← merged from source files + _config sheet
+    Dashboard.html                        ← latest engine output (event-level)
+    Dashboard.xlsx                        ← latest engine output (event-level)
+    rawdata-source/
+        CaptureRecordsDetails-*.xlsx      ← user uploads (1 per day, up to 30, 50MB each)
+    reports/
+        <reportId>/
+            Dashboard.html                ← per-report snapshot
+            Dashboard.xlsx                ← per-report snapshot
+```
+
+### EventReport model columns (Prisma)
+```prisma
+id, eventId, status (QUEUED|RUNNING|COMPLETED|FAILED|CANCELLED),
+profile (simple|standard|full), rawdataPath,
+htmlPath, xlsxPath, htmlSize, xlsxSize,
+queuedAt, startedAt, completedAt, durationMs,
+stdout (last 10K), stderr (last 5K), errorMessage,
+triggeredById, createdAt, updatedAt
+```
+
+### Telegram dispatch
+`dispatchEventReportReady()` fires after each successful generation. Reads `NotificationRule` where `trigger='EVENT_REPORT_READY' AND enabled=true`. Default message template includes event name, organizer, venue, date range, profile, duration, file sizes, dashboard URL. Per-rule `templateBody` can override with `{{event.name}}`, `{{event.organizer}}`, `{{event.venue}}`, `{{report.profile}}`, `{{report.durationSec}}`, `{{dashboardUrl}}` placeholders.
+
+## May 15 bug fix — `fix(engine): replace hard-coded '3 Days'` (commit `92eb2db`)
+
+**Symptom:** ALSTOM event configured for 2 days, but HTML report KPI strip shows "Total Visitors (3 Days)".
+
+**Root cause:** Engine date loading was correct (`Dates: ['2026-05-06', '2026-05-07']` in stdout, `Auto-paginate: 6 → 6 pages (days=2, ...)`). Bug was render-layer only — `dashboard_engine.py` had literal `'3 Days'` / `'Day 3'` strings hard-coded from when the engine was first built for a 3-day event (OTC Asia 2026). One instruction line even referenced a stale filename `OTC_Asia_2026_Dashboard_v4_Dashboard.html` that no longer existed.
+
+**Files changed:** `backend/python-engine/dashboard_engine.py` only (+15 / −15 lines)
+
+**15 replacements made:**
+- 7 user-visible strings → `f'... {len(EVENT_DATES)} Days'`
+  - KPI cards: Total Visitors / Unique / Passersby
+  - Excel chart header: "HOURLY VISITOR TRAFFIC CHART · All N Days"
+  - Overall Summary: "N-Day Total" row
+  - Heatmap subtitle: "... All N Days"
+  - Tab instruction: dynamic `'Overall (N Days) / ' + ' / '.join(f'Day {i+1}' for i in range(...))`
+  - Update instruction: removed "Day 2-3" reference
+- 6 comments/docstrings → "multi-day" / "all days" (cosmetic; prevents future copy-paste of bug)
+- 1 hard-coded filename `OTC_Asia_2026_...html` → `os.path.basename(heatmap_path)` (initial attempt used `_os` which hit UnboundLocalError — see lesson #47)
+
+**Verification:** ALSTOM event regenerated May 15 08:22:35, completed in 111s, KPI now reads "(2 Days)" correctly.
+
 ## What works (verified May 13)
 
 - ✅ `GET/POST/PATCH/DELETE /api/designs` + sensors + zones
@@ -274,11 +360,21 @@ scales the page to A4 automatically.
 - ✅ Gantt page (executive redesign + print route)
 - ✅ Calendar view with week-label alignment
 - ✅ Telegram notifications configured
+- ✅ **Event Reports** — rawdata upload, source file merging, BullMQ queue, Python engine spawn, per-report snapshots, Telegram `EVENT_REPORT_READY` dispatch, HTML+XLSX outputs, history list with polling. Bug fix May 15: hardcoded '3 Days' (commit `92eb2db`).
 
 ## Pending
 
 ### Branch merge
-`fix/sensor-cache-merge` is **11 commits ahead** of `main`. PR/merge pending.
+~~`fix/sensor-cache-merge` is **11 commits ahead** of `main`.~~ ✅ **Merged via PR #1 on May 14** (commit `a85ab9a`).
+
+### Event Reports follow-ups (post-bug-fix audit)
+Discovered during May 15 audit of `eventReport.service.ts` (521 lines):
+- **`enqueueReport` silent fallback risk** — if BullMQ `queue.add()` throws (Redis down mid-request), falls through `setImmediate(runReport)` but only when `require()` itself fails. A throw from `.add()` would leave report stuck `QUEUED`. Consider explicit health check or split try/catch.
+- **No job-level timeout** — `runReport()` lacks a timeout wrapper. If `spawnPython()`'s internal 5-min timeout fails to kill the child (SIGTERM ignored), DB row stays `RUNNING` forever. Add SIGKILL fallback + outer timeout.
+- **Engine timeout is hard-coded 5 min** — large events (5+ days, many gates) may need more. Move to env var `EVENT_REPORT_TIMEOUT_MS`.
+- **`writeConfigSheetIntoRawdata` modifies original file** — safe today due to BullMQ concurrency=1, but the inline fallback in `enqueueReport` could race if Redis is offline.
+- **`(event.profile || 'FULL')` is dead code** — `Event.profile` is required enum, never null.
+- **Service file at 521 lines is getting unwieldy** — candidate split: `eventReport.paths.ts`, `eventReport.engine.ts` (spawn + timeout), `eventReport.telegram.ts`, `eventConfig.writer.ts` (Excel _config builder).
 
 ### Commit 5 of Batch 1
 **feat: label visibility + draggable labels** — 3 new columns (`showCoverage`, `labelOffsetX`, `labelOffsetY`), Konva drag handlers, UI toggle.
@@ -523,6 +619,18 @@ Additional tech debt (gluing onto C1.10d):
 
 38. **Make it more professional = strip backgrounds, keep borders.** Polish loop: full pastel band → header-only → white+border (too subtle) → filled muted badge + pastel header (final). When user says too playful, strip row-level fills; keep palette on small chrome.
 
+### From May 15 session (engine "3 Days" bug fix)
+
+45. **PROJECT_STATE.md can lag behind reality — `grep` before writing new files.** May 15 session began on the assumption that Event Reports needed to be built from scratch (per the doc at the time). Reality: full backend + frontend feature was already shipped, with engine spawning real Python, multi-file rawdata merging, Telegram notifications, per-report snapshotting. Wasted ~30 minutes generating duplicate skeleton code (~2,100 lines) before verifying with `grep -rn "eventReport" backend/src/ frontend/src/`. The user's question — "what you sent, what does it change vs existing code?" — was what triggered the pivot. **Rule:** before writing the first new file for any feature, run `grep -rn "<feature-keyword>" backend/src/ frontend/src/ --include="*.ts" --include="*.tsx" -l`. If anything comes back, read it before writing. PROJECT_STATE is a guide, not ground truth.
+
+46. **Don't assume hard-coded literals are intentional.** The engine had string literals like `'Total Visitors (3 Days)'` with no f-string wrapping — valid Python, passes review, breaks for every event ≠ 3 days. Pattern to grep periodically: `grep -nE "\\([0-9].*[Dd]ays?\\)" *.py` catches hard-coded day counts in display strings. Similar audit useful for old event names (the engine had `OTC_Asia_2026_Dashboard_v4_Dashboard.html` literal tucked into an instruction table).
+
+47. **f-string evaluates at runtime, but local-scope is determined at function compile time.** During the May 15 fix, tried `f'... {_os.path.basename(...)}'` at line 3791, relying on `import os as _os` at line 3795 of the same function. Python's compile-time scope analysis saw the `import` assignment anywhere in the function and marked `_os` as local — so reading it before the import line raised `UnboundLocalError`. Hit FAILED on first regenerate, fixed by switching to `os.path.basename(...)` since `import os` exists at module top. **Rule:** if you need a name in a function, either import it at module level OR move the in-function import above all usage. Do not rely on "f-string is lazy."
+
+48. **Engine `_config` sheet pattern is excellent — preserve it.** The Node backend writes a `_config` sheet into Rawdata.xlsx before each engine run, encoding event dates/gates/zones/activities/parameters from DB. This means Python engine has zero DB dependency — it's a pure file-in/file-out tool. Worth preserving as the engine grows; resist temptation to add API calls from Python. Makes the engine independently testable with any `.xlsx`.
+
+49. **Static strings in UI need periodic audit for stale references.** The engine carried `OTC_Asia_2026_Dashboard_v4_Dashboard.html` as a literal in an instructions table since v4. Never noticed because the *adjacent* line uses dynamic `hm_fname` — the eye reads "this looks dynamic" and moves on. `grep -n "[A-Z][A-Z][A-Z]_[0-9][0-9][0-9][0-9]" engine.py` would catch old event-name leaks. Add to release checklist when next major engine refactor lands.
+
 ## File location quick-reference
 
 ### Backend
@@ -543,6 +651,14 @@ Additional tech debt (gluing onto C1.10d):
 ### Document generation (stable, untouched May 11+)
 - `src/services/document.service.ts`, `pdf.service.ts`, `document-defaults.ts`
 - Templates: `templates/work-permit.html`, `templates/installation-confirm.html`
+
+### Event Reports (documented May 15)
+- `src/services/eventReport.service.ts` (521) — main service
+- `src/services/rawdataNormalizer.service.ts`, `src/services/rawdataFiles.service.ts`
+- `src/queues/eventReport.queue.ts` — queue + worker
+- `src/routes/event.routes.ts` — /events/:id/{generate,reports,…} (lines 8,123,206,301,314,324,333,342,352,368,385,397)
+- `python-engine/dashboard_engine.py` (3820) — Python report generator
+- Frontend: `src/api/events.ts`, `src/components/events/*`, `src/pages/EventDetailPage.tsx`
 
 ## Recovery pattern (if files get truncated again)
 
@@ -605,5 +721,6 @@ curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq
 5. **Direct string replacement > regex** when grep output of actual code is available.
 6. **Read `git status` after `git add`** — empty "Changes to be committed" = stop, do not commit.
 7. **Always `npx prisma validate`** after schema edits.
-8. **Update `_PROJECT_STATE.md` AT END of every session** — even short ones. Stale docs cost real time.
+8. **Update `docs/PROJECT_STATE.md` AT END of every session** — even short ones. Stale docs cost real time.
 9. **Verify `.gitignore` rules with `git check-ignore -v`** after every edit. Patterns that look right may silently no-op.
+10. **Grep before writing new files for any feature** — `grep -rn "<keyword>" backend/src/ frontend/src/ --include="*.ts" -l`. If matches return, read them first. PROJECT_STATE may be incomplete. (Lesson #45 — May 15)
