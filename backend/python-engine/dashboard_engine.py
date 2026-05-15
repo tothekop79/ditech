@@ -2423,8 +2423,9 @@ def generate_full_html(df, output_path):
     _ex_psb = len(psb) + _ex_v
     _ex_conv = (_ex_v / _ex_psb * 100) if _ex_psb > 0 else 0
 
-    # Engagement
-    _zio = df[(df['Type']=='Zone') & df['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
+    # Engagement (staff-aware: filter at source so numerator matches uv_count denominator)
+    _zio = _non_staff(df)
+    _zio = _zio[(_zio['Type']=='Zone') & _zio['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
     _ex_eng = set()
     for (_b,_l),_g in _zio.groupby(['BodyID','Location'],sort=False):
         _is=_g[_g['Event']=='in']['Time'].tolist()
