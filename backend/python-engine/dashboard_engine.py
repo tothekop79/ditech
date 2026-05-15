@@ -5,7 +5,7 @@ Template ที่ใช้ร่วมกับ event_config.py
 
 Sheets:
   1. Overall Summary      — KPIs + hourly + zone + demographics
-  2. Day 1 / Day 2 / Day 3  — per-day dashboards
+  2. Per-day dashboards — one sheet per event day
   3. Dwell Time Analysis  — per-zone dwell with distributions
   4. Activity Analytics   — activity traffic + zone matrix
   5. Raw Data Day 1/2/3   — filterable source data
@@ -698,7 +698,7 @@ def hourly_section(ws, r, ent, psb, acts_list, dc=15,
     """
     Hourly traffic table + chart.
     - Single day mode  : pass ent/psb filtered to one date + acts_list
-    - 3-day summary mode : pass all_days_data = {date_str: (ent_d, psb_d)}
+    - multi-day summary mode : pass all_days_data = {date_str: (ent_d, psb_d)}
     dc = start column for hidden chart data.
     Returns: row after section.
     """
@@ -765,7 +765,7 @@ def hourly_section(ws, r, ent, psb, acts_list, dc=15,
         return cr + 17
 
     # ══════════════════════════════════════════════════════════════
-    # MODE B: 3-day stacked tables — one per day, same layout as Mode A
+    # MODE B: multi-day stacked tables — one per day, same layout as Mode A
     # ══════════════════════════════════════════════════════════════
     _DC = [c.lstrip('#') for c in DAY_COLORS[:len(EVENT_DATES)]]  # strip # for openpyxl
     DAY_LABELS = [f'Day {i+1}  \u00b7  {l}' for i,l in enumerate(EVENT_LABELS)]
@@ -866,8 +866,8 @@ def hourly_section(ws, r, ent, psb, acts_list, dc=15,
 
         gap(ws, cur, 6); cur += 1
 
-    # ── Combined 3-day chart (Visitors only, 3 series) ─────────────
-    sec_hdr(ws, cur, '│ HOURLY VISITOR TRAFFIC CHART  ·  All 3 Days')
+    # ── Combined multi-day chart (Visitors only, one series per day) ──
+    sec_hdr(ws, cur, f'│ HOURLY VISITOR TRAFFIC CHART  ·  All {len(EVENT_DATES)} Days')
     cur += 1
     for ri in range(cur, cur+16): rh(ws, ri, 14)
 
@@ -1779,10 +1779,10 @@ def build_overall_sheet(wb, df):
         if not has:
             for ci in range(2,10): ws.cell(r+2+i,ci).font=fn(9,color=MUT,italic=True)
 
-    tbl_row(ws, r+5, ['3-Day Total','—', tv, uv, tp, len(zon),'—','—'], total=True)  # tp = psb+visitors
+    tbl_row(ws, r+5, [f'{len(EVENT_DATES)}-Day Total','—', tv, uv, tp, len(zon),'—','—'], total=True)  # tp = psb+visitors
     gap(ws, r+6)
 
-    # Build per-day dicts for 3-day hourly table
+    # Build per-day dicts for multi-day hourly table
     all_days_data = {}
     for ds in EVENT_DATES:
         e_d = df[(df['Date']==ds) & (df['Type']=='Entrance') & (df['Event']=='in')]
@@ -2497,7 +2497,7 @@ def generate_full_html(df, output_path):
     _davg = round(sum(_dwell_all)/len(_dwell_all),1) if _dwell_all else 0
     _dmed = round(sorted(_dwell_all)[len(_dwell_all)//2],1) if _dwell_all else 0
 
-    # Per-day stats for sub-labels (show all 3 days)
+    # Per-day stats for sub-labels (show all days)
     def _day_v(ds):
         e=ent[ent['Date']==ds]; return len(e) if len(e)>0 else None
     def _day_uv(ds):
@@ -3187,9 +3187,9 @@ def generate_full_html(df, output_path):
     gpuv= max(all_vals_uv); gpuvh= HOUR_LBLS[all_vals_uv.index(gpuv)% len(HOUR_LBLS)] if gpuv>0 else '--'
     gpp = max(all_vals_p);  gpph = HOUR_LBLS[all_vals_p.index(gpp)  % len(HOUR_LBLS)] if gpp>0  else '--'
     s.append(kpi_cards(
-        ('Total Visitors (3 Days)',       fmt(gv),  f'Peak: {gpvh} ({gpv:,})',  '#005B9A'),
-        ('Total Unique Visitors (3 Days)',fmt(guv), f'Peak: {gpuvh} ({gpuv:,})','#1A7A45'),
-        *([('Total Passersby (3 Days)', fmt(gp), f'Peak: {gpph} ({gpp:,})', '#B06000')]
+        (f'Total Visitors ({len(EVENT_DATES)} Days)',       fmt(gv),  f'Peak: {gpvh} ({gpv:,})',  '#005B9A'),
+        (f'Total Unique Visitors ({len(EVENT_DATES)} Days)',fmt(guv), f'Peak: {gpuvh} ({gpuv:,})','#1A7A45'),
+        *([(f'Total Passersby ({len(EVENT_DATES)} Days)', fmt(gp), f'Peak: {gpph} ({gpp:,})', '#B06000')]
           if (PROFILE_CONFIG.get(EVENT_PROFILE, PROFILE_CONFIG['full'])['has_psb'] and SHOW_PASSERBY) else []),
     ))
 
@@ -3776,7 +3776,7 @@ def main():
     ws_link = setup_ws(wb, '🌡 Heatmap Report', tab_color='2D7DD2')
     page_header(ws_link, 1,
         f'{EVENT_NAME}  —  Hourly Traffic Heatmap Report',
-        'Interactive HTML report  ·  Visitors / Unique / Passersby per Hour  ·  All 3 Days',
+        f'Interactive HTML report  ·  Visitors / Unique / Passersby per Hour  ·  All {len(EVENT_DATES)} Days',
         f'{EVENT_LABELS[0][:6]} – {EVENT_LABELS[-1][:6]} {EVENT_DATES[-1][-4:]}')
 
     rh(ws_link, 4, 8); rh(ws_link, 5, 40); rh(ws_link, 6, 20); rh(ws_link, 7, 8)
@@ -3788,7 +3788,7 @@ def main():
 
     ws_link.merge_cells(start_row=6, start_column=2, end_row=6, end_column=11)
     sc = ws_link.cell(6, 2,
-        'Open the file: OTC_Asia_2026_Dashboard_v4_Dashboard.html (same folder as this Excel)')
+        f'Open the file: {os.path.basename(heatmap_path)} (same folder as this Excel)')
     sc.font = Font(name='Calibri', size=11, color='6B8299', italic=True)
     sc.fill = PatternFill('solid', start_color='F4F7FB', fgColor='F4F7FB')
     sc.alignment = Alignment(horizontal='center', vertical='center')
@@ -3800,10 +3800,10 @@ def main():
     sec_hdr(ws_link, 8, 'ℹ️  How to use the Heatmap Report')
     instructions = [
         ('1', 'เปิดไฟล์', f'{hm_fname}  (ใน folder เดียวกัน)'),
-        ('2', 'เลือก Tab', 'Overall (3 Days) / Day 1 / Day 2 / Day 3'),
+        ('2', 'เลือก Tab', f'Overall ({len(EVENT_DATES)} Days) / ' + ' / '.join(f'Day {i+1}' for i in range(len(EVENT_DATES)))),
         ('3', 'เลือก Metric', 'Visitors (ENT in) / Unique Visitors / Passersby'),
         ('4', 'Hover บน Cell', 'ดูตัวเลขละเอียด + ชื่อ Hour'),
-        ('5', 'อัปเดตข้อมูล', 'รัน dashboard_engine.py ใหม่เมื่อมีข้อมูล Day 2–3'),
+        ('5', 'อัปเดตข้อมูล', 'รัน dashboard_engine.py ใหม่เมื่อมีข้อมูลวันใหม่'),
     ]
     tbl_hdr(ws_link, 9, ['Step', 'Action', 'Details'])
     for i, (step, action, detail) in enumerate(instructions):
