@@ -77,6 +77,32 @@ SHOW_PASSERBY  = True      # True = show PSB data; False = hide even if has_psb=
 # ── Profile settings ──────────────────────────────────────────
 EVENT_PROFILE = 'full'   # simple / standard / full — overridden in main()
 
+# ── Staff exclusion ───────────────────────────────────────────
+# True = exclude CustomerType='Staff' rows from unique/dwell metrics
+# Overridden in main() from cfg['EXCLUDE_STAFF']
+EXCLUDE_STAFF = True
+
+def _non_staff(frame):
+    """Filter out staff rows. Used by uv_count() and dwell computations.
+
+    Behavior:
+      - If EXCLUDE_STAFF=False: return frame unchanged
+      - If 'CustomerType' column missing: return frame unchanged
+        (graceful degradation for old rawdata without the column)
+      - Otherwise: filter rows where CustomerType != 'Staff'
+    """
+    if not EXCLUDE_STAFF:
+        return frame
+    if 'CustomerType' not in frame.columns:
+        return frame
+    return frame[frame['CustomerType'] != 'Staff']
+
+def uv_count(frame):
+    """Unique BodyID count, staff-aware. Replaces frame['BodyID'].nunique()
+    everywhere we want 'unique customers' rather than 'unique people'."""
+    return _non_staff(frame)['BodyID'].nunique()
+
+
 
 
 # ══════════════════════════════════════════════════════════════
@@ -484,6 +510,9 @@ def load_config_from_excel(filepath):
             cfg[k] = int(v) if isinstance(v, float) and v == int(v) else v
 
     # Derived
+    # exclude_staff: enables staff filter for unique/dwell metrics (default True)
+    _exc = str(cfg.get('exclude_staff', 'true')).strip().lower()
+    cfg['EXCLUDE_STAFF']             = _exc in ('true', '1', 'yes', 'on')
     cfg['DWELL_MIN_SEC']             = int(cfg.get('dwell_min_sec', 10))
     cfg['DWELL_MAX_SEC']             = int(cfg.get('dwell_max_sec', 3600))
     cfg['ENGAGEMENT_THRESHOLD_SEC']  = int(cfg.get('engagement_threshold_sec', 60))
@@ -578,6 +607,7 @@ def compute_zone_dwell(df):
     Returns DataFrame with columns:
       BodyID, Location, dwell_sec, dwell_min, hour
     """
+    df = _non_staff(df)   # exclude staff from dwell analysis
     zone_io = (df[df['Type']=='Zone'][['BodyID','Location','Event','Time','Hour']]
                .pipe(lambda x: x[x['Event'].isin(['in','out'])])
                .sort_values(['BodyID','Location','Time']))
@@ -610,6 +640,7 @@ def compute_booth_dwell(df):
     Filter: dwell > 0 (seen at ≥2 time points).
     Returns DataFrame: BodyID, dwell_min, first_seen, last_seen, hour
     """
+    df = _non_staff(df)   # exclude staff from booth dwell
     booth = (df[df['Type'].isin(['Entrance','Zone'])]
              [['BodyID','Event','Time','Hour']]
              .pipe(lambda x: x[x['Event'].isin(['in','out'])]))
@@ -726,7 +757,7 @@ def hourly_section(ws, r, ent, psb, acts_list, dc=15,
         rows = []
         for h in HOURS:
             eh = ent[ent['Hour']==h]; ph = psb[psb['Hour']==h]
-            v  = len(eh); uv = eh['BodyID'].nunique(); p = len(ph) + v
+            v  = len(eh); uv = uv_count(eh); p = len(ph) + v
             rows.append((f'{h:02d}:00', v, uv, p, notes(h)))
 
         # Only show rows that have any data OR are within operating hours
@@ -830,7 +861,7 @@ def hourly_section(ws, r, ent, psb, acts_list, dc=15,
         rows = []
         for h in HOURS:
             eh = e_d[e_d['Hour']==h]; ph = p_d[p_d['Hour']==h]
-            v  = len(eh); uv = eh['BodyID'].nunique() if len(eh) > 0 else 0
+            v  = len(eh); uv = uv_count(eh) if len(eh) > 0 else 0
             p  = len(ph) + v  # Passersby = PSB gate + Visitors
             rows.append((f'{h:02d}:00', v, uv, p, day_notes(h)))
 
@@ -904,9 +935,13 @@ def zone_section(ws, r, zon, dc=15):
         ws.cell(r+1, 2, 'No zone data for this event type')
         return r + 2
 
-    stats = (zon.groupby('Location')
-             .agg(Visits=('No','count'), Unique=('BodyID','nunique'))
+    # Staff-aware: visits count uses raw zon, unique uses _non_staff filter
+    _zon_ns = _non_staff(zon)
+    _vis = zon.groupby('Location').size().rename('Visits')
+    _uniq = _zon_ns.groupby('Location')['BodyID'].nunique().rename('Unique')
+    stats = (_vis.to_frame().join(_uniq, how='left').fillna({'Unique': 0})
              .reset_index().sort_values('Visits', ascending=False))
+    stats['Unique'] = stats['Unique'].astype(int)
     # Use only Gender column to avoid TypeError on datetime columns
     zm = zon.groupby('Location')['Gender'].apply(lambda x:(x=='Male').sum())
     zf = zon.groupby('Location')['Gender'].apply(lambda x:(x=='Female').sum())
@@ -922,7 +957,7 @@ def zone_section(ws, r, zon, dc=15):
                  f"{int(zr['Visits'])/tv*100:.1f}%" if tv>0 else '—'],
                 alt=(i%2==0))
     zt = r+2+len(stats)
-    tbl_row(ws, zt, ['TOTAL', tv, int(zon['BodyID'].nunique()),
+    tbl_row(ws, zt, ['TOTAL', tv, int(uv_count(zon)),
                      int(zm.sum()), int(zf.sum()), '100%'], total=True)
     gap(ws, zt+1)
 
@@ -1168,7 +1203,7 @@ def build_activity_sheet(wb, df):
             def in_w(sub):
                 mins = sub['Time'].dt.hour*60 + sub['Time'].dt.minute
                 return sub[(sub['Date']==date_str) & (mins >= s_min) & (mins <= e_min)]
-            v_w = in_w(ent); uv_w = v_w['BodyID'].nunique()
+            v_w = in_w(ent); uv_w = uv_count(v_w)
             p_w = in_w(psb); z_w = in_w(zon)
             all_act_rows.append({
                 'date': date_str, 'time': f'{t_s}–{t_e}',
@@ -1301,7 +1336,9 @@ def build_zone_sheet(wb, df):
 
     # Zone ordering: by total visits desc, consistent across days
     stats_all = (zon_all.groupby('Location')
-                 .agg(Visits=('No','count'), Unique=('BodyID','nunique'))
+                 .agg(Visits=('No','count'),
+                      Unique=('BodyID', lambda s: (_non_staff(zon_all.loc[s.index])['BodyID'].nunique()
+                                                  if 'CustomerType' in zon_all.columns else s.nunique())))
                  .reset_index().sort_values('Visits', ascending=False))
     zones_in_data = stats_all['Location'].tolist()
     tv_all = int(stats_all['Visits'].sum())
@@ -1315,7 +1352,7 @@ def build_zone_sheet(wb, df):
 
     kpi(ws, 5,  2, 'TOTAL ZONE VISITS',    tv_all,
         'All zones combined',      BLU)
-    kpi(ws, 5,  4, 'UNIQUE ZONE VISITORS', int(zon_all['BodyID'].nunique()),
+    kpi(ws, 5,  4, 'UNIQUE ZONE VISITORS', int(uv_count(zon_all)),
         'Distinct visitors',       GRN)
     kpi(ws, 5,  6, 'ACTIVE ZONES',         len(zones_in_data),
         'Zones with traffic',      NAV)
@@ -1369,7 +1406,7 @@ def build_zone_sheet(wb, df):
             _, z_d = day_slices[ds]
             z_loc = z_d[z_d['Location']==loc]
             v_d  = len(z_loc)
-            uv_d = z_loc['BodyID'].nunique()
+            uv_d = uv_count(z_loc)
             m_d  = int((z_loc['Gender']=='Male').sum())
             f_d  = int((z_loc['Gender']=='Female').sum())
             eng  = f'{uv_d/v_d*100:.1f}%' if v_d > 0 else '—'
@@ -1408,8 +1445,8 @@ def build_zone_sheet(wb, df):
 
     # Grand total row
     tbl_row(ws, row_cursor,
-            ['TOTAL (All Days)', '', tv_all, int(zon_all['BodyID'].nunique()),
-             f"{int(zon_all['BodyID'].nunique())/tv_all*100:.1f}%" if tv_all>0 else '—',
+            ['TOTAL (All Days)', '', tv_all, int(uv_count(zon_all)),
+             f"{int(uv_count(zon_all))/tv_all*100:.1f}%" if tv_all>0 else '—',
              int((zon_all['Gender']=='Male').sum()),
              int((zon_all['Gender']=='Female').sum()), ''],
             total=True)
@@ -1558,7 +1595,7 @@ def build_zone_sheet(wb, df):
                 zone_counts[z] = len(sub)
             all_act_rows.append({
                 'date': ds, 'time': f'{t_s}–{t_e}', 'name': name,
-                'visitors': len(v_w), 'unique': int(v_w['BodyID'].nunique()),
+                'visitors': len(v_w), 'unique': int(uv_count(v_w)),
                 'zone_counts': zone_counts,
             })
 
@@ -1687,7 +1724,7 @@ def build_day_sheet(wb, df, date_str, day_num, date_label):
 
     # KPIs
     gap(ws, 4, 8); rh(ws, 5, 16); rh(ws, 6, 28); rh(ws, 7, 14); gap(ws, 8, 8)
-    tv  = len(ent); uv = ent['BodyID'].nunique(); tp = len(psb) + len(ent)
+    tv  = len(ent); uv = uv_count(ent); tp = len(psb) + len(ent)
     ph  = ent.groupby('Hour').size().idxmax() if tv>0 else 0
     pv  = ent.groupby('Hour').size().max()    if tv>0 else 0
     mn  = int((d['Gender']=='Male').sum()); fn2 = int((d['Gender']=='Female').sum())
@@ -1718,7 +1755,7 @@ def build_day_sheet(wb, df, date_str, day_num, date_label):
                 return sub[(mins>=sm_)&(mins<=em_)]
             vw=iw(ent); pw=iw(psb); zw=iw(zon)  # ent already filtered to Event='in'
             tbl_row(ws, r+2+i,
-                    [f'{ts}–{te}', name, len(vw), int(vw['BodyID'].nunique()),
+                    [f'{ts}–{te}', name, len(vw), int(uv_count(vw)),
                      len(pw), len(zw)],
                     alt=(i%2==0), hi=True)
         r = r+3+len(acts)
@@ -1742,7 +1779,7 @@ def build_overall_sheet(wb, df):
         f'{EVENT_LABELS[0][:6]} – {EVENT_LABELS[-1][:6]} {EVENT_DATES[-1][-4:]}')
 
     gap(ws, 4, 8); rh(ws, 5, 16); rh(ws, 6, 28); rh(ws, 7, 14); gap(ws, 8, 8)
-    tv  = len(ent); uv = ent['BodyID'].nunique(); tp = len(psb) + len(ent)
+    tv  = len(ent); uv = uv_count(ent); tp = len(psb) + len(ent)
     ph  = ent.groupby('Hour').size().idxmax() if tv>0 else 0
     pv  = ent.groupby('Hour').size().max()    if tv>0 else 0
     mn  = int((df['Gender']=='Male').sum()); fn2 = int((df['Gender']=='Female').sum())
@@ -1770,7 +1807,7 @@ def build_overall_sheet(wb, df):
         tbl_row(ws, r+2+i,
                 [dl, f'Day {dn}',
                  len(e) if has else 'No Data',
-                 e['BodyID'].nunique() if has else '—',
+                 uv_count(e) if has else '—',
                  psb_total if has else '—',
                  len(z) if has else '—',
                  f'{ph2:02d}:00' if has else '—',
@@ -1881,7 +1918,7 @@ def generate_full_html(df, output_path):
     # ── Helper functions ───────────────────────────────────────────
     def h_vals(sub, mode='count'):
         return [int(len(sub[sub['Hour']==h])) if mode=='count'
-                else int(sub[sub['Hour']==h]['BodyID'].nunique())
+                else int(uv_count(sub[sub['Hour']==h]))
                 for h in HOURS]
 
     def fmt(n):
@@ -2333,7 +2370,7 @@ def generate_full_html(df, output_path):
         for d in day_data:
             has = sum(d['v'][:sn]) > 0
             tv  = sum(d['v'][:sn])
-            tuv = d.get('v_global', d['ent_d']['BodyID'].nunique() if 'ent_d' in d else sum(d['uv'][:sn]))
+            tuv = d.get('v_global', uv_count(d['ent_d']) if 'ent_d' in d else sum(d['uv'][:sn]))
             tp  = sum(d['p'][:sn])
             _tot_vals = [tv, tuv] + ([tp] if PROFILE_CONFIG.get(EVENT_PROFILE,PROFILE_CONFIG['full'])['has_psb'] else [])
             for val in _tot_vals:
@@ -2382,7 +2419,7 @@ def generate_full_html(df, output_path):
 
     # Master KPIs
     _ex_v   = len(ent)
-    _ex_uv  = int(ent['BodyID'].nunique())
+    _ex_uv  = int(uv_count(ent))
     _ex_psb = len(psb) + _ex_v
     _ex_conv = (_ex_v / _ex_psb * 100) if _ex_psb > 0 else 0
 
@@ -2471,7 +2508,7 @@ def generate_full_html(df, output_path):
     # SECTION 1: OVERALL SUMMARY KPIs + Hourly Traffic
     # ─────────────────────────────────────────────────────────────
     total_v   = len(ent)
-    unique_v  = ent['BodyID'].nunique()
+    unique_v  = uv_count(ent)
     total_p   = len(psb) + len(ent)
     total_z   = len(zon)
     peak_h_v  = ent.groupby('Hour').size().idxmax() if total_v > 0 else 0
@@ -2501,7 +2538,7 @@ def generate_full_html(df, output_path):
     def _day_v(ds):
         e=ent[ent['Date']==ds]; return len(e) if len(e)>0 else None
     def _day_uv(ds):
-        e=ent[ent['Date']==ds]; return e['BodyID'].nunique() if len(e)>0 else None
+        e=ent[ent['Date']==ds]; return uv_count(e) if len(e)>0 else None
     def _day_p(ds):
         e=ent[ent['Date']==ds]; pb=psb[psb['Date']==ds]
         return len(pb)+len(e) if len(e)>0 else None
@@ -2559,7 +2596,7 @@ def generate_full_html(df, output_path):
                          'Passersby → Visitors → Unique → Engaged'))
         s.append(funnel_block(
             total_psb=len(psb)+len(ent),
-            total_v=len(ent), total_uv=ent['BodyID'].nunique(),
+            total_v=len(ent), total_uv=uv_count(ent),
             engaged_uv=len(_eng),
             insights_list=_get_ins('funnel'),
         ))
@@ -2598,7 +2635,9 @@ def generate_full_html(df, output_path):
             continue
 
         day_stats = (z_d.groupby('Location')
-                     .agg(V=('No','count'), UV=('BodyID','nunique'))
+                     .agg(V=('No','count'),
+                          UV=('BodyID', lambda s: (_non_staff(z_d.loc[s.index])['BodyID'].nunique()
+                                                   if 'CustomerType' in z_d.columns else s.nunique())))
                      .reset_index().sort_values('V', ascending=False))
         tv_day = int(day_stats['V'].sum())
 
@@ -2636,7 +2675,7 @@ def generate_full_html(df, output_path):
         # Totals for every column
         tot_zm  = int((z_d['Gender']=='Male').sum())
         tot_zf  = int((z_d['Gender']=='Female').sum())
-        tot_uv  = int(z_d['BodyID'].nunique())
+        tot_uv  = int(uv_count(z_d))
         # Engmt% total = UV engaged (any zone) / total UV
         all_eng_day = set(bid for (loc_k, ds_k), bids in engaged_day.items()
                           if ds_k == ds for bid in bids)
@@ -2690,12 +2729,12 @@ def generate_full_html(df, output_path):
         zv = zon[zon['Location']==z]
         if len(zv) == 0: continue
         vcount = len(zv)
-        uv = int(zv['BodyID'].nunique())
+        uv = int(uv_count(zv))
         # Dwell avg for this zone
         zd = ddf[ddf['loc']==z] if 'loc' in ddf.columns else pd.DataFrame()
         d_avg = float(zd['min'].mean()) if len(zd) > 0 else 0.0
         # Engagement %
-        total_zone_uv = int(zv['BodyID'].nunique())
+        total_zone_uv = int(uv_count(zv))
         eng_uv = int(zd[zd['min']*60 > ENGAGEMENT_THRESHOLD_SEC]['bid'].nunique()) if len(zd) > 0 else 0
         eng_pct = (eng_uv / total_zone_uv * 100) if total_zone_uv > 0 else 0
         zone_stats_all.append({
@@ -2718,7 +2757,7 @@ def generate_full_html(df, output_path):
             if len(stage_zon) == 0:
                 continue
             exp_v  = len(stage_zon)
-            exp_uv = int(stage_zon['BodyID'].nunique())
+            exp_uv = int(uv_count(stage_zon))
             during_v = 0
             for date_str, acts in ACTIVITIES_.items():
                 for ts, te, _ in acts:
@@ -2770,7 +2809,7 @@ def generate_full_html(df, output_path):
             dur_min = max(em_ - sm_, 15)
             vw=in_window(e_d,ds,sm_,em_); pw=in_window(p_d,ds,sm_,em_); zw=in_window(z_d,ds,sm_,em_)
             all_acts.append({'ds':ds,'di':di,'time':f'{ts}–{te}','name':name,
-                             'v':len(vw),'uv':int(vw['BodyID'].nunique()),'p':len(pw),'z':len(zw)})
+                             'v':len(vw),'uv':int(uv_count(vw)),'p':len(pw),'z':len(zw)})
             # Before/after windows of equal duration
             bw = in_window(e_d, ds, max(0, sm_-dur_min), sm_)
             aw = in_window(e_d, ds, em_, em_+dur_min)
@@ -2943,7 +2982,7 @@ def generate_full_html(df, output_path):
         s.append(kpi_cards(
             ('Avg Zone Dwell Time',     f'{zone_avg} min', f'{len(ddf):,} valid zone sessions (in→out pairs)', '#003865'),
             ('Median Zone Dwell',       f'{zone_med} min', 'Half of visitors stayed longer than this',           '#005B9A'),
-            ('Visitors with Dwell Data',f'{ddf["bid"].nunique():,}', f'of {int(zon["BodyID"].nunique()):,} zone unique visitors',  '#1A7A45'),
+            ('Visitors with Dwell Data',f'{ddf["bid"].nunique():,}', f'of {int(uv_count(zon)):,} zone unique visitors',  '#1A7A45'),
             ('Zones with Dwell Data',   f'{ddf["loc"].nunique()}',   'Zones with valid in→out pairs',                         '#B06000'),
         ))
 
@@ -3127,12 +3166,12 @@ def generate_full_html(df, output_path):
     s.append('<table class="dt"><thead><tr><th>Gate</th><th>Visitors</th><th>Unique</th><th>Share %</th></tr></thead><tbody>')
     ent_tot = len(ent)
     for i,(loc,g) in enumerate(ent.groupby('Location')):
-        n=len(g); uv=g['BodyID'].nunique()
+        n=len(g); uv=uv_count(g)
         s.append(f'<tr class="{"alt" if i%2==0 else ""}"><td>{loc}</td>'
                  f'<td class="mono">{n:,}</td><td class="mono">{uv:,}</td>'
                  f'<td class="mono">{pct(n,ent_tot)}</td></tr>')
     s.append(f'<tr class="total"><td>TOTAL</td><td class="mono">{ent_tot:,}</td>'
-             f'<td class="mono">{ent["BodyID"].nunique():,}</td><td class="mono">100%</td></tr>')
+             f'<td class="mono">{uv_count(ent):,}</td><td class="mono">100%</td></tr>')
     s.append('</tbody></table></div>')
 
     # PSB gates — standard/full only
@@ -3165,7 +3204,7 @@ def generate_full_html(df, output_path):
     for di, ds in enumerate(EVENT_DATES_):
         e_d = ent[ent['Date']==ds]; p_d = psb[psb['Date']==ds]
         v_h  = h_vals(e_d)
-        uv_h = h_vals(e_d, 'nunique')
+        uv_h = h_vals(_non_staff(e_d), 'nunique')
         p_h  = [h_vals(p_d)[i] + v_h[i] for i in range(len(HOURS))]
         day_data_hm.append({
             'label':    DAY_SHORT[di],
@@ -3173,7 +3212,7 @@ def generate_full_html(df, output_path):
             'v':        v_h,
             'uv':       uv_h,
             'p':        p_h,
-            'v_global': e_d['BodyID'].nunique(),  # true global unique for total row
+            'v_global': uv_count(e_d),  # true global unique for total row (staff-aware)
         })
         all_vals_v  += v_h; all_vals_uv += uv_h; all_vals_p += p_h
 
@@ -3182,13 +3221,19 @@ def generate_full_html(df, output_path):
                 [d['p']  for d in day_data_hm])
 
     # Overall KPI strip
-    gv  = len(ent); guv = ent['BodyID'].nunique(); gp = len(psb)+len(ent)
+    gv  = len(ent); guv = uv_count(ent); gp = len(psb)+len(ent)
     gpv = max(all_vals_v);  gpvh = HOUR_LBLS[all_vals_v.index(gpv)  % len(HOUR_LBLS)] if gpv>0  else '--'
     gpuv= max(all_vals_uv); gpuvh= HOUR_LBLS[all_vals_uv.index(gpuv)% len(HOUR_LBLS)] if gpuv>0 else '--'
     gpp = max(all_vals_p);  gpph = HOUR_LBLS[all_vals_p.index(gpp)  % len(HOUR_LBLS)] if gpp>0  else '--'
+    # Staff-exclusion footnote: only set when filter is active and staff exist
+    if EXCLUDE_STAFF and 'CustomerType' in ent.columns:
+        _staff_n = ent[ent['CustomerType']=='Staff']['BodyID'].nunique()
+        _staff_note = f' · Excluded {_staff_n:,} staff' if _staff_n > 0 else ''
+    else:
+        _staff_note = ''
     s.append(kpi_cards(
         (f'Total Visitors ({len(EVENT_DATES)} Days)',       fmt(gv),  f'Peak: {gpvh} ({gpv:,})',  '#005B9A'),
-        (f'Total Unique Visitors ({len(EVENT_DATES)} Days)',fmt(guv), f'Peak: {gpuvh} ({gpuv:,})','#1A7A45'),
+        (f'Total Unique Visitors ({len(EVENT_DATES)} Days)',fmt(guv), f'Peak: {gpuvh} ({gpuv:,}){_staff_note}','#1A7A45'),
         *([(f'Total Passersby ({len(EVENT_DATES)} Days)', fmt(gp), f'Peak: {gpph} ({gpp:,})', '#B06000')]
           if (PROFILE_CONFIG.get(EVENT_PROFILE, PROFILE_CONFIG['full'])['has_psb'] and SHOW_PASSERBY) else []),
     ))
@@ -3222,7 +3267,7 @@ def generate_full_html(df, output_path):
         rows_h = []; peak_vv = 0
         for h in HOURS:
             eh = e_d[e_d['Hour']==h]; ph = p_d[p_d['Hour']==h]
-            v=len(eh); uv=int(eh['BodyID'].nunique()); p=len(ph)+v
+            v=len(eh); uv=int(uv_count(eh)); p=len(ph)+v
             note_hits = [a[2] for a in acts
                          if int(a[0][:2])*60+int(a[0][3:]) < h*60+60
                          and int(a[1][:2])*60+int(a[1][3:]) > h*60]
@@ -3244,7 +3289,7 @@ def generate_full_html(df, output_path):
                      f'{_psb_td}<td class="act">{note}</td></tr>')
         tot_v=sum(r[1] for r in rows_h[:show])
         tot_p=sum(r[3] for r in rows_h[:show])
-        tot_uv = e_d['BodyID'].nunique()
+        tot_uv = uv_count(e_d)
         _psb_tot_td = f'<td class="mono">{tot_p:,}</td>' if _s8_show_psb else ''
         s.append(f'<tr class="total"><td>TOTAL</td><td class="mono">{tot_v:,}</td>'
                  f'<td class="mono">{tot_uv:,}</td>{_psb_tot_td}<td></td></tr>')
@@ -3633,6 +3678,7 @@ def main():
     global ACTIVITIES, DWELL_MIN_SEC, DWELL_MAX_SEC
     global ENGAGEMENT_THRESHOLD_SEC, DISPLAY_HOURS_START, DISPLAY_HOURS_END
     global INPUT_FILES, EVENT_PROFILE, PAGE_GROUPS, VENUE_TYPE, SHOW_PASSERBY, SPONSOR_ZONES
+    global EXCLUDE_STAFF
 
     # ── Load config (Excel _config sheet or event_config.py) ───
     if _USE_EXCEL_CONFIG:
@@ -3657,6 +3703,8 @@ def main():
         ENGAGEMENT_THRESHOLD_SEC = _cfg["ENGAGEMENT_THRESHOLD_SEC"]
         DISPLAY_HOURS_START      = _cfg["DISPLAY_HOURS_START"]
         DISPLAY_HOURS_END        = _cfg["DISPLAY_HOURS_END"]
+        EXCLUDE_STAFF            = _cfg.get("EXCLUDE_STAFF", True)
+        print(f'  Staff exclusion: {"enabled" if EXCLUDE_STAFF else "disabled"}')
         INPUT_FILES    = [_RAWDATA_FILE]
         # event_type / profile from Section A of _config sheet
         EVENT_PROFILE  = _cfg.get('event_type', 'full').lower().strip()
