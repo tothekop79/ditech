@@ -2583,7 +2583,9 @@ def generate_full_html(df, output_path):
     # ── Visitor Funnel (standard/full only) ──────────────────
     _p2 = PROFILE_CONFIG.get(EVENT_PROFILE, PROFILE_CONFIG['full'])
     if _p2['has_psb'] and SHOW_PASSERBY:
-        _zon_io = df[(df['Type']=='Zone') & df['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
+        # Staff-aware: filter so engaged_uv numerator matches uv_count denominator
+        _zon_io = _non_staff(df)
+        _zon_io = _zon_io[(_zon_io['Type']=='Zone') & _zon_io['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
         _eng = set()
         for (_bid,_loc),_grp in _zon_io.groupby(['BodyID','Location'],sort=False):
             _ins_t=_grp[_grp['Event']=='in']['Time'].tolist()
@@ -2606,7 +2608,9 @@ def generate_full_html(df, output_path):
                      'Total Visits / Unique / Engmt % / Dwell Time · แยกตามวัน'))
 
     # ── Pre-compute engaged UV (dwell > 60s) per zone PER DAY ────
-    zone_io_eng = df[(df['Type']=='Zone') & df['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
+    # Staff-aware: filter so engagement % aligns with zone unique
+    zone_io_eng = _non_staff(df)
+    zone_io_eng = zone_io_eng[(zone_io_eng['Type']=='Zone') & zone_io_eng['Event'].isin(['in','out'])].sort_values(['BodyID','Location','Time'])
     engaged_day = {}   # (loc, date) → set of BodyID
     for (bid, loc), grp in zone_io_eng.groupby(['BodyID','Location'], sort=False):
         ins  = grp[grp['Event']=='in']['Time'].tolist()
@@ -3065,7 +3069,7 @@ def generate_full_html(df, output_path):
     _demo_prof = PROFILE_CONFIG.get(EVENT_PROFILE, PROFILE_CONFIG['full'])
 
     if _demo_prof['has_zones']:  # standard/full: overall only
-        uniq_v = ent.drop_duplicates('BodyID')
+        uniq_v = _non_staff(ent).drop_duplicates('BodyID')
         male_e = int((uniq_v['Gender']=='Male').sum())
         fem_e  = int((uniq_v['Gender']=='Female').sum())
         tge    = male_e + fem_e
@@ -3077,7 +3081,7 @@ def generate_full_html(df, output_path):
         s.extend(demo_block(uniq_v))
 
     else:  # simple profile: overall KPIs + per-day side-by-side
-        uniq_v = ent.drop_duplicates('BodyID')
+        uniq_v = _non_staff(ent).drop_duplicates('BodyID')
         male_e = int((uniq_v['Gender']=='Male').sum())
         fem_e  = int((uniq_v['Gender']=='Female').sum())
         tge    = male_e + fem_e
