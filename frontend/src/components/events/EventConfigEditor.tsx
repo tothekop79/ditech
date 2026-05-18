@@ -398,6 +398,7 @@ function ParametersEditor({ event }: { event: Event }) {
     dwellMinSec: event.dwellMinSec,
     dwellMaxSec: event.dwellMaxSec,
     engagementThresholdSec: event.engagementThresholdSec,
+    excludeStaff: event.excludeStaff ?? true,
     profile: event.profile,
     venueType: event.venueType,
     showPasserby: event.showPasserby,
@@ -410,6 +411,7 @@ function ParametersEditor({ event }: { event: Event }) {
       dwellMinSec: event.dwellMinSec,
       dwellMaxSec: event.dwellMaxSec,
       engagementThresholdSec: event.engagementThresholdSec,
+      excludeStaff: event.excludeStaff ?? true,
       profile: event.profile,
       venueType: event.venueType,
       showPasserby: event.showPasserby,
@@ -428,6 +430,7 @@ function ParametersEditor({ event }: { event: Event }) {
   });
 
   return (
+    <>
     <Section title="⚙️ Analytics Parameters" count={6} editing={editing}
       setEditing={setEditing} onSave={() => save.mutate()} saving={save.isPending}>
       {editing ? (
@@ -496,6 +499,53 @@ function ParametersEditor({ event }: { event: Event }) {
         </ul>
       )}
     </Section>
+    <Section title="🚫 Visitor Type Filter" count={1} editing={editing}
+      setEditing={setEditing} onSave={() => save.mutate()} saving={save.isPending}>
+      {editing ? (
+        <div className="space-y-3 text-xs">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox"
+              checked={!!form.excludeStaff}
+              onChange={(e) => setForm({ ...form, excludeStaff: e.target.checked })} />
+            <span className="font-medium text-sm">Exclude staff from unique visitor counts</span>
+          </label>
+          <div className="ml-6 space-y-2 text-gray-600">
+            <p>ตัดพนักงาน (<code className="text-[10px] bg-gray-100 px-1 rounded">CustomerType = 'Staff'</code>) ออกจาก:</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              <span className="text-green-700">✓ Unique Visitors</span>
+              <span className="text-green-700">✓ Zone Unique</span>
+              <span className="text-green-700">✓ Dwell Time</span>
+              <span className="text-green-700">✓ Demographics</span>
+              <span className="text-green-700">✓ Engagement Rate</span>
+            </div>
+            <p className="mt-1">คงเดิม (รวมทั้งหมด):</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-gray-500">
+              <span>Total Visitors</span>
+              <span>· Passersby</span>
+              <span>· Peak Hour</span>
+            </div>
+            <p className="text-gray-400 italic mt-2 text-[10px]">
+              ⓘ ระบบ AI ระบุพนักงานจาก column <code className="text-[10px] bg-gray-100 px-1 rounded">CustomerType</code> ใน rawdata
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="text-xs">
+          <div className="flex items-center gap-2">
+            <span className={`inline-block w-3 h-3 rounded-sm ${form.excludeStaff ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+            <span className="font-medium">
+              {form.excludeStaff ? 'Staff excluded from unique counts' : 'Staff included in unique counts'}
+            </span>
+          </div>
+          <p className="text-gray-400 mt-1 ml-5 text-[10px]">
+            {form.excludeStaff
+              ? 'Unique Visitors, Zone Unique, Dwell, Demographics, Engagement exclude staff'
+              : 'All metrics count staff and customers equally'}
+          </p>
+        </div>
+      )}
+    </Section>
+    </>
   );
 }
 

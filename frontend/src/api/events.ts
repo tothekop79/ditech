@@ -98,6 +98,7 @@ export interface Event {
   dwellMinSec: number;
   dwellMaxSec: number;
   engagementThresholdSec: number;
+  excludeStaff: boolean;
   sponsorZones?: string | null;
   customerId?: string | null;
   customer?: { id: string; customerCode: string; customerName: string } | null;
@@ -133,6 +134,7 @@ export interface EventCreateInput {
   dwellMinSec?: number;
   dwellMaxSec?: number;
   engagementThresholdSec?: number;
+  excludeStaff?: boolean;
   sponsorZones?: string;
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
   gates?: Array<{ name: string; gateType: GateType; sortOrder?: number }>;

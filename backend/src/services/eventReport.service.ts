@@ -308,6 +308,7 @@ ${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${eve
     cfg.addRow(['dwell_min_sec', event.dwellMinSec, 'Minimum dwell time']);
     cfg.addRow(['dwell_max_sec', event.dwellMaxSec, 'Maximum dwell time']);
     cfg.addRow(['engagement_threshold_sec', event.engagementThresholdSec, 'Engaged threshold']);
+    cfg.addRow(['exclude_staff', event.excludeStaff ? 'True' : 'False', 'Exclude staff (CustomerType=Staff) from unique/dwell metrics']);
     cfg.addRow(['display_hours_start', event.displayHoursStart, 'Heatmap display start']);
     cfg.addRow(['display_hours_end', event.displayHoursEnd, 'Heatmap display end']);
     cfg.addRow(['event_profile', event.profile.toLowerCase(), 'simple / standard / full']);

@@ -307,3 +307,9 @@ upsert-*.sh
 /wire-frontend.sh
 /xiaomi-import-ready-v2.xlsx
 backups/
+
+# Python cache
+backend/python-engine/__pycache__/
+
+# Engine backups from patch sessions
+backend/python-engine/*.bak-*

@@ -330,6 +330,7 @@ model Event {
   dwellMinSec            Int                  @default(0)
   dwellMaxSec            Int                  @default(3600)
   engagementThresholdSec Int                  @default(60)
+  excludeStaff           Boolean              @default(true)
   sponsorZones           String?
   customerId             String?
   createdById            String?

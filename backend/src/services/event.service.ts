@@ -20,6 +20,7 @@ export interface EventCreateInput {
   dwellMinSec?: number;
   dwellMaxSec?: number;
   engagementThresholdSec?: number;
+  excludeStaff?: boolean;
   sponsorZones?: string;
   // Initial setup data
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
@@ -129,6 +130,7 @@ export const eventService = {
         dwellMinSec: data.dwellMinSec ?? 0,
         dwellMaxSec: data.dwellMaxSec ?? 3600,
         engagementThresholdSec: data.engagementThresholdSec ?? 60,
+        excludeStaff: data.excludeStaff ?? true,
         sponsorZones: data.sponsorZones || null,
         createdById: createdById || null,
         days: { create: days },
@@ -194,6 +196,7 @@ export const eventService = {
     if (data.dwellMinSec !== undefined) updateData.dwellMinSec = data.dwellMinSec;
     if (data.dwellMaxSec !== undefined) updateData.dwellMaxSec = data.dwellMaxSec;
     if (data.engagementThresholdSec !== undefined) updateData.engagementThresholdSec = data.engagementThresholdSec;
+    if (data.excludeStaff !== undefined) updateData.excludeStaff = data.excludeStaff;
     if (data.sponsorZones !== undefined) updateData.sponsorZones = data.sponsorZones;
 
     return prisma.event.update({ where: { id }, data: updateData });
