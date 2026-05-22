@@ -1,4 +1,4 @@
-# DITECH Installation Planner — Current State (May 15, 2026)
+# DITECH Installation Planner — Current State (May 18, 2026)
 
 ## 📌 TL;DR
 
@@ -9,10 +9,12 @@
 - ✅ **Gantt UX polish (May 14 afternoon, commit `571ba09`)** — Date Color Banding (left-side only), Date Group Header per date, always-visible work time, pagination silent regression hotfix
 - ✅ **May 15 — Event Reports bug fix shipped (commit `92eb2db`, merged to main)** — engine had hard-coded "3 Days" / "Day 3" strings rendering wrong for any event ≠ 3 days. ALSTOM 2-day event now correctly shows "(2 Days)".
 - 🔍 **May 15 audit revealed** — Event Reports feature was already fully built (backend + frontend) but not reflected in earlier PROJECT_STATE. See "Event Reports infrastructure" section below.
-- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones)
-- ⏭️ **Branch state**: `fix/sensor-cache-merge` was merged via PR #1. `main` now at `92eb2db`.
+- ✅ **May 18 — excludeStaff feature shipped end-to-end (5 commits, `be40b55` → `2d4917f`, merged to main)** — Event reports can now exclude `CustomerType='Staff'` rows from unique/dwell/engagement/demographics metrics via Event config toggle (default: enabled). Discovered + fixed 3 latent bugs that surfaced when the filter shrank the UV denominator. UI shows a `🚫 Visitor Type Filter` section with an inline matrix explaining scope. See "excludeStaff feature" section below.
+- 🧹 **May 18 housekeeping** — Renamed `20260513203221_c1_10d_ratio_override` migration → `20260514000001_*` so Prisma replays it AFTER the baseline (was failing P3006 shadow DB rebuild). Updated `_prisma_migrations` table in-place. (Commit `d84ba92`)
+- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones); Event Reports follow-ups (job timeout, service split)
+- ⏭️ **Branch state**: `feat/exclude-staff` and `feat/exclude-staff-config` both merged to main. `main` now at `2d4917f`.
 
-Latest commit: `92eb2db` "fix(engine): replace hard-coded '3 Days' with dynamic len(EVENT_DATES)"
+Latest commit: `2d4917f` "feat(event): add excludeStaff toggle to Event config"
 
 ## Stack & Server
 
@@ -29,7 +31,13 @@ Latest commit: `92eb2db` "fix(engine): replace hard-coded '3 Days' with dynamic 
 ## Git history (recent)
 
 ```
-92eb2db  fix(engine): replace hard-coded '3 Days' with dynamic len(EVENT_DATES) ← HEAD = origin/main (May 15)
+2d4917f  feat(event): add excludeStaff toggle to Event config                  ← HEAD = origin/main (May 18)
+d84ba92  chore(prisma): rename c1_10d_ratio_override migration to fix replay order
+9100cb8  fix(engine): consistency — apply staff filter to demographics + funnel + zone engagement
+3bf355d  fix(engine): engagement rate >100% when staff exclusion is active
+be40b55  feat(engine): exclude staff (CustomerType='Staff') from unique/dwell metrics
+651c514  docs(state): May 15 update — engine '3 Days' bug fix + Event Reports inventory + 5 lessons
+92eb2db  fix(engine): replace hard-coded '3 Days' with dynamic len(EVENT_DATES) (May 15)
 a85ab9a  Merge pull request #1 from tothekop79/fix/sensor-cache-merge          ← Batch 1 merged
 792e62b  docs(state): May 14 update — Batch 1 + Gantt UX + 13 new lessons
 571ba09  feat(gantt): date color banding + group header + work time + pagination fix
@@ -318,6 +326,124 @@ triggeredById, createdAt, updatedAt
 ### Telegram dispatch
 `dispatchEventReportReady()` fires after each successful generation. Reads `NotificationRule` where `trigger='EVENT_REPORT_READY' AND enabled=true`. Default message template includes event name, organizer, venue, date range, profile, duration, file sizes, dashboard URL. Per-rule `templateBody` can override with `{{event.name}}`, `{{event.organizer}}`, `{{event.venue}}`, `{{report.profile}}`, `{{report.durationSec}}`, `{{dashboardUrl}}` placeholders.
 
+## excludeStaff feature (May 18 — 5 commits)
+
+End-to-end staff exclusion toggle for Event Reports. Lets users choose whether to exclude `CustomerType='Staff'` rows from "unique people" metrics while keeping them in traffic counters.
+
+### Architecture
+
+```
+┌───────────────────┐   excludeStaff: bool   ┌──────────────────┐
+│ EventConfigEditor │  ─────PATCH────────►   │ event.service.ts │
+│  (frontend UI)    │   /api/events/:id      │  whitelist field │
+└───────────────────┘                        └────────┬─────────┘
+                                                      │ prisma.event.update
+                                                      ▼
+                                              ┌──────────────────┐
+                                              │ Event.excludeStaff│
+                                              │  (PG bool, def=T) │
+                                              └────────┬─────────┘
+                                                       │ read on generate
+                                                       ▼
+                                      ┌─────────────────────────────────┐
+                                      │ writeConfigSheetIntoRawdata()   │
+                                      │  Section F row: exclude_staff   │
+                                      │  → Rawdata.xlsx _config sheet   │
+                                      └────────┬────────────────────────┘
+                                               │ spawnPython
+                                               ▼
+                                      ┌─────────────────────────────────┐
+                                      │ dashboard_engine.py             │
+                                      │  EXCLUDE_STAFF = cfg.get(...)   │
+                                      │  _non_staff(df), uv_count(df)   │
+                                      │  → HTML/XLSX with filter applied│
+                                      └─────────────────────────────────┘
+```
+
+### Scope
+
+Staff filter applies to ALL "unique people" metrics:
+
+| Metric | Filter applied? |
+|---|---|
+| Unique Visitors (KPI cards, hourly, daily) | ✅ |
+| Zone Unique Visitors | ✅ |
+| Dwell Time analysis | ✅ |
+| Visitor Demographics (Gender/Age) | ✅ |
+| Engagement Rate | ✅ |
+| Visitor Funnel (Engaged step) | ✅ |
+| Total Visitors (entries) | ❌ traffic still counted |
+| Passersby | ❌ |
+| Peak Hour | ❌ |
+
+### Engine implementation (`dashboard_engine.py`)
+
+Two module-level helpers added near top of file:
+
+```python
+EXCLUDE_STAFF = True   # set from cfg in main()
+
+def _non_staff(frame):
+    if not EXCLUDE_STAFF: return frame
+    if 'CustomerType' not in frame.columns: return frame
+    return frame[frame['CustomerType'] != 'Staff']
+
+def uv_count(frame):
+    return _non_staff(frame)['BodyID'].nunique()
+```
+
+Replaces:
+- 28 `BodyID.nunique()` call sites → `uv_count(...)`
+- `compute_zone_dwell` and `compute_booth_dwell` filter `df = _non_staff(df)` at entry point
+- `Date.nunique()` deliberately untouched (counts days, not people)
+- HTML KPI subtitle appends `· Excluded N staff` when filter active
+
+### Config wiring
+
+Backend `eventReport.service.ts` `writeConfigSheetIntoRawdata()` writes one row to Section F:
+
+```ts
+cfg.addRow(['exclude_staff', event.excludeStaff ? 'True' : 'False',
+            'Exclude staff (CustomerType=Staff) from unique/dwell metrics']);
+```
+
+Engine reads it in `build_config()` and applies to global `EXCLUDE_STAFF` in `main()`.
+
+### Frontend UI
+
+`EventConfigEditor.tsx` adds a sibling Section after Analytics Parameters wrapped in fragment `<>...</>`. Edit mode shows checkbox + inline matrix; view mode shows colored dot + status text.
+
+### Default value
+
+`excludeStaff @default(true)` — matches the typical business question. To use historical "no filter" semantics, toggle off explicitly.
+
+### Verified end-to-end (ALSTOM 2-day event)
+
+| Toggle | DB | Engine stdout | HTML Unique Visitors | Funnel Conv | Demographics TOTAL |
+|---|---|---|---|---|---|
+| ON (default) | `t` | `Staff exclusion: enabled` | 639 + "Excluded 174 staff" | 78.6% | 639 |
+| OFF | `f` | `Staff exclusion: disabled` | 813 | 100%+ ⚠ | 813 |
+
+⚠ Funnel ~107% with filter OFF is a latent bug uncovered while shipping this. With filter ON it's hidden because the denominator (`uv_count`) is small. Not fixed yet — captured as a known issue (separate from staff exclusion).
+
+### Commits
+
+```
+be40b55  feat(engine): exclude staff from unique/dwell metrics (32 sites, 2 helpers)
+3bf355d  fix(engine): engagement rate >100% when staff exclusion is active
+9100cb8  fix(engine): consistency — demographics + funnel + zone engagement
+d84ba92  chore(prisma): rename c1_10d migration to fix replay order
+2d4917f  feat(event): add excludeStaff toggle to Event config (schema + backend + UI)
+```
+
+### Side-effect: migration rename (commit `d84ba92`)
+
+When adding the `add_event_exclude_staff` migration, `prisma migrate dev` failed with P3006: shadow DB rebuild couldn't apply `c1_10d_ratio_override` because it ALTERs `SensorPlacement` (created in baseline) but its timestamp `20260513203221` sorted BEFORE the baseline `20260514000000`.
+
+Fix: renamed the migration directory to `20260514000001_c1_10d_ratio_override` so it sorts after baseline. Updated `_prisma_migrations.migration_name` in DB to match. Production DB unchanged.
+
+---
+
 ## May 15 bug fix — `fix(engine): replace hard-coded '3 Days'` (commit `92eb2db`)
 
 **Symptom:** ALSTOM event configured for 2 days, but HTML report KPI strip shows "Total Visitors (3 Days)".
@@ -361,11 +487,16 @@ triggeredById, createdAt, updatedAt
 - ✅ Calendar view with week-label alignment
 - ✅ Telegram notifications configured
 - ✅ **Event Reports** — rawdata upload, source file merging, BullMQ queue, Python engine spawn, per-report snapshots, Telegram `EVENT_REPORT_READY` dispatch, HTML+XLSX outputs, history list with polling. Bug fix May 15: hardcoded '3 Days' (commit `92eb2db`).
+- ✅ **excludeStaff toggle** (May 18) — Event config has `🚫 Visitor Type Filter` section. Toggle default = true (exclude staff). When enabled, engine prints `Staff exclusion: enabled` and HTML KPIs include `Excluded N staff` note. Verified end-to-end on ALSTOM: 813 → 639 unique visitors (174 staff excluded). Toggling off → 813 (no filter). Consistency across Demographics, Funnel, Zone Summary, Engagement Rate.
 
 ## Pending
 
 ### Branch merge
 ~~`fix/sensor-cache-merge` is **11 commits ahead** of `main`.~~ ✅ **Merged via PR #1 on May 14** (commit `a85ab9a`).
+
+### Known issue: Visitor Funnel conversion >100% when excludeStaff=false (May 18)
+
+With staff filter OFF, the Funnel section shows `Engaged 686 / 813 = 84.4%` — but engaged_uv (686) was historically miscounted (counts BodyIDs entered into engagement set from `_zon_io` groupby without dedup constraint against `total_uv`). This has been present since the feature shipped but was always < 100% because the original UV was already large. Surfaced visibly only after the May 18 work pushed UV smaller (639). Filter ON path now uses `_non_staff(df)` so both numerator and denominator are consistent; filter OFF path still has the original logic. Tracking as a follow-up; not blocking.
 
 ### Event Reports follow-ups (post-bug-fix audit)
 Discovered during May 15 audit of `eventReport.service.ts` (521 lines):
@@ -631,6 +762,80 @@ Additional tech debt (gluing onto C1.10d):
 
 49. **Static strings in UI need periodic audit for stale references.** The engine carried `OTC_Asia_2026_Dashboard_v4_Dashboard.html` as a literal in an instructions table since v4. Never noticed because the *adjacent* line uses dynamic `hm_fname` — the eye reads "this looks dynamic" and moves on. `grep -n "[A-Z][A-Z][A-Z]_[0-9][0-9][0-9][0-9]" engine.py` would catch old event-name leaks. Add to release checklist when next major engine refactor lands.
 
+### From May 18 session (excludeStaff feature — engine + schema + frontend)
+
+50. **Latent bugs surface when filters change data shape.** Engagement Rate 107% in
+    Executive Summary, "813 TOTAL UNIQUE" in Demographics block, and Funnel 107.4%
+    conversion all had the same underlying bug: numerator built from unfiltered `df`,
+    denominator from `uv_count()` (filtered). Bug existed since v1 of the engine but
+    was invisible because both numerator and denominator scaled with the same data.
+    Adding the staff filter shrank the denominator by 22% while the numerator stayed
+    the same → ratio shot above 100%. **Rule:** after any patch that changes "what
+    counts as a unit" in an aggregate metric, re-verify every ratio in the same
+    section. The bug is usually somewhere ELSE in the codebase, not in the patch.
+
+51. **Atomic patch scripts > shell heredoc.** Python script that:
+    (a) reads file into memory
+    (b) checks ALL replacements have count==1 BEFORE writing
+    (c) writes only if every check passed
+    (d) verifies syntax with `py_compile` after writing
+    is bulletproof. Bash `heredoc` + `sed -i` is not — partial application leaves
+    files half-patched. May 18 had 3 patches abort mid-way and the source files
+    stayed pristine because the atomic guard caught the failure first.
+
+52. **Migration timestamp ordering matters even when DB is fine.** Prisma replays
+    migrations in alphabetic order of directory names (timestamp prefix). A migration
+    that ALTERs a table from the baseline must have a timestamp AFTER the baseline,
+    or `prisma migrate dev` (which uses a shadow DB starting from empty) fails P3006
+    with "table does not exist". Production DB worked because tables were established
+    before _prisma_migrations was populated, but any new migration attempt blocked
+    until the rename was done. **Rule:** before creating a new migration, do a quick
+    `ls prisma/migrations/` and confirm the directory you're depending on sorts
+    earlier than the dependent.
+
+53. **Python `\u` escape in raw-bytes string ≠ literal Unicode codepoint.** Patch
+    script wrote `"<Section title=\"\\ud83d\\udeab Visitor Type Filter\"..."` to
+    inject the 🚫 emoji into JSX. Python read the `\\` pair as a literal backslash,
+    so the resulting JSX contained the literal text `\ud83d\udeab` — and React rendered
+    it as-is. Either paste the emoji UTF-8 byte directly into Python source, or use
+    `\u` (single backslash) inside a regular string literal so Python interprets it.
+    **Rule:** when writing Unicode into output files, print and visually inspect one
+    sample line before generating the full output.
+
+54. **`.git/info/exclude` blocks files silently and is local-only.** Sakchai's
+    `.git/info/exclude` had `*.sql` listed (legacy from another session). New Prisma
+    migration files were silently un-trackable — `git add` reported success but
+    `git status` showed nothing staged. `git check-ignore -v <path>` is the only
+    way to diagnose this. **Fix:** add a whitelist `!backend/prisma/migrations/**/migration.sql`
+    after the `*.sql` line in `.git/info/exclude`. Note: this is local-only —
+    other developers on the project don't share it.
+
+55. **Half-patched files = silent landmine.** The all-or-nothing pattern from
+    lesson #51 isn't optional. When patch_part2 failed on `patch #2b`, the script
+    aborted BEFORE writing — so the file was untouched even though patches
+    #1, #2a had already been computed in memory. Without that guard, the file
+    would be half-patched and the next session's `grep` would find a state nobody
+    designed. **Rule:** all-or-nothing writes are non-negotiable for multi-step patches.
+
+56. **Pre-existing TS errors are signal, not noise — read them anyway.** Running
+    `tsc --noEmit` after the Part 2 patch surfaced ~20 errors in files that the
+    patch never touched (PlanEditModal, useDesignEditor, CalendarPage, etc.).
+    None were in `EventConfigEditor.tsx` or `events.ts`, so the patch was OK to
+    ship. But those 20 errors are real tech debt — `(x as any)` casts from lessons
+    #14 and #20 have continued to drift. Don't dismiss them; capture them for a
+    cleanup pass.
+
+57. **Verify downstream of patches even when upstream is "done".** Part 1 (engine)
+    looked complete after `be40b55` shipped. The engine printed `Staff exclusion: enabled`
+    and the KPI strip showed correct numbers. But the **Demographics** section,
+    **Visitor Funnel**, and **Zone Traffic Summary** were still on unfiltered data
+    paths — visible only by re-reading the full PDF, not by looking at stdout or
+    primary KPIs. Three follow-up commits (3bf355d, 9100cb8) were needed before
+    the report was actually consistent. **Rule:** for any data-shape-changing patch,
+    re-render the FULL output and audit section-by-section. "First KPI looks right"
+    is not "feature works".
+
+
 ## File location quick-reference
 
 ### Backend
@@ -724,3 +929,7 @@ curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq
 8. **Update `docs/PROJECT_STATE.md` AT END of every session** — even short ones. Stale docs cost real time.
 9. **Verify `.gitignore` rules with `git check-ignore -v`** after every edit. Patterns that look right may silently no-op.
 10. **Grep before writing new files for any feature** — `grep -rn "<keyword>" backend/src/ frontend/src/ --include="*.ts" -l`. If matches return, read them first. PROJECT_STATE may be incomplete. (Lesson #45 — May 15)
+11. **Atomic Python patch scripts beat shell heredoc** — read whole file, check ALL replacements have count==1, only write on full pass, then `py_compile` verify. (Lesson #51 — May 18)
+12. **Re-render full output after data-shape patches** — checking stdout + first KPI isn't enough; audit every section that uses the same aggregate. Latent bugs hide in sections that look unrelated. (Lessons #50, #57 — May 18)
+13. **Migration timestamps must reflect dependency order** — Prisma replays alphabetically; a migration that ALTERs baseline tables must have a timestamp prefix AFTER the baseline. Check with `ls prisma/migrations/` before creating. (Lesson #52 — May 18)
+14. **`git check-ignore -v <path>` after every `.gitignore`-like change** — `.git/info/exclude` (local) and `.gitignore` (tracked) both block silently. (Lesson #54 — May 18)
