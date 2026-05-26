@@ -102,6 +102,14 @@ def uv_count(frame):
     everywhere we want 'unique customers' rather than 'unique people'."""
     return _non_staff(frame)['BodyID'].nunique()
 
+# ── Dwell time benchmark by zone (behavior-based) ─────────────
+# Per-zone target dwell (seconds). Populated from _config Section D.
+# SHOW_DWELL_BENCHMARK toggles the dashboard table. Both set in main().
+SHOW_DWELL_BENCHMARK = False
+ZONE_BENCHMARK = {}   # zone_name -> benchmark seconds
+ZONE_DESC = {}        # zone_name -> human description
+ZONE_BENCHMARK_MODE = {}  # zone_name -> 'higher_better' | 'lower_better'
+
 
 
 
@@ -488,6 +496,27 @@ def load_config_from_excel(filepath):
     cfg['ZONE_ABBREV'] = {r.iloc[1].strip(): r.iloc[2].strip()
                           for _,r in d_sec.iterrows()
                           if pd.notna(r.iloc[2]) and str(r.iloc[2]).strip()}
+    # Column 3 = dwell_benchmark_sec, col 4 = description, col 5 = benchmark_mode
+    _zbench = {}
+    _zdesc = {}
+    _zmode = {}
+    for _, r in d_sec.iterrows():
+        zname = str(r.iloc[1]).strip()
+        if not zname:
+            continue
+        if len(r) > 3 and pd.notna(r.iloc[3]) and str(r.iloc[3]).strip():
+            try:
+                _zbench[zname] = int(float(r.iloc[3]))
+            except (ValueError, TypeError):
+                pass
+        if len(r) > 4 and pd.notna(r.iloc[4]) and str(r.iloc[4]).strip():
+            _zdesc[zname] = str(r.iloc[4]).strip()
+        if len(r) > 5 and pd.notna(r.iloc[5]) and str(r.iloc[5]).strip():
+            _m = str(r.iloc[5]).strip().lower()
+            _zmode[zname] = 'lower_better' if _m == 'lower_better' else 'higher_better'
+    cfg['ZONE_BENCHMARK'] = _zbench
+    cfg['ZONE_DESC'] = _zdesc
+    cfg['ZONE_BENCHMARK_MODE'] = _zmode
 
     # ── E: Activities ────────────────────────────────────────────
     e_sec = read_section(raw, 'E —')
@@ -513,6 +542,8 @@ def load_config_from_excel(filepath):
     # exclude_staff: enables staff filter for unique/dwell metrics (default True)
     _exc = str(cfg.get('exclude_staff', 'true')).strip().lower()
     cfg['EXCLUDE_STAFF']             = _exc in ('true', '1', 'yes', 'on')
+    _sdb = str(cfg.get('show_dwell_benchmark', 'false')).strip().lower()
+    cfg['SHOW_DWELL_BENCHMARK']      = _sdb in ('true', '1', 'yes', 'on')
     cfg['DWELL_MIN_SEC']             = int(cfg.get('dwell_min_sec', 10))
     cfg['DWELL_MAX_SEC']             = int(cfg.get('dwell_max_sec', 3600))
     cfg['ENGAGEMENT_THRESHOLD_SEC']  = int(cfg.get('engagement_threshold_sec', 60))
@@ -3023,6 +3054,59 @@ def generate_full_html(df, output_path):
     else:
         s.append(no_data_block())
 
+    # ── Dwell Time Benchmark by Zone (behavior-based) ─────────────
+    # Shown only when SHOW_DWELL_BENCHMARK is on. Compares actual avg
+    # zone dwell against per-zone targets set in event config.
+    if SHOW_DWELL_BENCHMARK and len(ddf) > 0 and ZONE_BENCHMARK:
+        s.append(sec_hdr('\U0001F3AF', 'Dwell Time Benchmark by Zone',
+                         'Behavior-based targets per zone \u00b7 actual vs benchmark'))
+        s.append('<p class="tbl-note" style="margin-bottom:6px">'
+                 'Benchmarks reflect expected visitor behavior in each zone '
+                 '(interaction complexity), not a single flat target.</p>')
+        s.append('<table class="dt"><thead><tr>'
+                 '<th>Zone</th><th>Description</th>'
+                 '<th>Actual Avg Dwell</th><th>Benchmark</th><th>Status</th>'
+                 '</tr></thead><tbody>')
+        _row_i = 0
+        for z in ZONES:
+            _bench_sec = ZONE_BENCHMARK.get(z)
+            if _bench_sec is None:
+                continue   # zone has no benchmark set — skip
+            _g = ddf[ddf['loc'] == z]
+            _actual_min = _g['min'].mean() if len(_g) > 0 else None
+            _bench_min = _bench_sec / 60.0
+            _desc = ZONE_DESC.get(z, '')
+            _mode = ZONE_BENCHMARK_MODE.get(z, 'higher_better')
+            _dir = '\u2264' if _mode == 'lower_better' else '\u2265'  # ≤ or ≥
+            if _actual_min is None:
+                _actual_str = '\u2014'
+                _status = '<span style="color:#9CA3AF">no data</span>'
+            else:
+                _actual_str = f'{_actual_min:.1f} min'
+                if _mode == 'lower_better':
+                    _met = _actual_min <= _bench_min
+                    _fail_label = '\u2717 Over'   # stayed too long
+                else:
+                    _met = _actual_min >= _bench_min
+                    _fail_label = '\u2717 Below'  # stayed too short
+                if _met:
+                    _status = '<span style="color:#1A7A45;font-weight:700">\u2713 Met</span>'
+                else:
+                    _status = f'<span style="color:#B02020;font-weight:700">{_fail_label}</span>'
+            _alt = 'alt' if _row_i % 2 == 0 else ''
+            _row_i += 1
+            s.append(f'<tr class="{_alt}"><td>{z}</td>'
+                     f'<td>{_desc}</td>'
+                     f'<td class="mono">{_actual_str}</td>'
+                     f'<td class="mono">{_dir} {_bench_min:.0f} min</td>'
+                     f'<td>{_status}</td></tr>')
+        s.append('</tbody></table>')
+        s.append('<p class="tbl-note">&#9432;&nbsp; '
+                 '<b>Status</b> = \u2713 Met when a zone hits its target. '
+                 '\u2265 means "higher is better" (longer dwell = good, e.g. consultation); '
+                 '\u2264 means "lower is better" (shorter dwell = good, e.g. photo booth). '
+                 'Zones without a configured benchmark are omitted.</p>')
+
     sections.append(('\n'.join(s), 4))
 
     # ─────────────────────────────────────────────────────────────
@@ -3684,6 +3768,7 @@ def main():
     global ENGAGEMENT_THRESHOLD_SEC, DISPLAY_HOURS_START, DISPLAY_HOURS_END
     global INPUT_FILES, EVENT_PROFILE, PAGE_GROUPS, VENUE_TYPE, SHOW_PASSERBY, SPONSOR_ZONES
     global EXCLUDE_STAFF
+    global SHOW_DWELL_BENCHMARK, ZONE_BENCHMARK, ZONE_DESC, ZONE_BENCHMARK_MODE
 
     # ── Load config (Excel _config sheet or event_config.py) ───
     if _USE_EXCEL_CONFIG:
@@ -3710,6 +3795,12 @@ def main():
         DISPLAY_HOURS_END        = _cfg["DISPLAY_HOURS_END"]
         EXCLUDE_STAFF            = _cfg.get("EXCLUDE_STAFF", True)
         print(f'  Staff exclusion: {"enabled" if EXCLUDE_STAFF else "disabled"}')
+        SHOW_DWELL_BENCHMARK     = _cfg.get("SHOW_DWELL_BENCHMARK", False)
+        ZONE_BENCHMARK           = _cfg.get("ZONE_BENCHMARK", {})
+        ZONE_DESC                = _cfg.get("ZONE_DESC", {})
+        ZONE_BENCHMARK_MODE      = _cfg.get("ZONE_BENCHMARK_MODE", {})
+        if SHOW_DWELL_BENCHMARK:
+            print(f'  Dwell benchmark table: enabled ({len(ZONE_BENCHMARK)} zone target(s))')
         INPUT_FILES    = [_RAWDATA_FILE]
         # event_type / profile from Section A of _config sheet
         EVENT_PROFILE  = _cfg.get('event_type', 'full').lower().strip()

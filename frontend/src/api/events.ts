@@ -38,6 +38,9 @@ export interface EventZone {
   eventId: string;
   name: string;
   abbrev?: string | null;
+  description?: string | null;
+  dwellBenchmarkSec?: number | null;
+  dwellBenchmarkMode?: string | null;
   sortOrder: number;
 }
 
@@ -99,6 +102,7 @@ export interface Event {
   dwellMaxSec: number;
   engagementThresholdSec: number;
   excludeStaff: boolean;
+  showDwellBenchmark: boolean;
   sponsorZones?: string | null;
   customerId?: string | null;
   customer?: { id: string; customerCode: string; customerName: string } | null;
@@ -135,6 +139,7 @@ export interface EventCreateInput {
   dwellMaxSec?: number;
   engagementThresholdSec?: number;
   excludeStaff?: boolean;
+  showDwellBenchmark?: boolean;
   sponsorZones?: string;
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
   gates?: Array<{ name: string; gateType: GateType; sortOrder?: number }>;

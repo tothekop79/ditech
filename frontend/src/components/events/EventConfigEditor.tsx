@@ -225,7 +225,11 @@ function ZonesEditor({ event }: { event: Event }) {
 
   const save = useMutation({
     mutationFn: () => eventsApi.setZones(event.id, items.map((z) => ({
-      name: z.name, abbrev: z.abbrev || undefined, sortOrder: z.sortOrder,
+      name: z.name, abbrev: z.abbrev || undefined,
+      description: z.description || undefined,
+      dwellBenchmarkSec: z.dwellBenchmarkSec ?? undefined,
+      dwellBenchmarkMode: z.dwellBenchmarkMode || undefined,
+      sortOrder: z.sortOrder,
     }))),
     onSuccess: () => {
       showToast('Zones saved');
@@ -257,12 +261,41 @@ function ZonesEditor({ event }: { event: Event }) {
                 }}
                 placeholder="Abbrev"
                 className="w-20 px-1.5 py-1 text-xs border border-gray-200 rounded font-mono" />
+              <input value={z.description || ''}
+                onChange={(e) => {
+                  const next = [...items]; next[i] = { ...z, description: e.target.value };
+                  setItems(next);
+                }}
+                placeholder="Description"
+                className="flex-1 px-1.5 py-1 text-xs border border-gray-200 rounded" />
+              <input type="number" min={0} step={0.5}
+                value={z.dwellBenchmarkSec != null ? z.dwellBenchmarkSec / 60 : ''}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const next = [...items];
+                  next[i] = { ...z, dwellBenchmarkSec: v === '' ? null : Math.round(parseFloat(v) * 60) };
+                  setItems(next);
+                }}
+                placeholder="min"
+                title="Dwell benchmark (minutes)"
+                className="w-16 px-1.5 py-1 text-xs border border-gray-200 rounded" />
+              <select value={z.dwellBenchmarkMode || 'higher_better'}
+                onChange={(e) => {
+                  const next = [...items]; next[i] = { ...z, dwellBenchmarkMode: e.target.value };
+                  setItems(next);
+                }}
+                title="Benchmark direction"
+                className="w-20 px-1 py-1 text-xs border border-gray-200 rounded">
+                <option value="higher_better">≥ good</option>
+                <option value="lower_better">≤ good</option>
+              </select>
               <button onClick={() => setItems(items.filter((_, idx) => idx !== i))}
                 className="text-xs text-gray-400 hover:text-red-600 px-1">✕</button>
             </div>
           ))}
           <button onClick={() => setItems([...items, {
-            id: '', eventId: event.id, name: '', abbrev: '', sortOrder: items.length,
+            id: '', eventId: event.id, name: '', abbrev: '',
+            description: '', dwellBenchmarkSec: null, dwellBenchmarkMode: 'higher_better', sortOrder: items.length,
           }])}
             className="w-full text-xs px-2 py-1 border border-dashed border-gray-300 rounded text-gray-600 hover:bg-gray-50">
             + Add zone
@@ -275,6 +308,12 @@ function ZonesEditor({ event }: { event: Event }) {
               <li key={z.id} className="flex items-center gap-2 py-1 px-2 bg-gray-50 rounded">
                 <span>{z.name}</span>
                 {z.abbrev && <span className="text-[10px] text-gray-500 font-mono">[{z.abbrev}]</span>}
+                {z.description && <span className="text-[10px] text-gray-400">{z.description}</span>}
+                {z.dwellBenchmarkSec != null && (
+                  <span className="ml-auto text-[10px] text-blue-600 font-mono">
+                    🎯 {z.dwellBenchmarkMode === 'lower_better' ? '≤' : '≥'} {(z.dwellBenchmarkSec / 60).toFixed(0)} min
+                  </span>
+                )}
               </li>
             ))}
           </ul>
@@ -399,6 +438,7 @@ function ParametersEditor({ event }: { event: Event }) {
     dwellMaxSec: event.dwellMaxSec,
     engagementThresholdSec: event.engagementThresholdSec,
     excludeStaff: event.excludeStaff ?? true,
+    showDwellBenchmark: event.showDwellBenchmark ?? false,
     profile: event.profile,
     venueType: event.venueType,
     showPasserby: event.showPasserby,
@@ -412,6 +452,7 @@ function ParametersEditor({ event }: { event: Event }) {
       dwellMaxSec: event.dwellMaxSec,
       engagementThresholdSec: event.engagementThresholdSec,
       excludeStaff: event.excludeStaff ?? true,
+    showDwellBenchmark: event.showDwellBenchmark ?? false,
       profile: event.profile,
       venueType: event.venueType,
       showPasserby: event.showPasserby,
@@ -509,6 +550,12 @@ function ParametersEditor({ event }: { event: Event }) {
               onChange={(e) => setForm({ ...form, excludeStaff: e.target.checked })} />
             <span className="font-medium text-sm">Exclude staff from unique visitor counts</span>
           </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox"
+              checked={!!form.showDwellBenchmark}
+              onChange={(e) => setForm({ ...form, showDwellBenchmark: e.target.checked })} />
+            <span className="font-medium text-sm">Show Dwell Time Benchmark by Zone table</span>
+          </label>
           <div className="ml-6 space-y-2 text-gray-600">
             <p>ตัดพนักงาน (<code className="text-[10px] bg-gray-100 px-1 rounded">CustomerType = 'Staff'</code>) ออกจาก:</p>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
@@ -542,6 +589,12 @@ function ParametersEditor({ event }: { event: Event }) {
               ? 'Unique Visitors, Zone Unique, Dwell, Demographics, Engagement exclude staff'
               : 'All metrics count staff and customers equally'}
           </p>
+          <div className="flex items-center gap-2 mt-2">
+            <span className={`inline-block w-3 h-3 rounded-sm ${form.showDwellBenchmark ? 'bg-green-500' : 'bg-gray-300'}`}></span>
+            <span className="font-medium">
+              {form.showDwellBenchmark ? 'Dwell benchmark table shown in dashboard' : 'Dwell benchmark table hidden'}
+            </span>
+          </div>
         </div>
       )}
     </Section>

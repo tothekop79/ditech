@@ -287,9 +287,9 @@ ${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${eve
     cfg.addRow([]);
 
     cfg.addRow(['  D — ZONE CONFIGURATION']);
-    cfg.addRow(['order', 'zone_name', 'abbrev (optional)']);
+    cfg.addRow(['order', 'zone_name', 'abbrev (optional)', 'dwell_benchmark_sec', 'description', 'benchmark_mode']);
     event.zones.forEach((z: any, i: number) => {
-      cfg.addRow([i + 1, z.name, z.abbrev || '']);
+      cfg.addRow([i + 1, z.name, z.abbrev || '', z.dwellBenchmarkSec ?? '', z.description || '', z.dwellBenchmarkMode || 'higher_better']);
     });
     if (event.zones.length === 0) cfg.addRow(['  (no zones configured)']);
     cfg.addRow([]);
@@ -309,6 +309,7 @@ ${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${eve
     cfg.addRow(['dwell_max_sec', event.dwellMaxSec, 'Maximum dwell time']);
     cfg.addRow(['engagement_threshold_sec', event.engagementThresholdSec, 'Engaged threshold']);
     cfg.addRow(['exclude_staff', event.excludeStaff ? 'True' : 'False', 'Exclude staff (CustomerType=Staff) from unique/dwell metrics']);
+    cfg.addRow(['show_dwell_benchmark', event.showDwellBenchmark ? 'True' : 'False', 'Show behavior-based dwell benchmark table per zone']);
     cfg.addRow(['display_hours_start', event.displayHoursStart, 'Heatmap display start']);
     cfg.addRow(['display_hours_end', event.displayHoursEnd, 'Heatmap display end']);
     cfg.addRow(['event_profile', event.profile.toLowerCase(), 'simple / standard / full']);

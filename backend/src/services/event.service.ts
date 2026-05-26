@@ -21,6 +21,7 @@ export interface EventCreateInput {
   dwellMaxSec?: number;
   engagementThresholdSec?: number;
   excludeStaff?: boolean;
+  showDwellBenchmark?: boolean;
   sponsorZones?: string;
   // Initial setup data
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
@@ -131,6 +132,7 @@ export const eventService = {
         dwellMaxSec: data.dwellMaxSec ?? 3600,
         engagementThresholdSec: data.engagementThresholdSec ?? 60,
         excludeStaff: data.excludeStaff ?? true,
+        showDwellBenchmark: data.showDwellBenchmark ?? false,
         sponsorZones: data.sponsorZones || null,
         createdById: createdById || null,
         days: { create: days },
@@ -197,6 +199,7 @@ export const eventService = {
     if (data.dwellMaxSec !== undefined) updateData.dwellMaxSec = data.dwellMaxSec;
     if (data.engagementThresholdSec !== undefined) updateData.engagementThresholdSec = data.engagementThresholdSec;
     if (data.excludeStaff !== undefined) updateData.excludeStaff = data.excludeStaff;
+    if (data.showDwellBenchmark !== undefined) updateData.showDwellBenchmark = data.showDwellBenchmark;
     if (data.sponsorZones !== undefined) updateData.sponsorZones = data.sponsorZones;
 
     return prisma.event.update({ where: { id }, data: updateData });
@@ -228,11 +231,19 @@ export const eventService = {
   },
 
   // ── Replace zones ──
-  async setZones(eventId: string, zones: Array<{ name: string; abbrev?: string; sortOrder?: number }>) {
+  async setZones(eventId: string, zones: Array<{ name: string; abbrev?: string; description?: string; dwellBenchmarkSec?: number | null; dwellBenchmarkMode?: string | null; sortOrder?: number }>) {
     await prisma.eventZone.deleteMany({ where: { eventId } });
     if (!zones.length) return { count: 0 };
     return prisma.eventZone.createMany({
-      data: zones.map((z, i) => ({ ...z, eventId, sortOrder: z.sortOrder ?? i })),
+      data: zones.map((z, i) => ({
+        eventId,
+        name: z.name,
+        abbrev: z.abbrev,
+        description: z.description ?? null,
+        dwellBenchmarkSec: z.dwellBenchmarkSec ?? null,
+        dwellBenchmarkMode: z.dwellBenchmarkMode ?? null,
+        sortOrder: z.sortOrder ?? i,
+      })),
     });
   },
 

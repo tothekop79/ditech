@@ -331,6 +331,7 @@ model Event {
   dwellMaxSec            Int                  @default(3600)
   engagementThresholdSec Int                  @default(60)
   excludeStaff           Boolean              @default(true)
+  showDwellBenchmark     Boolean              @default(false)
   sponsorZones           String?
   customerId             String?
   createdById            String?
@@ -379,11 +380,14 @@ model EventGate {
 }
 
 model EventZone {
-  id        String  @id @default(uuid())
-  eventId   String
-  name      String
-  abbrev    String?
-  sortOrder Int     @default(0)
+  id                String  @id @default(uuid())
+  eventId           String
+  name              String
+  abbrev            String?
+  description        String?
+  dwellBenchmarkSec  Int?
+  dwellBenchmarkMode String?
+  sortOrder          Int     @default(0)
   event     Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@index([eventId])
