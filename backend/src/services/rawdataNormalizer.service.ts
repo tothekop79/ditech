@@ -127,11 +127,13 @@ export async function verifyRawdata(
   // SOURCE FILES CHECK — count uploaded CaptureRecordsDetails files
   // (we do this via fs scan since we don't have access to rawdataFilesService here
   //  — would create a circular import; this duplicates a tiny bit of logic.)
+  let sourceFileCount = 0;
   try {
     const eventDir = path.dirname(filepath);
     const sourceDir = path.join(eventDir, 'source');
     const sourceFiles = await fs.readdir(sourceDir).catch(() => [] as string[]);
     const xlsxFiles = sourceFiles.filter((n) => /\.(xlsx|xlsm)$/i.test(n));
+    sourceFileCount = xlsxFiles.length;
     if (xlsxFiles.length > 0) {
       checks.push({
         level: 'success',
@@ -142,19 +144,31 @@ export async function verifyRawdata(
     }
   } catch { /* ignore */ }
 
-  // 1. File exists
+  // 1. Rawdata.xlsx — built from source files at generate time if missing
   let stat;
+  let rawdataExists = false;
   try {
     stat = await fs.stat(filepath);
+    rawdataExists = true;
     checks.push({
       level: 'success',
-      label: 'Rawdata.xlsx uploaded',
+      label: 'Rawdata.xlsx ready',
       detail: `${(stat.size / 1024 / 1024).toFixed(2)} MB`,
       ok: true,
     });
   } catch {
-    checks.push({ level: 'error', label: 'Rawdata.xlsx not found — please upload', ok: false });
-    return { checks, canGenerate: false };
+    if (sourceFileCount > 0) {
+      // Source files present — generate() merges them into Rawdata.xlsx.
+      // Matches hasRawdata() and the generate flow. Not a blocker.
+      checks.push({
+        level: 'info',
+        label: 'Rawdata.xlsx will be built from source files at generate time',
+        ok: true,
+      });
+    } else {
+      checks.push({ level: 'error', label: 'No rawdata — please upload source files', ok: false });
+      return { checks, canGenerate: false };
+    }
   }
 
   // 2. Days configured
@@ -183,7 +197,9 @@ export async function verifyRawdata(
     });
   }
 
-  // 4. Inspect Excel — sheet structure + record counts + locations
+  // 4. Inspect Excel — sheet structure + record counts + locations.
+  //    Skipped when Rawdata.xlsx doesn't exist yet (built at generate time).
+  if (rawdataExists) {
   try {
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(filepath);
@@ -361,6 +377,7 @@ export async function verifyRawdata(
       ok: false,
     });
   }
+  } // end if (rawdataExists)
 
   const hasErrors = checks.some((c) => c.level === 'error');
   return { checks, canGenerate: !hasErrors };

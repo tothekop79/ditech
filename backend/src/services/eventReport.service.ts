@@ -13,6 +13,9 @@ const UPLOADS_ROOT = process.env.UPLOADS_ROOT || '/app/uploads';
 const EVENTS_DIR = path.join(UPLOADS_ROOT, 'events');
 const PYTHON_ENGINE = process.env.PYTHON_ENGINE_PATH || '/app/python-engine/dashboard_engine.py';
 const PYTHON_CMD = process.env.PYTHON_CMD || 'python3';
+// Engine spawn timeout. Default 15 min; large multi-day events need more
+// than the old hard-coded 5 min (a 2-day ~8MB run takes ~7.5 min).
+const ENGINE_TIMEOUT_MS = Number(process.env.ENGINE_TIMEOUT_MS) || 15 * 60 * 1000;
 
 // ── File names within event folder ──
 const RAWDATA_FILENAME = 'Rawdata.xlsx';   // engine looks for this
@@ -439,8 +442,8 @@ ${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${eve
 
       const timeout = setTimeout(() => {
         child.kill('SIGTERM');
-        reject(new Error('Engine timeout (5 minutes)'));
-      }, 5 * 60 * 1000);
+        reject(new Error(`Engine timeout (${Math.round(ENGINE_TIMEOUT_MS / 60000)} minutes)`));
+      }, ENGINE_TIMEOUT_MS);
 
       child.on('close', (code) => {
         clearTimeout(timeout);

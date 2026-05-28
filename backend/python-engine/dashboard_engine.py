@@ -3417,7 +3417,7 @@ body{max-width:1100px;margin:0 auto}
 
 /* ── Print: force A4 pages with proper breaks ──────────── */
 @media print{
-  @page{size:A4 portrait;margin:10mm 10mm 18mm 10mm}
+  @page{size:A4 portrait;margin:10mm 10mm 12mm 10mm}
   body{background:#fff;padding:0;font-size:9.5px;max-width:100%;margin:0}
   .no-print{display:none!important}
 
@@ -3428,12 +3428,15 @@ body{max-width:1100px;margin:0 auto}
     display:block!important;height:0!important;margin:0!important;padding:0!important
   }
 
-  /* Footer fixed to bottom of every printed page */
-  .pfooter{position:fixed;bottom:3mm;left:10mm;right:10mm;
+  /* Footer as a normal flow element at the very end of the document.
+     It is rendered only once (is_last), so static positioning places it
+     after the final content instead of floating on top of it. */
+  .pfooter{position:static;
            text-align:center;font-size:7px;color:#666;
-           padding-top:2mm;margin:0;
+           margin-top:8mm;padding-top:2mm;
            border-top:1px solid #ccc;
            background:#fff;
+           page-break-inside:avoid;break-inside:avoid;
            word-break:break-word;line-height:1.4}
 
   /* Prevent SMALL atomic blocks from splitting — let containers flow */
@@ -3443,8 +3446,12 @@ body{max-width:1100px;margin:0 auto}
   .dt thead,.hm thead{
     page-break-inside:avoid;break-inside:avoid
   }
-  /* Table rows: keep together */
-  .dt tbody tr,.hm tbody tr{
+  /* Repeat table headers at the top of every printed page */
+  .dt thead,.hm thead{
+    display:table-header-group
+  }
+  /* Table rows: keep together (all report tables use .dt or .hm) */
+  .dt tbody tr,.hm tbody tr,.dt tr,.hm tr{
     page-break-inside:avoid;break-inside:avoid
   }
   /* Section headers should stay with at least the next block */
