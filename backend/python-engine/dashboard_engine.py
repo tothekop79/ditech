@@ -3316,8 +3316,14 @@ def generate_full_html(df, output_path):
     gpp = max(all_vals_p);  gpph = HOUR_LBLS[all_vals_p.index(gpp)  % len(HOUR_LBLS)] if gpp>0  else '--'
     # Staff-exclusion footnote: only set when filter is active and staff exist
     if EXCLUDE_STAFF and 'CustomerType' in ent.columns:
-        _staff_n = ent[ent['CustomerType']=='Staff']['BodyID'].nunique()
-        _staff_note = f' · Excluded {_staff_n:,} staff' if _staff_n > 0 else ''
+        _staff_rows    = ent[ent['CustomerType']=='Staff']
+        _staff_entries = len(_staff_rows)                      # entrance 'in' events excluded from visitor count
+        _staff_people  = _staff_rows['BodyID'].nunique()       # distinct staff behind those entries
+        if _staff_entries > 0:
+            _people_sfx = f' ({_staff_people:,} staff)' if _staff_people else ''
+            _staff_note = f' · Excluded {_staff_entries:,} staff entries{_people_sfx}'
+        else:
+            _staff_note = ''
     else:
         _staff_note = ''
     s.append(kpi_cards(
