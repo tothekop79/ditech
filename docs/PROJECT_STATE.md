@@ -15,7 +15,8 @@
   - `f59f5a4` feat: per-zone benchmark target (minutes) + direction (≥ good / ≤ good) + dashboard table comparing actual avg dwell vs benchmark with ✓ Met / ✗ Below / ✗ Over. Opt-in via `Event.showDwellBenchmark`. Verified on SHIN RAMYUN (12 zones, lower_better): Photo Booth 4.4min ≤ 10min → Met; Consultation 6.9min ≤ 2min → Over.
   - `7cb681e` fix: (1) `verifyRawdata` accepts source files before Rawdata.xlsx merge — unblocks every NEW event (Generate button was disabled despite source files present); (2) PDF footer overlap — `.pfooter` position:fixed → static + thead repeat per page + broaden row-break protection; (3) engine spawn timeout 5min → 15min via `ENGINE_TIMEOUT_MS` env (2-day SHIN RAMYUN run takes ~7.5min and was failing at the old 5min limit).
 - 🔬 **May 27 investigation (not committed)** — "Excluded N staff" stat reflects UV-eligible staff (those seen at an Entrance gate), not all unique staff in the raw file. SHIN RAMYUN had 5 unique Staff BodyIDs but 2 only appeared zone-only / sensor-ghost (one with a `-1` re-id suffix), so the engine counted 3. Also confirmed engine is single-thread CPU-bound (103% of 1 core, RAM 6%) — do NOT add hardware; optimize the dwell-pairing algorithm instead. Both deferred.
-- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones); Event Reports follow-ups (job timeout, service split). Longer-term: vectorize engine dwell pairing (~225s/day single-thread → target ~30-60s) + relabel "Excluded N staff".
+- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones); Event Reports follow-ups (job timeout, service split). Longer-term: vectorize engine dwell pairing (~225s/day single-thread → target ~30-60s). [relabel "Excluded N staff" ✅ done May 28]
+- ✅ **May 28 — "Excluded N staff" relabel shipped (commits `abd9567` → `6c5c3d6`, pushed to main)** — footnote เปลี่ยนจากนับ unique BodyID (`.nunique()` → 3) เป็น staff entrance entries (`len` → 109) เพื่อตอบ "ตัด staff ออกจาก visitor กี่ครั้ง". ตัด `(N staff)` ในวงเล็บออกตาม insight สำคัญ: เลข 3 เดิมคือ **3 uniform templates** ที่ป้อนให้ ReID ไม่ใช่ 3 คน — รายงานเป็นจำนวนคนจะทำให้ผู้จัดงานเข้าใจผิด. Verify ด้วยข้อมูลจริง SHIN RAMYUN (1,264 staff rows รวม 2 วัน) โดยไม่ regenerate. ปิดงานค้าง lesson #64.
 - ⏭️ **Branch state**: `feat/exclude-staff` + `feat/exclude-staff-config` merged (May 18). `feat/dwell-benchmark` merged to main (May 27). `main` now at `7cb681e`.
 
 Latest commit: `7cb681e` "fix: verify source files + PDF footer overlap + engine timeout"
@@ -923,6 +924,18 @@ Additional tech debt (gluing onto C1.10d):
     O(rows) dwell pairing. For an N-day run budget
     `ceil(225 × N × 1.5 / 60)` minutes (1.5× safety) and set `ENGINE_TIMEOUT_MS`
     accordingly until the algorithm is vectorized.
+
+66. **ReID จับ staff ตาม uniform template ไม่ใช่ตัวบุคคล — อย่ารายงาน unique BodyID เป็น "จำนวนคน".**
+    "Excluded 3 staff" เดิม (`.nunique`) ถูกเข้าใจผิดว่า 3 คน แต่จริง ๆ คือ
+    3 uniform templates ที่ป้อนให้ ReID (จำพนักงานจากชุด ไม่ใช่ใบหน้า/ตัวตน).
+    footnote (engine ~L3318) เปลี่ยนเป็น staff entrance entries
+    (`len(ent[CustomerType=='Staff'])` = 109) สื่อ "ตัดออกจาก visitor กี่ครั้ง"
+    ไม่อ้างจำนวนคน. `ent` เป็น in-gate subset อยู่แล้ว
+    (`df[(Type=='Entrance')&(Event=='in')]`) จึง entries = len ตรง ๆ.
+    Verify raw: Rawdata.xlsx ไม่มี header (cols = COL_NAMES ตามตำแหน่ง, มี
+    คอลัมน์จีน 年龄/性别), ไม่มีคอลัมน์ Type (engine สร้างจาก
+    Location ∈ ENTRANCE_GATES ผ่านชีต `_config`), data แยกชีตรายวัน
+    `data_YYYY-MM-DD` ต้อง concat ก่อน. (commits abd9567 → 6c5c3d6)
 
 
 ## File location quick-reference
