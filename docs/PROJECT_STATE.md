@@ -1,4 +1,4 @@
-# DITECH Installation Planner — Current State (May 18, 2026)
+# DITECH Installation Planner — Current State (May 27, 2026)
 
 ## 📌 TL;DR
 
@@ -11,10 +11,14 @@
 - 🔍 **May 15 audit revealed** — Event Reports feature was already fully built (backend + frontend) but not reflected in earlier PROJECT_STATE. See "Event Reports infrastructure" section below.
 - ✅ **May 18 — excludeStaff feature shipped end-to-end (5 commits, `be40b55` → `2d4917f`, merged to main)** — Event reports can now exclude `CustomerType='Staff'` rows from unique/dwell/engagement/demographics metrics via Event config toggle (default: enabled). Discovered + fixed 3 latent bugs that surfaced when the filter shrank the UV denominator. UI shows a `🚫 Visitor Type Filter` section with an inline matrix explaining scope. See "excludeStaff feature" section below.
 - 🧹 **May 18 housekeeping** — Renamed `20260513203221_c1_10d_ratio_override` migration → `20260514000001_*` so Prisma replays it AFTER the baseline (was failing P3006 shadow DB rebuild). Updated `_prisma_migrations` table in-place. (Commit `d84ba92`)
-- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones); Event Reports follow-ups (job timeout, service split)
-- ⏭️ **Branch state**: `feat/exclude-staff` and `feat/exclude-staff-config` both merged to main. `main` now at `2d4917f`.
+- ✅ **May 26–27 — Dwell Time Benchmark by Zone + 3 fixes shipped (2 commits, merged to main)**:
+  - `f59f5a4` feat: per-zone benchmark target (minutes) + direction (≥ good / ≤ good) + dashboard table comparing actual avg dwell vs benchmark with ✓ Met / ✗ Below / ✗ Over. Opt-in via `Event.showDwellBenchmark`. Verified on SHIN RAMYUN (12 zones, lower_better): Photo Booth 4.4min ≤ 10min → Met; Consultation 6.9min ≤ 2min → Over.
+  - `7cb681e` fix: (1) `verifyRawdata` accepts source files before Rawdata.xlsx merge — unblocks every NEW event (Generate button was disabled despite source files present); (2) PDF footer overlap — `.pfooter` position:fixed → static + thead repeat per page + broaden row-break protection; (3) engine spawn timeout 5min → 15min via `ENGINE_TIMEOUT_MS` env (2-day SHIN RAMYUN run takes ~7.5min and was failing at the old 5min limit).
+- 🔬 **May 27 investigation (not committed)** — "Excluded N staff" stat reflects UV-eligible staff (those seen at an Entrance gate), not all unique staff in the raw file. SHIN RAMYUN had 5 unique Staff BodyIDs but 2 only appeared zone-only / sensor-ghost (one with a `-1` re-id suffix), so the engine counted 3. Also confirmed engine is single-thread CPU-bound (103% of 1 core, RAM 6%) — do NOT add hardware; optimize the dwell-pairing algorithm instead. Both deferred.
+- ⏭️ **Next**: Commit 5 (label visibility + draggable labels) closes Batch 1; then C1.10d#4 (Near/Far ratio UX), C1.11 (IN/OUT arrows), C2 (export PDF/PNG + polygon zones); Event Reports follow-ups (job timeout, service split). Longer-term: vectorize engine dwell pairing (~225s/day single-thread → target ~30-60s) + relabel "Excluded N staff".
+- ⏭️ **Branch state**: `feat/exclude-staff` + `feat/exclude-staff-config` merged (May 18). `feat/dwell-benchmark` merged to main (May 27). `main` now at `7cb681e`.
 
-Latest commit: `2d4917f` "feat(event): add excludeStaff toggle to Event config"
+Latest commit: `7cb681e` "fix: verify source files + PDF footer overlap + engine timeout"
 
 ## Stack & Server
 
@@ -31,7 +35,10 @@ Latest commit: `2d4917f` "feat(event): add excludeStaff toggle to Event config"
 ## Git history (recent)
 
 ```
-2d4917f  feat(event): add excludeStaff toggle to Event config                  ← HEAD = origin/main (May 18)
+7cb681e  fix: verify source files + PDF footer overlap + engine timeout         ← HEAD = origin/main (May 27)
+f59f5a4  feat(event): add dwell time benchmark by zone with per-zone direction
+146a635  docs(state): May 18 update — excludeStaff feature + 8 lessons
+2d4917f  feat(event): add excludeStaff toggle to Event config                  ← May 18
 d84ba92  chore(prisma): rename c1_10d_ratio_override migration to fix replay order
 9100cb8  fix(engine): consistency — apply staff filter to demographics + funnel + zone engagement
 3bf355d  fix(engine): engagement rate >100% when staff exclusion is active
@@ -835,6 +842,88 @@ Additional tech debt (gluing onto C1.10d):
     re-render the FULL output and audit section-by-section. "First KPI looks right"
     is not "feature works".
 
+### From May 26-27 session (dwell benchmark + 3 fixes)
+
+58. **`docker exec ... prisma migrate dev` creates root-owned migration files.**
+    The prisma CLI runs as UID 0 inside the backend container, so any new file
+    under `backend/prisma/migrations/<dir>/migration.sql` lands as `root:root`
+    on the host bind mount. Host user `ditech` then cannot delete or unlink
+    them, so `git checkout main` / merge / pull that needs to remove or
+    overwrite those files fails with `unable to unlink ...: Permission denied`
+    then `error: untracked working tree files would be overwritten by merge`.
+    Caught merging `feat/dwell-benchmark` to `main`. Fix:
+    `sudo chown -R ditech:ditech backend/prisma/migrations/<new-dir>/` right
+    after every `prisma migrate dev` (or `docker exec ... chown 1000:1000`).
+    The migration isn't "yours" until you chown it — do it before you commit.
+
+59. **`git add -p` splits one file across two commits when features overlap.**
+    Both the dwell-benchmark feature and the PDF-footer fix landed in
+    `dashboard_engine.py`. Split into separate commits via `git add -p`:
+    9 hunks streamed; `y` for the 6 benchmark hunks (globals ~109, parser ~499,
+    Section F ~542, table ~3066, main global ~3776, main apply ~3792), `n` for
+    the 3 footer hunks (@media print CSS ~3404-3441). Worked because the two
+    features lived in disjoint regions; overlapping hunks would need `s`/`e`.
+    First pass accidentally `y`'d the footer hunks — recovery was
+    `git restore --staged <file>` then redo the whole pass. Always verify with
+    `git diff --cached <file> | grep -E '^\+' | grep <keyword>` before commit;
+    staging is silent about which hunks made it in.
+
+60. **5-minute hard-coded timeouts silently kill anything that grows.**
+    `eventReport.service.ts` had `setTimeout(..., 5 * 60 * 1000)`. A 1-day
+    SHIN RAMYUN run took 225s (fine); the next day 2 days of data (~8MB) took
+    ~7.5 min and every report failed with "Engine timeout (5 minutes)". Nothing
+    in the code changed — only the data grew. Fix: `ENGINE_TIMEOUT_MS =
+    Number(process.env.ENGINE_TIMEOUT_MS) || 15 * 60 * 1000` (higher default +
+    per-env override), and the error message now interpolates the real value so
+    it never lies. Any "a few minutes" magic number is a future failure — env it.
+
+61. **`position:fixed` footer in `@media print` floats out of flow and overlaps.**
+    The dashboard `.pfooter` was `position:fixed; bottom:3mm`, rendered once on
+    the last page. Fixed positioning removes it from normal flow, so content
+    that grew past the last page's body rendered UNDER it. Fix: `position:static`
+    + `@page` margin-bottom 18mm → 12mm. For a footer on every page use the
+    `@page` margin box or Puppeteer `footerTemplate` — never a fixed HTML element.
+    Also added `thead { display: table-header-group }` (repeat headers per page)
+    and broadened `.dt tbody tr,.hm tbody tr,.dt tr,.hm tr` row-break protection.
+    NO width/font-size changes in `@media print` (see lesson #11).
+
+62. **`verify` must mirror `generate`'s data acceptance, not be stricter.**
+    `verifyRawdata()` checked for the merged `Rawdata.xlsx` directly, but
+    `generate()` accepts `source/CaptureRecords*.xlsx` and builds Rawdata.xlsx
+    at run time (as does `hasRawdata()`). Result: EVERY new event was stuck —
+    Verify said "Rawdata.xlsx not found", Generate button disabled — yet POSTing
+    `/generate` directly worked fine. Rule: a "can we do X?" pre-check must use
+    the same predicate as "do X." Fix: `if (rawdataExists)` guard around the
+    Excel-inspection block; missing Rawdata.xlsx + source present → `info` not
+    `error`; `canGenerate` still derived from error count so days/gates gate.
+
+63. **103% CPU on an 8-core box = single-thread bound. More cores won't help.**
+    During generate, `docker stats` showed backend at 103.83% CPU (1 full core)
+    on 8 cores; RAM 1017MiB / 15.62GiB (6%). The Python engine is single-threaded,
+    spending most time in pandas `groupby` + iterrows loops (`compute_zone_dwell`,
+    dwell pairing ~line 1963). Adding vCPUs cannot help — the engine can't use
+    them; RAM isn't the bottleneck either. The fix that would: vectorize dwell
+    pairing into `merge_asof` / shift ops (5-50× plausible). Lesson: run
+    `docker stats --no-stream` during the slow op BEFORE sizing up hardware.
+    CPU% ≤ 100 × cores-used + RAM under half = algorithm bound, not box bound.
+
+64. **"Excluded N staff" counts UV-eligible staff, not unique staff in data.**
+    A SHIN RAMYUN report said "Excluded 3 staff" while the raw file had 1,264
+    staff rows. Those rows were **5 unique Staff BodyIDs**, but only 3 appeared
+    at an `Entrance` gate with in/out events; the other 2 appeared zone-only
+    (no entrance, no exit), one with a `-1` BodyID suffix = sensor re-id failure.
+    The engine's UV definition is `df[df.Type=='Entrance'].drop_duplicates('BodyID')`,
+    so "excluded staff" = the staff slice of that set — correct, but confusing
+    to operators who see staff rows and expect them all counted. Options:
+    relabel ("Excluded 3 of 5 staff in data") or count
+    `df[df.CustomerType=='Staff'].BodyID.nunique()`. Deferred; leaning relabel.
+
+65. **Engine time scales linearly with data — budget the timeout.**
+    SHIN RAMYUN: 4 MB / 1 day = 225s; 8 MB / 2 days ≈ 450s. The work is
+    O(rows) dwell pairing. For an N-day run budget
+    `ceil(225 × N × 1.5 / 60)` minutes (1.5× safety) and set `ENGINE_TIMEOUT_MS`
+    accordingly until the algorithm is vectorized.
+
 
 ## File location quick-reference
 
@@ -933,3 +1022,6 @@ curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq
 12. **Re-render full output after data-shape patches** — checking stdout + first KPI isn't enough; audit every section that uses the same aggregate. Latent bugs hide in sections that look unrelated. (Lessons #50, #57 — May 18)
 13. **Migration timestamps must reflect dependency order** — Prisma replays alphabetically; a migration that ALTERs baseline tables must have a timestamp prefix AFTER the baseline. Check with `ls prisma/migrations/` before creating. (Lesson #52 — May 18)
 14. **`git check-ignore -v <path>` after every `.gitignore`-like change** — `.git/info/exclude` (local) and `.gitignore` (tracked) both block silently. (Lesson #54 — May 18)
+15. **After `docker exec ... prisma migrate dev`, immediately `sudo chown -R ditech:ditech backend/prisma/migrations/`.** Otherwise the new SQL files are root-owned and any branch switch or merge that touches them will fail with "unable to unlink ... Permission denied." (Lesson #58 — May 27)
+16. **When two features land in the same file, split with `git add -p` and verify with `git diff --cached <file> | grep <keyword>` before committing.** Staging is silent; the only way to confirm a hunk made it in (or stayed out) is to grep the cached diff. (Lesson #59 — May 27)
+17. **Run `docker stats --no-stream` during the slow operation BEFORE sizing up the server.** A 103% CPU reading on an 8-core box means one core saturated and seven idle — buying more vCPUs cannot help a single-threaded process. (Lesson #63 — May 27)
