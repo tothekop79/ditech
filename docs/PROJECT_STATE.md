@@ -937,6 +937,18 @@ Additional tech debt (gluing onto C1.10d):
     Location ∈ ENTRANCE_GATES ผ่านชีต `_config`), data แยกชีตรายวัน
     `data_YYYY-MM-DD` ต้อง concat ก่อน. (commits abd9567 → 6c5c3d6)
 
+67. **Compose `.env` ทำ variable substitution เท่านั้น — ไม่ inject vars เข้า container อัตโนมัติ.**
+    `.env` ที่ root ของโปรเจกต์ถูก compose อ่านเพื่อ substitute `${VAR}` ใน
+    `docker-compose.yml` เท่านั้น — มันไม่ส่ง vars ทั้งไฟล์เข้า container
+    ให้ฟรี. ถ้า service ใช้ `environment:` block แบบ inline list ต้องเพิ่ม
+    ชื่อ var ในนั้นด้วย (ตาม pattern `VAR: ${VAR:-default}`) ไม่งั้น
+    `process.env.VAR` ใน Node = undefined แล้วโค้ดตกกลับไป default.
+    Symptom: ENGINE_TIMEOUT_MS ใน `.env` ถูกตั้งเป็น 1800000 แต่ error ยังขึ้น
+    "Engine timeout (15 minutes)" เพราะ Node เห็น undefined → fallback 15 นาที.
+    ทางเลือก: `env_file:` (ส่งทั้งไฟล์เข้า container) แต่ inline `environment:`
+    เห็นชัดกว่าและตรวจง่าย. หลังเพิ่ม var ใน compose ต้อง `docker compose
+    up -d backend` (recreate) — `restart` ไม่ re-read compose env.
+
 
 ## File location quick-reference
 
