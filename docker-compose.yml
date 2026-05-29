@@ -39,6 +39,7 @@ services:
     environment:
       DATABASE_URL: postgresql://ditech:ditech_dev@postgres:5432/ditech_planner
       REDIS_URL: redis://redis:6379
+      ENGINE_TIMEOUT_MS: ${ENGINE_TIMEOUT_MS:-900000}
       JWT_SECRET: ${JWT_SECRET:-change_me_in_production}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_PM_GROUP_CHAT_ID: ${TELEGRAM_PM_GROUP_CHAT_ID:-}
