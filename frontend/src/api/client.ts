@@ -2,7 +2,7 @@ import axios from 'axios';
 
 export const api = axios.create({
   baseURL: '/api',
-  timeout: 30_000,
+  timeout: 120_000, // 120s — verify endpoint can take 30-60s on large multi-day events
 });
 
 api.interceptors.request.use((config) => {
