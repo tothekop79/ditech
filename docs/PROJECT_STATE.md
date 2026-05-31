@@ -949,6 +949,55 @@ Additional tech debt (gluing onto C1.10d):
     เห็นชัดกว่าและตรวจง่าย. หลังเพิ่ม var ใน compose ต้อง `docker compose
     up -d backend` (recreate) — `restart` ไม่ re-read compose env.
 
+68. **Frontend "ข้อมูลหาย/ว่าง" ส่วนใหญ่ = backend OOM loop ไม่ใช่ DB หาย — ทำ recovery drill เป็นขั้น.**
+    Symptom: user รายงาน "plan กับ event หาย ไม่แสดงเลย". ตรวจ DB พบ
+    InstallationPlan 129, Event 3, EventReport 69 รวมครบ. สาเหตุ: BullMQ
+    stuck job pick กลับมา process ทุกครั้ง backend boot → spawn engine 33MB
+    → buffer stdout ใน memory → OOM 4GB → tsx watch restart → loop. Container
+    ขึ้น "Up 27 hours" หลอกตาเพราะไม่ตาย แต่ Node process ตายทุกครั้งที่ pick job.
+    **Drill:** (1) `docker compose stop backend` ไม่ใช่ restart เพื่อตัด loop,
+    (2) `redis-cli LREM bull:<queue>:wait 0 <jobId>` + `DEL bull:<queue>:<jobId>:*`
+    เคลียร์ stuck job, (3) `UPDATE EventReport SET status='FAILED'` ที่ค้าง
+    RUNNING > 1h, (4) เพิ่ม Node heap (`NODE_OPTIONS=--max-old-space-size=8192`),
+    (5) start backend. Quick diag: `docker compose logs --tail=80 backend |
+    grep -E "OOM|heap|stalled"`. Prisma Pascal case ต้อง quote ใน raw SQL
+    (`"InstallationPlan"` ไม่ใช่ `plans`).
+
+69. **`docker compose up -d <service>` recreate → frontend ที่ proxy ผ่าน Node.js
+    ต้อง restart เพื่อ flush state.** ตอนเพิ่ม env var ใหม่ใน compose แล้ว
+    `up -d backend` → backend container recreate. Vite dev server ทำตัวเป็น
+    HTTP proxy `/api → backend:5000` ใช้ Node.js http-proxy ที่ resolve hostname
+    ครั้งเดียวตอนเริ่ม + cache connection state. หลัง recreate แม้ DNS resolve
+    ใหม่ได้ IP ตัวเดิม แต่ระหว่าง backend ลงตัว Vite proxy log เต็มไปด้วย
+    `ECONNREFUSED 172.18.0.5:5000` → requests fail แต่ user เห็นแค่ "Initial
+    connection: 2 min" ใน DevTools timing. Fix: `docker compose restart frontend`
+    หลังทุกครั้งที่ recreate backend. Diag: `docker compose logs frontend | grep
+    "proxy error"` — ถ้ามี ECONNREFUSED คือสัญญาณ.
+
+70. **Verify endpoint ที่ parse Excel ทั้งไฟล์ → ช้า → axios timeout default 30s ตัด
+    → modal แสดง banner เขียวหลอกตา.** `verifyRawdata` ใช้ ExcelJS อ่าน 33MB
+    Rawdata + sample 1000 rows = ~38 วินาที. Frontend axios timeout 30s default
+    → request cancelled → useQuery's `data = undefined` → `data?.canGenerate
+    ?? false` = false (disabled) AND `data?.checks || []` = [] → no
+    error/warning → banner ตกลงเป็นเขียว "All checks passed" (false positive).
+    **The combination is deceptive**: banner เขียว + ปุ่ม disabled + ไม่มี
+    checks list เลย — ปกติเขียวควรมี Passed/Info sections. **Fix:** bump
+    axios timeout to 120s (commit 46ae855). **TODO:** stream/header-sniff
+    แทน full parse. **Lesson:** ถ้า modal verify ทุก label/section เป็น
+    empty แต่ banner ขึ้น — สงสัย data structure / timeout ก่อน logic.
+
+71. **BullMQ lockDuration default 30s ไม่พอสำหรับ worker ที่ block event loop
+    > 30s — ต้องตั้ง `lockDuration` + `maxStalledCount: 0`.** Worker ของ
+    eventReport ทำ ExcelJS merge 14 นาทีก่อน spawn engine → event loop ค้าง
+    → BullMQ background lock-renewal task ทำงานไม่ได้ → lock หมดอายุ →
+    BullMQ คิดว่า job stalled → requeue (default `maxStalledCount: 1`) → engine
+    ที่ 2 spawn ทับเดิม → 2x memory → OOM crash → restart loop. **2 fix:**
+    (a) `lockDuration: 2h` ให้ renewal ทุก 1h ครอบคลุม block สูงสุด 14 นาที,
+    (b) `maxStalledCount: 0` ห้าม requeue stalled — engine write DB เป็น
+    COMPLETED เอง ไม่ต้องพึ่ง BullMQ ack. (commit cbdb9ac). **TODO ระยะกลาง:**
+    ย้าย merge phase ออกจาก worker main thread (worker_threads/child_process)
+    ให้ event loop responsive.
+
 
 ## File location quick-reference
 
