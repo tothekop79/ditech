@@ -19,6 +19,8 @@ import photoRoutes from './routes/photo.routes';
 import regionRoutes from './routes/region.routes';
 import eventRoutes from './routes/event.routes';
 import { startEventReportWorker } from './queues/eventReport.queue';
+import monitorRoutes from './routes/monitor.routes';
+import { startDeviceMonitor } from './queues/deviceMonitor.queue';
 import provinceRoutes from './routes/province.routes';
 import cameraModelRoutes from './routes/cameraModel.routes';
 import installationDesignRoutes from './routes/installationDesign.routes';
@@ -84,6 +86,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/provinces', provinceRoutes);
 app.use('/api/camera-models', cameraModelRoutes);
 app.use('/api/designs', installationDesignRoutes);
+app.use('/api/monitor', monitorRoutes);
 
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(err);
@@ -104,6 +107,7 @@ server.listen(PORT, () => {
 
   startScheduler();
   startEventReportWorker();
+  startDeviceMonitor().catch((e) => console.error('[monitor] start failed', e));
 });
 
 process.on('SIGTERM', async () => {

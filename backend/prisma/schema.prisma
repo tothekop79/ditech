@@ -53,6 +53,7 @@ model Customer {
 
   @@index([customerCode])
   @@index([isActive])
+  monitoredSites MonitoredSite[]
 }
 
 model Department {
@@ -749,3 +750,95 @@ model CoverageZone {
   @@index([designId])
   @@index([zoneType])
 }
+// ─────────────────────────────────────────────────────────────────────────────
+// Device Monitoring (Sprint 1) — append to backend/prisma/schema.prisma
+// Apply with:  docker exec ditech-planner-backend-1 npx prisma db push --skip-generate
+//              docker exec ditech-planner-backend-1 npx prisma generate
+//              docker compose restart backend
+// String enums on purpose (lesson #32) — zero-migration when values grow.
+// ─────────────────────────────────────────────────────────────────────────────
+
+model MonitoredSite {
+  id             String   @id @default(uuid())
+  source         String                       // "MALL" | "RETAIL"
+  plazaUnid      String                       // vendor id — the ONLY safe key (names collide: Central World ×6)
+  plazaName      String
+  plazaExternalId String?
+  timeZone       String   @default("+07:00")  // Mall has none → fallback
+  businessHours  Json?                        // raw [{week,startTime,endTime}] from plazaInfo
+  monitored      Boolean  @default(true)      // false for demo / finished events (26 empty sites)
+  customerId     String?                      // link to existing Customer once mapped
+  customer       Customer? @relation(fields: [customerId], references: [id])
+  lastSyncedAt   DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  devices        MonitoredDevice[]
+  alerts         Alert[]
+
+  @@unique([source, plazaUnid])
+  @@index([customerId])
+}
+
+model MonitoredDevice {
+  id              String   @id @default(uuid())
+  siteId          String
+  site            MonitoredSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  serialnum       String                       // vendor device serial, unique per source
+  name            String?
+  mac             String?
+  localIp         String?
+  channelCount    Int      @default(1)
+  channels        Json?                        // raw channelList (gateUnid/gateName/isMallGate per channel)
+  currentStatus   Int      @default(-1)        // 0 offline · 1 online · 3 disabled · -1 unknown/missing
+  vendorModifyTime DateTime?                   // modifyTime from API — secondary heartbeat
+  lastSeenOnline  DateTime?
+  lastPolledAt    DateTime?
+  statusSince     DateTime?                    // when currentStatus last changed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  statusLogs      DeviceStatusLog[]
+  alerts          Alert[]
+
+  @@unique([siteId, serialnum])
+  @@index([currentStatus])
+}
+
+/// One row per poll where status CHANGED (not every poll) — keeps table small, uptime% still computable.
+model DeviceStatusLog {
+  id         String   @id @default(uuid())
+  deviceId   String
+  device     MonitoredDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  fromStatus Int
+  toStatus   Int
+  changedAt  DateTime @default(now())
+
+  @@index([deviceId, changedAt])
+}
+
+/// State machine: OPEN → ACKNOWLEDGED → RESOLVED. Telegram fires on OPEN and RESOLVED only.
+model Alert {
+  id             String   @id @default(uuid())
+  type           String                       // OFFLINE | SILENT | STALE | IMBALANCE | ZERO | SPIKE | DEVICE_MISSING
+  severity       String   @default("WARN")    // INFO | WARN | CRIT
+  state          String   @default("OPEN")    // OPEN | ACKNOWLEDGED | RESOLVED
+  siteId         String
+  site           MonitoredSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  deviceId       String?
+  device         MonitoredDevice? @relation(fields: [deviceId], references: [id], onDelete: SetNull)
+  message        String
+  details        Json?
+  openedAt       DateTime @default(now())
+  acknowledgedAt DateTime?
+  acknowledgedById String?
+  resolvedAt     DateTime?
+  notifiedAt     DateTime?
+
+  @@index([state, type])
+  @@index([siteId, state])
+  @@index([deviceId, state])
+}
+
+// Also add to existing `model Customer`:
+//   monitoredSites MonitoredSite[]
