@@ -58,7 +58,8 @@ const hm = (s: string) => { const [h, mi] = s.split(':').map(Number); return h *
  *  - TRANSITION: within the grace windows → don't open, don't resolve
  * 00:00–00:00 (or missing) means "unknown" → DEFAULT_HOURS; a site can be marked 24h by setting 00:00–23:59.
  */
-export function businessHoursState(hours: unknown, tz: string, now = new Date()): 'OPEN' | 'CLOSED' | 'TRANSITION' {
+export function businessHoursState(hours: unknown, tz: string, now = new Date(), alwaysOpen = false): 'OPEN' | 'CLOSED' | 'TRANSITION' {
+  if (alwaysOpen) return 'OPEN';
   const { minutes, week } = siteLocalNow(tz, now);
   const list = Array.isArray(hours) ? (hours as BizHour[]) : [];
   let today = list.find(h => h.week === week);
@@ -189,7 +190,7 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
   });
   const nowTs = new Date();
   for (const d of stillOffline) {
-    if (businessHoursState(d.site.businessHours, d.site.timeZone, nowTs) !== 'OPEN') continue;
+    if (businessHoursState(d.site.businessHours, d.site.timeZone, nowTs, d.site.alwaysOpen) !== 'OPEN') continue;
     const type = d.currentStatus === DeviceStatus.UNKNOWN ? 'DEVICE_MISSING' : 'OFFLINE';
     await prisma.alert.create({ data: {
       type, severity: 'WARN', siteId: d.siteId, deviceId: d.id,

@@ -34,9 +34,10 @@ r.get('/sites/:id', async (req, res, next) => {
 /** Toggle monitoring / link to customer (used to hide the 26 demo/event sites) */
 r.patch('/sites/:id', async (req, res, next) => {
   try {
-    const { monitored, customerId } = req.body ?? {};
+    const { monitored, customerId, alwaysOpen } = req.body ?? {};
     const data: any = {};
     if (typeof monitored === 'boolean') data.monitored = monitored;
+    if (typeof alwaysOpen === 'boolean') data.alwaysOpen = alwaysOpen;
     // A human assignment is MANUAL and sticks; clearing it (null) re-opens the site to vendor auto-link on next sync.
     if (customerId === null) { data.customerId = null; data.customerSource = null; }
     else if (typeof customerId === 'string') { data.customerId = customerId; data.customerSource = 'MANUAL'; }
