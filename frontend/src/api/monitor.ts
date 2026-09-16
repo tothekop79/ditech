@@ -143,6 +143,8 @@ export interface FleetDevice {
 export interface FleetDeviceParams {
   /** comma-separated currentStatus list, e.g. "0,-1" */
   status?: string;
+  /** scope to one vendor server */
+  source?: MonitorSource;
   /** 1 = only devices whose site is OPEN right now */
   inHours?: 1;
   minOfflineHours?: number;
@@ -294,10 +296,12 @@ export interface DigestResult {
 // ─── API ────────────────────────────────────────────────────────────
 
 export const monitorApi = {
-  /** all = true → ?all=1, which also lists unmonitored sites */
-  overview: (all = false) =>
+  /** all = true → ?all=1 (also lists unmonitored sites); source scopes every number in the payload */
+  overview: (all = false, source?: MonitorSource) =>
     api
-      .get<{ success: boolean; data: FleetOverview }>('/monitor/overview', { params: all ? { all: 1 } : undefined })
+      .get<{ success: boolean; data: FleetOverview }>('/monitor/overview', {
+        params: { ...(all ? { all: 1 } : {}), ...(source ? { source } : {}) },
+      })
       .then((r) => r.data.data),
 
   site: (id: string) =>

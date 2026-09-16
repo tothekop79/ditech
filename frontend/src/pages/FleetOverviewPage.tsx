@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { masterApi } from '../api/master';
 import type { Customer } from '../api/types';
@@ -8,7 +8,6 @@ import {
   HEALTHS,
   HEALTH_COLOR,
   HEALTH_LABEL,
-  SOURCES,
   SOURCE_COLOR,
   UNASSIGNED,
   contractChip,
@@ -30,7 +29,14 @@ import { CancelSiteModal, ContractModal } from '../components/monitor/ContractMo
 
 /** /overview and /overview?all=1 are cached separately; invalidating the prefix refreshes both. */
 const OVERVIEW_ROOT = ['monitor-overview'];
-const overviewKey = (all: boolean) => [...OVERVIEW_ROOT, all];
+const overviewKey = (all: boolean, source?: MonitorSource) => [...OVERVIEW_ROOT, all, source ?? 'ALL'];
+
+/** primary scope — the backend applies it to every number it returns, so nothing is recounted here */
+const SOURCE_TABS: { value?: MonitorSource; label: string; short: string }[] = [
+  { value: undefined, label: 'ทั้งหมด · All', short: 'ทั้งหมด · All' },
+  { value: 'MALL', label: '🏬 Mall (King Power / Robinson)', short: 'Mall' },
+  { value: 'RETAIL', label: '🛍 Retail', short: 'Retail' },
+];
 
 /** collapse state is a UI preference — keyed by customer id, or NO_CUSTOMER for the unassigned group */
 const COLLAPSED_KEY = 'ditech_monitor_collapsed';
@@ -107,7 +113,19 @@ export function FleetOverviewPage() {
 
   const [q, setQ] = useState('');
   const [health, setHealth] = useState<SiteHealth | undefined>();
-  const [source, setSource] = useState<MonitorSource | undefined>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sourceParam = searchParams.get('source');
+  const source: MonitorSource | undefined = sourceParam === 'MALL' || sourceParam === 'RETAIL' ? sourceParam : undefined;
+  const setSource = (next?: MonitorSource) =>
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next) p.set('source', next);
+        else p.delete('source');
+        return p;
+      },
+      { replace: true },
+    );
   const [customerId, setCustomerId] = useState<string>('');
   const [showUnmonitored, setShowUnmonitored] = useState(false);
   const [view, setView] = useState<'sites' | 'customers'>('sites');
@@ -122,6 +140,14 @@ export function FleetOverviewPage() {
   const [cancelFor, setCancelFor] = useState<FleetSite | null>(null);
   const sitesRef = useRef<HTMLDivElement>(null);
 
+  /** every tile's device list is scoped to the same server as the tile's number */
+  const openPanel = (spec: DevicePanelSpec) =>
+    setPanel(
+      source
+        ? { ...spec, key: `${spec.key}:${source}`, params: { ...spec.params, source } }
+        : spec,
+    );
+
   useEffect(() => {
     try {
       localStorage.setItem(COLLAPSED_KEY, JSON.stringify(collapsed));
@@ -130,11 +156,11 @@ export function FleetOverviewPage() {
     }
   }, [collapsed]);
 
-  const activeKey = overviewKey(showUnmonitored);
+  const activeKey = overviewKey(showUnmonitored, source);
 
   const { data: overview, isLoading, dataUpdatedAt } = useQuery({
     queryKey: activeKey,
-    queryFn: () => monitorApi.overview(showUnmonitored),
+    queryFn: () => monitorApi.overview(showUnmonitored, source),
     refetchInterval: 60_000,
     // keep the current table on screen while the other list (all vs monitored-only) loads
     placeholderData: (prev: FleetOverview | undefined) => prev,
@@ -240,7 +266,6 @@ export function FleetOverviewPage() {
     return sites.filter((s) => {
       if (health && s.health !== health) return false;
       if (contract === 'CANCELLED' ? !s.cancelledAt : contract && s.contractState !== contract) return false;
-      if (source && s.source !== source) return false;
       if (customerId && (customerId === NO_CUSTOMER ? !!s.customer : s.customer?.id !== customerId)) return false;
       if (!needle) return true;
       return (
@@ -249,13 +274,17 @@ export function FleetOverviewPage() {
         (s.vendorGroupName ?? '').toLowerCase().includes(needle)
       );
     });
-  }, [sites, q, health, source, customerId, contract]);
+  }, [sites, q, health, customerId, contract]);
 
   const alertsBySite = useMemo(() => {
     const m = new Map<string, number>();
-    for (const a of openAlertRows) m.set(a.siteId, (m.get(a.siteId) ?? 0) + 1);
+    // GET /alerts has no source filter — scope it here so the column matches the selected server
+    for (const a of openAlertRows) {
+      if (source && a.site.source !== source) continue;
+      m.set(a.siteId, (m.get(a.siteId) ?? 0) + 1);
+    }
     return m;
-  }, [openAlertRows]);
+  }, [openAlertRows, source]);
 
   /** one grouping feeds both views — everything below comes from the overview payload */
   const groups = useMemo<CustomerGroup[]>(() => {
@@ -330,6 +359,7 @@ export function FleetOverviewPage() {
 
   const d = overview?.devices;
   const k = overview?.kpi;
+  const sourceTab = SOURCE_TABS.find((t) => t.value === source) ?? SOURCE_TABS[0];
 
   return (
     <div className="space-y-4">
@@ -339,6 +369,9 @@ export function FleetOverviewPage() {
           <h2 className="text-lg font-semibold text-gray-900">📷 Camera Monitor</h2>
           <p className="text-xs text-gray-500 mt-0.5">
             สถานะกล้องทุกสาขา — ดึงจากเซิร์ฟเวอร์ผู้ผลิตทุก 5 นาที · หน้านี้รีเฟรชเองทุก 60 วินาที
+          </p>
+          <p className="text-xs text-gray-600 mt-0.5">
+            แสดง: <span className="font-medium">{sourceTab.short}</span> · {sites.length} sites · {d?.total ?? 0} devices
           </p>
         </div>
         <div className="flex gap-2">
@@ -366,6 +399,20 @@ export function FleetOverviewPage() {
         </div>
       </div>
 
+      {/* Primary scope — one vendor server at a time. Kept in the URL so links keep the view. */}
+      <div className="inline-flex rounded-lg border border-gray-300 bg-white overflow-hidden">
+        {SOURCE_TABS.map((t) => (
+          <button
+            key={t.label}
+            onClick={() => setSource(t.value)}
+            className={`px-4 py-2 text-sm border-r border-gray-200 last:border-r-0 ${
+              source === t.value ? 'bg-blue-600 text-white font-medium' : 'text-gray-600 hover:bg-gray-50'
+            }`}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
       {editMode && (
         <div className="bg-amber-50 border border-amber-300 text-amber-800 rounded px-3 py-1.5 text-xs">
           ✏️ Edit mode on · แก้ไขอยู่ — เปลี่ยนลูกค้า / เปิด-ปิดมอนิเตอร์ / 24h ได้ทันที กด “Done” เมื่อเสร็จ
@@ -374,30 +421,30 @@ export function FleetOverviewPage() {
 
       {/* KPI row 1 — devices. Every tile opens the matching device list. */}
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
-        <Kpi label="Devices · ทั้งหมด" value={d?.total ?? 0} onClick={() => setPanel(DEVICE_PANELS.all)} />
-        <Kpi label="Online · ออนไลน์" value={d?.online ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.online)} />
+        <Kpi label="Devices · ทั้งหมด" value={d?.total ?? 0} onClick={() => openPanel(DEVICE_PANELS.all)} />
+        <Kpi label="Online · ออนไลน์" value={d?.online ?? 0} tone="text-green-600" onClick={() => openPanel(DEVICE_PANELS.online)} />
         <Kpi
           label="Offline in hours · ดับในเวลาทำการ"
           value={k?.offlineInHours ?? 0}
           tone="text-red-600"
           hint="กล้องที่ดับอยู่ในเวลาทำการ — ต้องตามทันที"
-          onClick={() => setPanel(DEVICE_PANELS.offlineInHours)}
+          onClick={() => openPanel(DEVICE_PANELS.offlineInHours)}
         />
         <Kpi
           label="Offline closed · ดับนอกเวลา"
           value={k?.offlineExpected ?? 0}
           tone="text-gray-500"
           hint="ดับนอกเวลาทำการ — ปกติ ไม่ต้องตาม"
-          onClick={() => setPanel(DEVICE_PANELS.offlineExpected)}
+          onClick={() => openPanel(DEVICE_PANELS.offlineExpected)}
         />
         <Kpi
           label="Offline > 24h · ดับเกิน 24 ชม."
           value={k?.offlineOver24h ?? 0}
           tone="text-amber-600"
-          onClick={() => setPanel(DEVICE_PANELS.offlineOver24h)}
+          onClick={() => openPanel(DEVICE_PANELS.offlineOver24h)}
         />
-        <Kpi label="Missing · หาย" value={d?.missing ?? 0} tone="text-purple-600" onClick={() => setPanel(DEVICE_PANELS.missing)} />
-        <Kpi label="Disabled · ปิดใช้" value={d?.disabled ?? 0} tone="text-gray-500" onClick={() => setPanel(DEVICE_PANELS.disabled)} />
+        <Kpi label="Missing · หาย" value={d?.missing ?? 0} tone="text-purple-600" onClick={() => openPanel(DEVICE_PANELS.missing)} />
+        <Kpi label="Disabled · ปิดใช้" value={d?.disabled ?? 0} tone="text-gray-500" onClick={() => openPanel(DEVICE_PANELS.disabled)} />
       </div>
 
       {/* KPI row 2 — fleet. Site tiles filter the table below; churn tiles open a device list. */}
@@ -405,22 +452,18 @@ export function FleetOverviewPage() {
         <Kpi label="Sites OK · ปกติ" value={k?.sitesOk ?? 0} tone="text-green-600" onClick={() => focusSites({ health: 'OK' })} />
         <Kpi label="Sites degraded · บางส่วน" value={k?.sitesDegraded ?? 0} tone="text-amber-600" onClick={() => focusSites({ health: 'DEGRADED' })} />
         <Kpi label="Sites down · ดับทั้งสาขา" value={k?.sitesDown ?? 0} tone="text-red-600" onClick={() => focusSites({ health: 'DOWN' })} />
-        <Kpi label="Went offline today · ดับวันนี้" value={k?.wentOfflineToday ?? 0} tone="text-red-600" onClick={() => setPanel(DEVICE_PANELS.wentOfflineToday)} />
-        <Kpi label="Recovered today · กลับมาวันนี้" value={k?.recoveredToday ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.recoveredToday)} />
+        <Kpi label="Went offline today · ดับวันนี้" value={k?.wentOfflineToday ?? 0} tone="text-red-600" onClick={() => openPanel(DEVICE_PANELS.wentOfflineToday)} />
+        <Kpi label="Recovered today · กลับมาวันนี้" value={k?.recoveredToday ?? 0} tone="text-green-600" onClick={() => openPanel(DEVICE_PANELS.recoveredToday)} />
         <Kpi label="Open alerts · แจ้งเตือน" value={overview?.openAlerts ?? 0} tone="text-amber-600" onClick={() => navigate('/monitor/alerts')} />
         <Kpi label="Unassigned sites · ยังไม่ผูกลูกค้า" value={k?.unassignedSites ?? 0} onClick={() => focusSites({ unassigned: true })} />
-        <Kpi
-          label="Contract expired · สัญญาหมด"
-          value={k?.contractExpired ?? 0}
-          tone="text-red-600"
-          onClick={() => focusSites({ contract: 'EXPIRED' })}
-        />
-        <Kpi
-          label="Expiring ≤30d · ใกล้หมด"
-          value={k?.contractExpiring ?? 0}
-          tone="text-amber-600"
-          onClick={() => focusSites({ contract: 'EXPIRING' })}
-        />
+        <div className="col-span-2 xl:col-span-2 bg-white border border-gray-200 rounded-lg p-1.5">
+          <div className="text-[10px] uppercase tracking-wider text-gray-400 px-1 pb-1">สัญญา · Contract</div>
+          <div className="grid grid-cols-3 gap-1.5">
+            <Kpi flat label="Expired · หมด" value={k?.contractExpired ?? 0} tone="text-red-600" onClick={() => focusSites({ contract: 'EXPIRED' })} />
+            <Kpi flat label="≤30d · ใกล้หมด" value={k?.contractExpiring ?? 0} tone="text-amber-600" onClick={() => focusSites({ contract: 'EXPIRING' })} />
+            <Kpi flat label="No contract · ไม่ระบุ" value={k?.contractNone ?? 0} tone="text-gray-500" onClick={() => focusSites({ contract: 'NONE' })} />
+          </div>
+        </div>
         <div className="bg-white border border-gray-200 rounded-lg p-2.5">
           <div className="text-[10px] uppercase tracking-wider text-gray-400">Last poll · โพลล์ล่าสุด</div>
           <div className="text-sm font-medium text-gray-700 mt-0.5" title={fmtDateTime(overview?.lastPolledAt)}>
@@ -452,15 +495,6 @@ export function FleetOverviewPage() {
         </div>
 
         <div className="flex flex-wrap gap-1">
-          <FilterBtn active={!source} onClick={() => setSource(undefined)}>All sources</FilterBtn>
-          {SOURCES.map((s) => (
-            <FilterBtn key={s} active={source === s} onClick={() => setSource(source === s ? undefined : s)}>
-              {s}
-            </FilterBtn>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap gap-1">
           {CONTRACT_FILTERS.map((c) => (
             <FilterBtn
               key={c.value}
@@ -487,27 +521,30 @@ export function FleetOverviewPage() {
           ))}
         </select>
 
-        <label className="flex items-center gap-1.5 text-xs text-gray-600" title="โหลดจาก /overview?all=1 — รวม site ที่ปิดมอนิเตอร์ (demo / งานที่จบแล้ว)">
-          <input type="checkbox" checked={showUnmonitored} onChange={(e) => setShowUnmonitored(e.target.checked)} />
-          Show unmonitored · แสดงที่ปิดมอนิเตอร์
-        </label>
-
-        {view === 'sites' && (
-          <span className="text-xs text-gray-500 flex gap-2">
-            <button onClick={() => setAllCollapsed(false)} className="text-blue-600 hover:underline">Expand all</button>
-            <button onClick={() => setAllCollapsed(true)} className="text-blue-600 hover:underline">Collapse all</button>
-          </span>
-        )}
-
-        <span className="text-xs text-gray-500 ml-auto">
-          {groups.length} customers · {filtered.length} sites
-        </span>
       </div>
 
-      {/* View switch */}
-      <div className="flex gap-1 border-b border-gray-200">
-        <TabBtn active={view === 'sites'} onClick={() => setView('sites')}>📍 Sites</TabBtn>
-        <TabBtn active={view === 'customers'} onClick={() => setView('customers')}>🏢 By customer / รายลูกค้า</TabBtn>
+      {/* View switch — tabs left, list controls right */}
+      <div className="flex items-center justify-between gap-3 border-b border-gray-200 flex-wrap">
+        <div className="flex gap-1">
+          <TabBtn active={view === 'sites'} onClick={() => setView('sites')}>📍 Sites</TabBtn>
+          <TabBtn active={view === 'customers'} onClick={() => setView('customers')}>🏢 By customer / รายลูกค้า</TabBtn>
+        </div>
+
+        <div className="flex items-center gap-3 pb-1.5 text-xs text-gray-500">
+          <span>{groups.length} customers · {filtered.length} sites</span>
+
+          <label className="flex items-center gap-1.5 text-gray-600" title="โหลดจาก /overview?all=1 — รวม site ที่ปิดมอนิเตอร์ (demo / งานที่จบแล้ว)">
+            <input type="checkbox" checked={showUnmonitored} onChange={(e) => setShowUnmonitored(e.target.checked)} />
+            Show unmonitored · แสดงที่ปิดมอนิเตอร์
+          </label>
+
+          {view === 'sites' && (
+            <span className="flex gap-2">
+              <button onClick={() => setAllCollapsed(false)} className="text-blue-600 hover:underline">Expand all</button>
+              <button onClick={() => setAllCollapsed(true)} className="text-blue-600 hover:underline">Collapse all</button>
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -548,6 +585,7 @@ export function FleetOverviewPage() {
                   onToggle={() => setCollapsed((c) => ({ ...c, [g.key]: !(c[g.key] ?? g.offline === 0) }))}
                   onOpen={(id) => navigate(`/monitor/sites/${id}`)}
                   onPatch={(id, patch, customer) => patchSite.mutate({ id, patch, customer })}
+                  showSource={!source}
                   onNewCustomer={(site) => setNewCustomerFor(site)}
                   onContract={(target) => setContractFor(target)}
                   onCancel={(site) => setCancelFor(site)}
@@ -650,6 +688,7 @@ function GroupRows({
   collapsed,
   editMode,
   customers,
+  showSource,
   onToggle,
   onOpen,
   onPatch,
@@ -661,6 +700,8 @@ function GroupRows({
   collapsed: boolean;
   editMode: boolean;
   customers: Customer[];
+  /** the badge is redundant once the page is scoped to one server */
+  showSource: boolean;
   onToggle: () => void;
   onOpen: (id: string) => void;
   onPatch: (id: string, patch: SitePatch, customer?: MonitorCustomerRef | null) => void;
@@ -705,9 +746,11 @@ function GroupRows({
             onClick={() => onOpen(s.id)}
             className={`border-b border-gray-100 cursor-pointer hover:bg-blue-50/50 ${s.monitored ? '' : 'opacity-50'}`}>
             <td className="px-3 py-1.5">
-              <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border mr-1.5 ${SOURCE_COLOR[s.source]}`}>
-                {s.source}
-              </span>
+              {showSource && (
+                <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border mr-1.5 ${SOURCE_COLOR[s.source]}`}>
+                  {s.source}
+                </span>
+              )}
               <span className={s.cancelledAt ? 'text-gray-500 line-through' : 'text-gray-900'}>{s.plazaName}</span>
               {s.cancelledAt && (
                 <span
@@ -971,12 +1014,14 @@ function Kpi({
   value,
   tone,
   hint,
+  flat,
   onClick,
 }: {
   label: string;
   value: number;
   tone?: string;
   hint?: string;
+  flat?: boolean;
   onClick?: () => void;
 }) {
   const body = (
@@ -985,9 +1030,10 @@ function Kpi({
       <div className={`text-xl font-semibold mt-0.5 ${tone || 'text-gray-900'}`}>{value}</div>
     </>
   );
-  const cls = 'bg-white border border-gray-200 rounded-lg p-2.5 text-left';
+  const cls = flat ? 'bg-gray-50 rounded-md p-2 text-left' : 'bg-white border border-gray-200 rounded-lg p-2.5 text-left';
+  const hover = flat ? 'hover:bg-blue-50' : 'hover:border-blue-300 hover:bg-blue-50/30';
   return onClick ? (
-    <button onClick={onClick} title={hint} className={`${cls} w-full hover:border-blue-300 hover:bg-blue-50/30`}>
+    <button onClick={onClick} title={hint} className={`${cls} w-full ${hover}`}>
       {body}
     </button>
   ) : (

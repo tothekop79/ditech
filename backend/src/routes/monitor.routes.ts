@@ -13,7 +13,7 @@ r.use(authenticate);
 /** KPI + per-site health for the Fleet Overview page */
 /** ?all=1 includes unmonitored sites (demo / finished events) */
 r.get('/overview', async (req, res, next) => {
-  try { res.json({ success: true, data: await fleetOverview(req.query.all === '1') }); } catch (e) { next(e); }
+  try { res.json({ success: true, data: await fleetOverview(req.query.all === '1', req.query.source as string | undefined) }); } catch (e) { next(e); }
 });
 
 /** Site detail: devices + channels + open alerts */
@@ -118,7 +118,7 @@ r.get('/devices', async (req, res, next) => {
       minOfflineHours: q.minOfflineHours ? Number(q.minOfflineHours) : undefined,
       changedSince: since && !isNaN(since.getTime()) ? since : undefined,
       customerId: q.customerId === 'none' ? null : q.customerId || undefined,
-      siteId: q.siteId, search: q.q, includeUnmonitored: q.all === '1',
+      source: q.source, siteId: q.siteId, search: q.q, includeUnmonitored: q.all === '1',
     });
     res.json({ success: true, data, count: data.length });
   } catch (e) { next(e); }
