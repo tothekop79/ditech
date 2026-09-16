@@ -37,9 +37,27 @@ r.patch('/sites/:id', async (req, res, next) => {
     const { monitored, customerId } = req.body ?? {};
     const data: any = {};
     if (typeof monitored === 'boolean') data.monitored = monitored;
-    if (customerId === null || typeof customerId === 'string') data.customerId = customerId;
+    // A human assignment is MANUAL and sticks; clearing it (null) re-opens the site to vendor auto-link on next sync.
+    if (customerId === null) { data.customerId = null; data.customerSource = null; }
+    else if (typeof customerId === 'string') { data.customerId = customerId; data.customerSource = 'MANUAL'; }
     const site = await prisma.monitoredSite.update({ where: { id: req.params.id }, data });
     res.json({ success: true, data: site });
+  } catch (e) { next(e); }
+});
+
+/** Bulk assign for the 139 sites vendor doesn't group: body { assignments: [{siteId, customerId}] } */
+r.post('/sites/assign', async (req, res, next) => {
+  try {
+    const list: { siteId: string; customerId: string | null }[] = req.body?.assignments ?? [];
+    let n = 0;
+    for (const a of list) {
+      await prisma.monitoredSite.update({
+        where: { id: a.siteId },
+        data: a.customerId ? { customerId: a.customerId, customerSource: 'MANUAL' } : { customerId: null, customerSource: null },
+      });
+      n++;
+    }
+    res.json({ success: true, data: { updated: n } });
   } catch (e) { next(e); }
 });
 

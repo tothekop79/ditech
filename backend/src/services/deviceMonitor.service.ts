@@ -6,7 +6,7 @@
  * Telegram fires ONLY on alert transitions (OPEN / RESOLVED) — never on every poll.
  */
 import { PrismaClient } from '@prisma/client';
-import { clientsFromEnv, VionClient, VionDevice, VionPlaza } from '../integrations/vion/vion.client';
+import { clientsFromEnv, VionClient, VionDevice, VionAccount, VionGroupNode } from '../integrations/vion/vion.client';
 
 const prisma = new PrismaClient();
 
@@ -30,6 +30,45 @@ function parseVendorTime(s?: string, tz = '+07:00'): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
+/** Minutes after opening before a still-offline camera counts as a problem (staff switching things on). */
+const OPEN_GRACE_MIN = Number(process.env.VION_OPEN_GRACE_MIN) || 30;
+/** Minutes before closing during which going offline is tolerated (staff switching things off early). */
+const CLOSE_GRACE_MIN = Number(process.env.VION_CLOSE_GRACE_MIN) || 30;
+/** Used when a site reports no usable hours (Mall server: 00:00–00:00 everywhere). */
+const DEFAULT_HOURS = { start: process.env.VION_DEFAULT_OPEN || '10:00', end: process.env.VION_DEFAULT_CLOSE || '22:00' };
+
+type BizHour = { week: number; startTime: string; endTime: string };
+
+/** Site-local "now" as minutes since midnight + ISO weekday (1=Mon..7=Sun), from the site's tz offset. */
+function siteLocalNow(tz: string, now: Date): { minutes: number; week: number } {
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(tz || '+07:00');
+  const offsetMin = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 420;
+  const local = new Date(now.getTime() + offsetMin * 60_000);
+  const jsDay = local.getUTCDay();                       // 0=Sun
+  return { minutes: local.getUTCHours() * 60 + local.getUTCMinutes(), week: jsDay === 0 ? 7 : jsDay };
+}
+const hm = (s: string) => { const [h, mi] = s.split(':').map(Number); return h * 60 + (mi || 0); };
+
+/**
+ * Business-hours verdict for a site at `now`.
+ *  - OPEN      : inside hours (after open+grace, before close-grace) → offline is a real problem
+ *  - CLOSED    : outside hours → offline is expected, never alert
+ *  - TRANSITION: within the grace windows → don't open, don't resolve
+ * 00:00–00:00 (or missing) means "unknown" → DEFAULT_HOURS; a site can be marked 24h by setting 00:00–23:59.
+ */
+export function businessHoursState(hours: unknown, tz: string, now = new Date()): 'OPEN' | 'CLOSED' | 'TRANSITION' {
+  const { minutes, week } = siteLocalNow(tz, now);
+  const list = Array.isArray(hours) ? (hours as BizHour[]) : [];
+  let today = list.find(h => h.week === week);
+  let start = today ? hm(today.startTime) : NaN, end = today ? hm(today.endTime) : NaN;
+  if (!today || isNaN(start) || isNaN(end) || (start === 0 && end === 0)) { start = hm(DEFAULT_HOURS.start); end = hm(DEFAULT_HOURS.end); }
+  if (end <= start) end += 24 * 60;                      // overnight closing (e.g. 10:00–01:00)
+  const t = minutes < start && end > 24 * 60 ? minutes + 24 * 60 : minutes;
+  if (t < start || t >= end) return 'CLOSED';
+  if (t < start + OPEN_GRACE_MIN || t >= end - CLOSE_GRACE_MIN) return 'TRANSITION';
+  return 'OPEN';
+}
+
 async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = new Array(items.length);
   let i = 0;
@@ -44,30 +83,65 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R
 }
 
 // ── sites ──────────────────────────────────────────────────────────────────
+/** leaf/any group name → set of top-level account names that contain it (dupes across accounts = ambiguous). */
+function buildGroupLookup(accounts: VionAccount[]): Map<string, Set<string>> {
+  const m = new Map<string, Set<string>>();
+  const walk = (nodes: VionGroupNode[] | undefined, account: string) => {
+    for (const n of nodes ?? []) {
+      const k = n.name.trim().toLowerCase();
+      if (!m.has(k)) m.set(k, new Set());
+      m.get(k)!.add(account);
+      walk(n.children, account);
+    }
+  };
+  for (const a of accounts) walk(a.groups, a.name.trim());
+  return m;
+}
+
 export async function syncSites(clients: VionClient[] = clientsFromEnv()) {
-  const summary: Record<string, number> = {};
+  const summary: Record<string, any> = {};
+  const customers = await prisma.customer.findMany({ select: { id: true, customerName: true } });
+  const customerByName = new Map(customers.map(c => [c.customerName.trim().toLowerCase(), c.id]));
+
   for (const c of clients) {
-    const plazas: VionPlaza[] = await c.listPlazas();
+    const [plazas, accounts] = await Promise.all([c.listPlazas(), c.listGroups()]);
+    const lookup = buildGroupLookup(accounts);
+    let linked = 0, ambiguous = 0;
+
     for (const p of plazas) {
+      const groupName = p.groupName?.trim() || null;
+      const hits = groupName ? [...(lookup.get(groupName.toLowerCase()) ?? [])] : [];
+      const accountName = hits.length === 1 ? hits[0] : null;
+      const isAmbiguous = hits.length > 1;
+      if (isAmbiguous) ambiguous++;
+
+      const existing = await prisma.monitoredSite.findUnique({ where: { source_plazaUnid: { source: c.source, plazaUnid: p.plazaUnid } } });
+      // Auto-link ONLY when unlinked or previously vendor-linked; never override a MANUAL choice.
+      let customerPatch: { customerId?: string | null; customerSource?: string | null } = {};
+      if (!existing?.customerId || existing.customerSource === 'VENDOR') {
+        const cid = accountName ? customerByName.get(accountName.toLowerCase()) ?? null : null;
+        if (cid) { customerPatch = { customerId: cid, customerSource: 'VENDOR' }; linked++; }
+        else if (existing?.customerSource === 'VENDOR') customerPatch = { customerId: null, customerSource: null };
+      }
+
+      const common = {
+        plazaName: p.plazaName,
+        plazaExternalId: p.plazaExternalid || null,
+        timeZone: p.timeZone || '+07:00',
+        businessHours: p.businessHours ?? undefined,
+        vendorGroupName: groupName,
+        vendorAccountName: accountName,
+        accountAmbiguous: isAmbiguous,
+        lastSyncedAt: new Date(),
+        ...customerPatch,
+      };
       await prisma.monitoredSite.upsert({
         where: { source_plazaUnid: { source: c.source, plazaUnid: p.plazaUnid } },
-        create: {
-          source: c.source, plazaUnid: p.plazaUnid, plazaName: p.plazaName,
-          plazaExternalId: p.plazaExternalid || null,
-          timeZone: p.timeZone || '+07:00',
-          businessHours: p.businessHours ?? undefined,
-          lastSyncedAt: new Date(),
-        },
-        update: {
-          plazaName: p.plazaName,
-          plazaExternalId: p.plazaExternalid || null,
-          timeZone: p.timeZone || '+07:00',
-          businessHours: p.businessHours ?? undefined,
-          lastSyncedAt: new Date(),
-        },
+        create: { source: c.source, plazaUnid: p.plazaUnid, ...common },
+        update: common,
       });
     }
-    summary[c.source] = plazas.length;
+    summary[c.source] = { sites: plazas.length, accounts: accounts.length, autoLinked: linked, ambiguous };
   }
   return summary;
 }
@@ -104,6 +178,24 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
     }
   });
 
+  // (b) "didn't come back after opening": offline devices with no open alert, at a site that is now OPEN.
+  const stillOffline = await prisma.monitoredDevice.findMany({
+    where: { currentStatus: { in: [DeviceStatus.OFFLINE, DeviceStatus.UNKNOWN] }, site: { monitored: true },
+             alerts: { none: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } } } },
+    include: { site: true },
+  });
+  const nowTs = new Date();
+  for (const d of stillOffline) {
+    if (businessHoursState(d.site.businessHours, d.site.timeZone, nowTs) !== 'OPEN') continue;
+    const type = d.currentStatus === DeviceStatus.UNKNOWN ? 'DEVICE_MISSING' : 'OFFLINE';
+    await prisma.alert.create({ data: {
+      type, severity: 'WARN', siteId: d.siteId, deviceId: d.id,
+      message: `${d.site.plazaName} · ${d.name ?? d.serialnum} still offline after opening`,
+      details: { reason: 'not_back_after_open', statusSince: d.statusSince },
+    } });
+    stats.opened++;
+  }
+
   stats.errors = results.filter(r => r.status === 'rejected').length;
   for (const r of results) if (r.status === 'rejected') console.error('[monitor] poll error', (r as PromiseRejectedResult).reason?.message ?? r);
   return stats;
@@ -111,6 +203,8 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
 
 async function upsertDevice(siteId: string, tz: string, d: VionDevice, now: Date, stats: PollStats) {
   const existing = await prisma.monitoredDevice.findUnique({ where: { siteId_serialnum: { siteId, serialnum: d.serialnum } } });
+  // modifyTime semantics (verified vs portal 2026-09-17): for status=0 it is when the server marked it offline
+  // (≈ last heartbeat + 12 min); for status=1 the vendor touches it nightly at 00:00 — NOT a "last seen".
   const vendorModifyTime = parseVendorTime(d.modifyTime, VENDOR_SERVER_TZ);   // NOT site tz — see VENDOR_SERVER_TZ
   const base = {
     name: d.name, mac: d.mac, localIp: d.localIp, channelCount: d.channelCount ?? 1,
@@ -144,7 +238,9 @@ async function transition(deviceId: string, siteId: string, from: number, to: nu
   const isBad = to === DeviceStatus.OFFLINE || to === DeviceStatus.UNKNOWN;
 
   if (isBad) {
-    // grace: open only if no open alert AND (first-seen offline + grace elapsed handled by resolveGraceAlerts)
+    // (a) went offline — only a problem if the store is open right now. Outside hours = staff powered it off.
+    const site = await prisma.monitoredSite.findUnique({ where: { id: siteId }, select: { businessHours: true, timeZone: true } });
+    if (businessHoursState(site?.businessHours, site?.timeZone ?? '+07:00', now) !== 'OPEN') return;
     const open = await prisma.alert.findFirst({ where: { deviceId, type, state: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
     if (!open) {
       await prisma.alert.create({
@@ -190,6 +286,7 @@ export async function fleetOverview() {
       where: { monitored: true },
       select: {
         id: true, source: true, plazaName: true, plazaUnid: true, customerId: true,
+        vendorGroupName: true, vendorAccountName: true, accountAmbiguous: true, customerSource: true,
         customer: { select: { id: true, customerName: true } },
         _count: { select: { devices: true } },
         devices: { select: { currentStatus: true, statusSince: true } },
@@ -205,7 +302,9 @@ export async function fleetOverview() {
     const offline = s.devices.filter(d => d.currentStatus === 0 || d.currentStatus === -1).length;
     return {
       id: s.id, source: s.source, plazaName: s.plazaName, plazaUnid: s.plazaUnid,
-      customer: s.customer, devices: s._count.devices, online, offline,
+      customer: s.customer, customerSource: s.customerSource,
+      vendorGroupName: s.vendorGroupName, vendorAccountName: s.vendorAccountName, accountAmbiguous: s.accountAmbiguous,
+      devices: s._count.devices, online, offline,
       health: s._count.devices === 0 ? 'EMPTY' : offline === 0 ? 'OK' : online === 0 ? 'DOWN' : 'DEGRADED',
     };
   });

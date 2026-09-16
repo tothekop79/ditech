@@ -24,10 +24,15 @@ export interface VionConfig {
   timeoutMs?: number;
 }
 
+export interface VionGroupNode { id: number; parentId: number; name: string; children?: VionGroupNode[] }
+export interface VionAccount { name: string; groups: VionGroupNode[] }
+
 export interface VionPlaza {
   plazaUnid: string;
   plazaName: string;
-  plazaExternalid?: string;
+  plazaExternalid?: string | null;
+  groupName?: string | null;                          // Retail: leaf group name; resolve via listGroups()
+  address?: string;
   timeZone?: string;                                  // Retail only, sometimes ""
   businessHours?: { week: number; startTime: string; endTime: string }[];
   launchTime?: string;
@@ -141,6 +146,12 @@ export class VionClient {
   // ── endpoints ────────────────────────────────────────────────────────────
   listPlazas(): Promise<VionPlaza[]> {
     return this.get<VionPlaza[]>('/api/v2/base/plazaInfo');
+  }
+
+  /** Retail only — Mall returns 404, which we treat as "no grouping" rather than an error. */
+  async listGroups(): Promise<VionAccount[]> {
+    try { return (await this.get<VionAccount[] | null>('/api/v2/base/groupInfo')) ?? []; }
+    catch (e) { if (e instanceof VionApiError && e.code === 404) return []; throw e; }
   }
 
   async listDevices(plazaUnid: string): Promise<VionDevice[]> {

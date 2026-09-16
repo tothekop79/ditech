@@ -767,6 +767,11 @@ model MonitoredSite {
   timeZone       String   @default("+07:00")  // Mall has none → fallback
   businessHours  Json?                        // raw [{week,startTime,endTime}] from plazaInfo
   monitored      Boolean  @default(true)      // false for demo / finished events (26 empty sites)
+  // ── vendor grouping (Retail groupInfo + plazaInfo.groupName). Covers ~36% of sites; rest is manual. ──
+  vendorGroupName   String?                   // leaf group as vendor reports it (e.g. "MCM", "Thailand")
+  vendorAccountName String?                   // top-level account resolved from groupInfo tree (e.g. "PP Group", "Panpuri")
+  accountAmbiguous  Boolean @default(false)   // groupName exists under >1 account (e.g. "Brand B") — needs a human
+  customerSource    String?                   // "VENDOR" auto-linked · "MANUAL" set by user · null unlinked
   customerId     String?                      // link to existing Customer once mapped
   customer       Customer? @relation(fields: [customerId], references: [id])
   lastSyncedAt   DateTime?
