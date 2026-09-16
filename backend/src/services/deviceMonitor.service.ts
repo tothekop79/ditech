@@ -20,8 +20,10 @@ export function setNotifier(fn: Notifier) { notify = fn; }
 /** Vendor server clock — modifyTime is server-local (GMT+8, verified vs portal 2026-09-17), NOT site tz. */
 const VENDOR_SERVER_TZ = process.env.VION_SERVER_TZ || '+08:00';
 const POLL_CONCURRENCY = Number(process.env.VION_POLL_CONCURRENCY) || 4;
-/** Debounce: a device must be offline for this long before an alert opens (absorbs 1-poll blips). */
-const OFFLINE_GRACE_MS = Number(process.env.VION_OFFLINE_GRACE_MS) || 10 * 60 * 1000;
+/** A device must be continuously offline this long (during business hours) before an alert opens.
+ *  Cameras miss heartbeats now and then and the vendor flips them offline for ~12 min; 60 min filters that. */
+const OFFLINE_GRACE_MS = Number(process.env.VION_OFFLINE_GRACE_MS) || 60 * 60 * 1000;
+const DIGEST_ALWAYS = process.env.VION_DIGEST_ALWAYS === 'true';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 function parseVendorTime(s?: string, tz = '+07:00'): Date | null {
@@ -181,6 +183,7 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
   // (b) "didn't come back after opening": offline devices with no open alert, at a site that is now OPEN.
   const stillOffline = await prisma.monitoredDevice.findMany({
     where: { currentStatus: { in: [DeviceStatus.OFFLINE, DeviceStatus.UNKNOWN] }, site: { monitored: true },
+             statusSince: { lte: new Date(Date.now() - OFFLINE_GRACE_MS) },      // continuously down ≥ grace
              alerts: { none: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } } } },
     include: { site: true },
   });
@@ -190,8 +193,8 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
     const type = d.currentStatus === DeviceStatus.UNKNOWN ? 'DEVICE_MISSING' : 'OFFLINE';
     await prisma.alert.create({ data: {
       type, severity: 'WARN', siteId: d.siteId, deviceId: d.id,
-      message: `${d.site.plazaName} · ${d.name ?? d.serialnum} still offline after opening`,
-      details: { reason: 'not_back_after_open', statusSince: d.statusSince },
+      message: `${d.site.plazaName} · ${d.name ?? d.serialnum} offline ≥ ${Math.round(OFFLINE_GRACE_MS / 60000)} min during business hours`,
+      details: { statusSince: d.statusSince },
     } });
     stats.opened++;
   }
@@ -234,45 +237,55 @@ async function transition(deviceId: string, siteId: string, from: number, to: nu
     prisma.deviceStatusLog.create({ data: { deviceId, fromStatus: from, toStatus: to, changedAt: now } }),
   ]);
 
-  const type = to === DeviceStatus.UNKNOWN ? 'DEVICE_MISSING' : 'OFFLINE';
-  const isBad = to === DeviceStatus.OFFLINE || to === DeviceStatus.UNKNOWN;
-
-  if (isBad) {
-    // (a) went offline — only a problem if the store is open right now. Outside hours = staff powered it off.
-    const site = await prisma.monitoredSite.findUnique({ where: { id: siteId }, select: { businessHours: true, timeZone: true } });
-    if (businessHoursState(site?.businessHours, site?.timeZone ?? '+07:00', now) !== 'OPEN') return;
-    const open = await prisma.alert.findFirst({ where: { deviceId, type, state: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
-    if (!open) {
-      await prisma.alert.create({
-        data: { type, severity: 'WARN', siteId, deviceId, message: `${label} → ${type}`, details: { from, to } },
-      });
-      stats.opened++;
-    }
-  } else if (to === DeviceStatus.ONLINE) {
+  // Going offline never opens an alert here — a missed heartbeat flips status for a poll or two.
+  // The "still offline" pass in pollDevices() opens one once the device has been down ≥ OFFLINE_GRACE_MS
+  // during business hours. Recovery resolves silently; the digest reports it.
+  if (to === DeviceStatus.ONLINE) {
     const opens = await prisma.alert.findMany({ where: { deviceId, type: { in: ['OFFLINE', 'DEVICE_MISSING'] }, state: { in: ['OPEN', 'ACKNOWLEDGED'] } } });
     for (const a of opens) {
-      await prisma.alert.update({ where: { id: a.id }, data: { state: 'RESOLVED', resolvedAt: now } });
+      await prisma.alert.update({ where: { id: a.id }, data: { state: 'RESOLVED', resolvedAt: now, details: { ...(a.details as object ?? {}), from, resolvedLabel: label } } });
       stats.resolved++;
-      const mins = Math.round((now.getTime() - a.openedAt.getTime()) / 60000);
-      if (mins * 60000 >= OFFLINE_GRACE_MS) await notify(`✅ ONLINE ${label}\nกลับมาหลังจาก ${mins} นาที`);
     }
   }
 }
 
-/** Notify OPEN alerts once they have survived the grace window. Call right after pollDevices(). */
-export async function notifyPendingAlerts() {
-  const cutoff = new Date(Date.now() - OFFLINE_GRACE_MS);
-  const due = await prisma.alert.findMany({
-    where: { state: 'OPEN', notifiedAt: null, openedAt: { lte: cutoff } },
-    include: { site: true, device: true },
-    orderBy: { openedAt: 'asc' },
-    take: 50,
-  });
-  if (!due.length) return 0;
-  const lines = due.map(a => `🔴 ${a.type} ${a.site.plazaName} · ${a.device?.name ?? a.device?.serialnum ?? '-'} (since ${a.openedAt.toISOString().slice(11, 16)}Z)`);
-  await notify(`DITECH Camera Monitor — ${due.length} alert(s)\n${lines.join('\n')}`);
-  await prisma.alert.updateMany({ where: { id: { in: due.map(a => a.id) } }, data: { notifiedAt: new Date() } });
-  return due.length;
+/**
+ * Periodic Telegram digest (cron in the queue, default 3×/day). One message:
+ *   open alerts grouped by customer → site, flagged NEW if not in the previous digest,
+ *   plus a count of devices that recovered since the previous digest.
+ * "Previous digest" = max(Alert.notifiedAt); no extra state table needed.
+ */
+export async function sendDigest() {
+  const now = new Date();
+  const last = (await prisma.alert.aggregate({ _max: { notifiedAt: true } }))._max.notifiedAt ?? new Date(now.getTime() - 6 * 3600_000);
+  const [open, recovered] = await Promise.all([
+    prisma.alert.findMany({
+      where: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } },
+      include: { site: { include: { customer: { select: { customerName: true } } } }, device: true },
+      orderBy: [{ siteId: 'asc' }, { openedAt: 'asc' }],
+    }),
+    prisma.alert.count({ where: { state: 'RESOLVED', resolvedAt: { gt: last } } }),
+  ]);
+  const fresh = open.filter(a => !a.notifiedAt).length;
+  if (!open.length && !recovered && !DIGEST_ALWAYS) return { sent: false, open: 0, fresh: 0, recovered: 0 };
+
+  const thTime = (d: Date) => new Date(d.getTime() + 7 * 3600_000).toISOString().slice(5, 16).replace('T', ' ');
+  const byCustomer = new Map<string, string[]>();
+  for (const a of open) {
+    const cust = a.site.customer?.customerName ?? '(unassigned)';
+    const hrs = Math.round((now.getTime() - a.openedAt.getTime()) / 3600_000);
+    const line = `  ${a.notifiedAt ? '•' : '🆕'} ${a.site.plazaName} · ${a.device?.name ?? a.device?.serialnum ?? '-'} — ${hrs} h (since ${thTime(a.openedAt)})`;
+    if (!byCustomer.has(cust)) byCustomer.set(cust, []);
+    byCustomer.get(cust)!.push(line);
+  }
+  const body = [...byCustomer.entries()].sort(([a], [b]) => a.localeCompare(b))
+    .map(([cust, lines]) => `${cust} (${lines.length})\n${lines.join('\n')}`).join('\n');
+  const header = `📷 DITECH Camera Monitor — ${thTime(now)} TH\n` +
+    `ดับอยู่ ${open.length} ตัว (ใหม่ ${fresh}) · กลับมาแล้ว ${recovered} ตัวตั้งแต่รอบก่อน`;
+  const text = open.length ? `${header}\n\n${body}` : `${header}\n✅ ไม่มีกล้องดับในเวลาทำการ`;
+  await notify(text.length > 3900 ? text.slice(0, 3850) + '\n… (ตัดทอน ดูเต็มใน dashboard)' : text);   // Telegram 4096 limit
+  await prisma.alert.updateMany({ where: { id: { in: open.map(a => a.id) } }, data: { notifiedAt: now } });
+  return { sent: true, open: open.length, fresh, recovered };
 }
 
 // ── read models for the dashboard ──────────────────────────────────────────
