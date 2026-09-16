@@ -496,6 +496,7 @@ enum NotificationTrigger {
   PLAN_CREATED
   PHOTO_UPLOADED
   EVENT_REPORT_READY
+  CAMERA_DIGEST
 }
 
 enum NotificationStatus {

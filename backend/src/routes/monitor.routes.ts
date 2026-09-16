@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { fleetOverview, pollDevices, syncSites } from '../services/deviceMonitor.service';
+import { fleetOverview, pollDevices, syncSites, sendDigest } from '../services/deviceMonitor.service';
 import { authenticate } from '../middlewares/auth.middleware';
 
 const prisma = new PrismaClient();
@@ -116,5 +116,6 @@ r.get('/devices/:id/uptime', async (req, res, next) => {
 /** Manual triggers (admin) — handy while testing without waiting for the repeatable */
 r.post('/run/sync', async (_req, res, next) => { try { res.json({ success: true, data: await syncSites() }); } catch (e) { next(e); } });
 r.post('/run/poll', async (_req, res, next) => { try { res.json({ success: true, data: await pollDevices() }); } catch (e) { next(e); } });
+r.post('/run/digest', async (_req, res, next) => { try { res.json({ success: true, data: await sendDigest() }); } catch (e) { next(e); } });
 
 export default r;

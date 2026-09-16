@@ -21,6 +21,7 @@ import eventRoutes from './routes/event.routes';
 import { startEventReportWorker } from './queues/eventReport.queue';
 import monitorRoutes from './routes/monitor.routes';
 import { startDeviceMonitor } from './queues/deviceMonitor.queue';
+import { wireCameraDigestToTelegram } from './services/cameraDigestNotifier';
 import provinceRoutes from './routes/province.routes';
 import cameraModelRoutes from './routes/cameraModel.routes';
 import installationDesignRoutes from './routes/installationDesign.routes';
@@ -107,6 +108,7 @@ server.listen(PORT, () => {
 
   startScheduler();
   startEventReportWorker();
+  wireCameraDigestToTelegram();
   startDeviceMonitor().catch((e) => console.error('[monitor] start failed', e));
 });
 
