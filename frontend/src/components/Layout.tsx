@@ -11,6 +11,7 @@ const PRIMARY_NAV = [
   { to: '/gantt', label: 'Gantt', icon: '📊' },
   { to: '/map', label: 'Map', icon: '🗺️' },
   { to: '/reports', label: 'Reports', icon: '📈' },
+  { to: '/monitor', label: 'Camera Monitor', icon: '📷' },
   { to: '/command-center', label: 'Command', icon: '🛰️' },
   { to: '/command-wall', label: 'Wall', icon: '📺' },
 ];
@@ -20,6 +21,7 @@ const SETTINGS_NAV = [
   { group: 'Operations', items: [
     { to: '/capacity', label: 'Capacity', icon: '⚖️' },
     { to: '/alerts', label: 'Alerts', icon: '🚨' },
+    { to: '/monitor/alerts', label: 'Camera alerts', icon: '📸' },
     { to: '/notify', label: 'Notification rules', icon: '🔔' },
   ]},
   { group: 'People', items: [

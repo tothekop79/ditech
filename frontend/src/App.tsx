@@ -24,6 +24,9 @@ import { CustomersPage } from './pages/CustomersPage';
 import { DepartmentsPage } from './pages/DepartmentsPage';
 import { ProvincesPage } from './pages/ProvincesPage';
 import { DesignEditorPage } from './pages/DesignEditorPage';
+import { FleetOverviewPage } from './pages/FleetOverviewPage';
+import { MonitorSitePage } from './pages/MonitorSitePage';
+import { MonitorAlertsPage } from './pages/MonitorAlertsPage';
 
 export function App() {
   const { token } = useAuth();
@@ -66,6 +69,9 @@ export function App() {
             <Route path="/events" element={<EventsListPage />} />
             <Route path="/events/new" element={<NewEventWizard />} />
             <Route path="/events/:id" element={<EventDetailPage />} />
+            <Route path="/monitor" element={<FleetOverviewPage />} />
+            <Route path="/monitor/alerts" element={<MonitorAlertsPage />} />
+            <Route path="/monitor/sites/:id" element={<MonitorSitePage />} />
             <Route path="/designs/:id" element={<DesignEditorPage />} />
             <Route path="/designs/by-plan/:planId" element={<DesignEditorPage />} />
             <Route path="/designs/by-event/:eventId" element={<DesignEditorPage />} />

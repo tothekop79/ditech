@@ -11,8 +11,9 @@ const r = Router();
 r.use(authenticate);
 
 /** KPI + per-site health for the Fleet Overview page */
-r.get('/overview', async (_req, res, next) => {
-  try { res.json({ success: true, data: await fleetOverview() }); } catch (e) { next(e); }
+/** ?all=1 includes unmonitored sites (demo / finished events) */
+r.get('/overview', async (req, res, next) => {
+  try { res.json({ success: true, data: await fleetOverview(req.query.all === '1') }); } catch (e) { next(e); }
 });
 
 /** Site detail: devices + channels + open alerts */

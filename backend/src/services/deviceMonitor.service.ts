@@ -290,16 +290,17 @@ export async function sendDigest() {
 }
 
 // ── read models for the dashboard ──────────────────────────────────────────
-export async function fleetOverview() {
-  const [bySource, bySite, openAlerts] = await Promise.all([
+export async function fleetOverview(includeUnmonitored = false) {
+  const siteWhere = includeUnmonitored ? {} : { monitored: true };
+  const [bySource, bySite, openAlerts, lastPoll] = await Promise.all([
     prisma.monitoredDevice.groupBy({
       by: ['currentStatus'], _count: { _all: true },
       where: { site: { monitored: true } },
     }),
     prisma.monitoredSite.findMany({
-      where: { monitored: true },
+      where: siteWhere,
       select: {
-        id: true, source: true, plazaName: true, plazaUnid: true, customerId: true,
+        id: true, source: true, plazaName: true, plazaUnid: true, customerId: true, monitored: true, alwaysOpen: true,
         vendorGroupName: true, vendorAccountName: true, accountAmbiguous: true, customerSource: true,
         customer: { select: { id: true, customerName: true } },
         _count: { select: { devices: true } },
@@ -308,6 +309,7 @@ export async function fleetOverview() {
       orderBy: [{ source: 'asc' }, { plazaName: 'asc' }],
     }),
     prisma.alert.count({ where: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } } }),
+    prisma.monitoredDevice.aggregate({ _max: { lastPolledAt: true } }),
   ]);
 
   const total = Object.fromEntries(bySource.map(r => [String(r.currentStatus), r._count._all]));
@@ -316,6 +318,7 @@ export async function fleetOverview() {
     const offline = s.devices.filter(d => d.currentStatus === 0 || d.currentStatus === -1).length;
     return {
       id: s.id, source: s.source, plazaName: s.plazaName, plazaUnid: s.plazaUnid,
+      monitored: s.monitored, alwaysOpen: s.alwaysOpen,
       customer: s.customer, customerSource: s.customerSource,
       vendorGroupName: s.vendorGroupName, vendorAccountName: s.vendorAccountName, accountAmbiguous: s.accountAmbiguous,
       devices: s._count.devices, online, offline,
@@ -324,6 +327,6 @@ export async function fleetOverview() {
   });
   return {
     devices: { total: Object.values(total).reduce((a, b) => a + b, 0), online: total['1'] ?? 0, offline: total['0'] ?? 0, missing: total['-1'] ?? 0, disabled: total['3'] ?? 0 },
-    openAlerts, sites,
+    openAlerts, sites, lastPolledAt: lastPoll._max.lastPolledAt,
   };
 }
