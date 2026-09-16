@@ -11,8 +11,12 @@ import {
   SOURCES,
   SOURCE_COLOR,
   UNASSIGNED,
+  contractChip,
+  fmtDate,
   fmtDateTime,
   relativeTime,
+  type ContractInput,
+  type ContractState,
   type FleetOverview,
   type FleetSite,
   type MonitorCustomerRef,
@@ -22,6 +26,7 @@ import {
 } from '../api/monitor';
 import { useToast } from '../components/Toast';
 import { FleetDevicePanel, type DevicePanelSpec } from '../components/monitor/FleetDevicePanel';
+import { CancelSiteModal, ContractModal } from '../components/monitor/ContractModals';
 
 /** /overview and /overview?all=1 are cached separately; invalidating the prefix refreshes both. */
 const OVERVIEW_ROOT = ['monitor-overview'];
@@ -55,6 +60,19 @@ const DEVICE_PANELS: Record<string, DevicePanelSpec> = {
   recoveredToday: { key: 'recoveredToday', title: 'Recovered today · กลับมาวันนี้', params: { status: '1', since: 'today' } },
 };
 
+/** contract filter — CANCELLED is not a contract state, it's the cancelledAt flag */
+type ContractFilter = '' | 'EXPIRING' | 'EXPIRED' | 'NONE' | 'CANCELLED';
+const CONTRACT_FILTERS: { value: ContractFilter; label: string }[] = [
+  { value: '', label: 'All contracts' },
+  { value: 'EXPIRING', label: 'Expiring · ใกล้หมด' },
+  { value: 'EXPIRED', label: 'Expired · หมดแล้ว' },
+  { value: 'NONE', label: 'No contract · ไม่ระบุ' },
+  { value: 'CANCELLED', label: 'Cancelled · ยกเลิก' },
+];
+
+/** EXPIRED first, then EXPIRING soonest-first; everything else keeps the API's name order */
+const CONTRACT_SORT: Record<ContractState, number> = { EXPIRED: 0, EXPIRING: 1, ACTIVE: 2, NONE: 2 };
+
 /** worst-first — EMPTY (no cameras registered) ranks above OK, below a real outage */
 const HEALTH_RANK: Record<SiteHealth, number> = { DOWN: 4, DEGRADED: 3, EMPTY: 2, OK: 1 };
 
@@ -68,6 +86,8 @@ interface CustomerGroup {
   offlineInHours: number;
   offlineOver24h: number;
   openAlerts: number;
+  expiring: number;
+  expired: number;
   worst: SiteHealth;
 }
 
@@ -96,7 +116,10 @@ export function FleetOverviewPage() {
   /** explicit user choices only; groups with no entry fall back to "expanded when something is offline" */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [newCustomerFor, setNewCustomerFor] = useState<FleetSite | null>(null);
+  const [contract, setContract] = useState<ContractFilter>('');
   const [panel, setPanel] = useState<DevicePanelSpec | null>(null);
+  const [contractFor, setContractFor] = useState<ContractTarget | null>(null);
+  const [cancelFor, setCancelFor] = useState<FleetSite | null>(null);
   const sitesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -170,6 +193,30 @@ export function FleetOverviewPage() {
     onError: (e: any) => showToast(e?.response?.data?.message || 'Failed to create customer'),
   });
 
+  const setContractMut = useMutation({
+    mutationFn: ({ siteIds, body }: { siteIds: string[]; body: ContractInput }) => monitorApi.setContract(siteIds, body),
+    onSuccess: (r) => {
+      showToast(`Contract saved · ${r.updated} site${r.updated === 1 ? '' : 's'}`);
+      setContractFor(null);
+      qc.invalidateQueries({ queryKey: OVERVIEW_ROOT });
+    },
+    onError: (e: any) => showToast(e?.response?.data?.message || 'Failed to save contract'),
+  });
+
+  const cancelSite = useMutation({
+    mutationFn: ({ site, note }: { site: FleetSite; note?: string }) => monitorApi.cancelSite(site.id, note),
+    onSuccess: (_row, vars) => {
+      setCancelFor(null);
+      qc.invalidateQueries({ queryKey: OVERVIEW_ROOT });
+      // undo only restores monitoring — cancelledAt stays as history, as the backend intends
+      showToast(`ยกเลิก “${vars.site.plazaName}” แล้ว`, {
+        label: 'Undo',
+        run: () => patchSite.mutate({ id: vars.site.id, patch: { monitored: true } }),
+      });
+    },
+    onError: (e: any) => showToast(e?.response?.data?.message || 'Failed to cancel site'),
+  });
+
   const runPoll = useMutation({
     mutationFn: () => monitorApi.runPoll(),
     onSuccess: (r) => {
@@ -192,6 +239,7 @@ export function FleetOverviewPage() {
     const needle = q.trim().toLowerCase();
     return sites.filter((s) => {
       if (health && s.health !== health) return false;
+      if (contract === 'CANCELLED' ? !s.cancelledAt : contract && s.contractState !== contract) return false;
       if (source && s.source !== source) return false;
       if (customerId && (customerId === NO_CUSTOMER ? !!s.customer : s.customer?.id !== customerId)) return false;
       if (!needle) return true;
@@ -201,7 +249,7 @@ export function FleetOverviewPage() {
         (s.vendorGroupName ?? '').toLowerCase().includes(needle)
       );
     });
-  }, [sites, q, health, source, customerId]);
+  }, [sites, q, health, source, customerId, contract]);
 
   const alertsBySite = useMemo(() => {
     const m = new Map<string, number>();
@@ -218,7 +266,8 @@ export function FleetOverviewPage() {
       if (!g) {
         g = {
           key, name: s.customer?.customerName ?? UNASSIGNED, sites: [],
-          devices: 0, online: 0, offline: 0, offlineInHours: 0, offlineOver24h: 0, openAlerts: 0, worst: 'OK',
+          devices: 0, online: 0, offline: 0, offlineInHours: 0, offlineOver24h: 0, openAlerts: 0,
+          expiring: 0, expired: 0, worst: 'OK',
         };
         map.set(key, g);
       }
@@ -229,7 +278,18 @@ export function FleetOverviewPage() {
       g.offlineInHours += s.offlineInHours;
       g.offlineOver24h += s.offlineOver24h;
       g.openAlerts += alertsBySite.get(s.id) ?? 0;
+      if (s.contractState === 'EXPIRING') g.expiring++;
+      if (s.contractState === 'EXPIRED') g.expired++;
       if (HEALTH_RANK[s.health] > HEALTH_RANK[g.worst]) g.worst = s.health;
+    }
+    // contract trouble floats to the top of every group
+    for (const g of map.values()) {
+      g.sites.sort((a, b) => {
+        const r = CONTRACT_SORT[a.contractState] - CONTRACT_SORT[b.contractState];
+        if (r) return r;
+        if (CONTRACT_SORT[a.contractState] < 2) return (a.contractDaysLeft ?? 0) - (b.contractDaysLeft ?? 0);
+        return a.plazaName.localeCompare(b.plazaName);
+      });
     }
     return [...map.values()].sort((a, b) => {
       if (a.name === UNASSIGNED) return 1;
@@ -253,9 +313,10 @@ export function FleetOverviewPage() {
     setCollapsed((c) => ({ ...c, ...Object.fromEntries(groups.map((g) => [g.key, value])) }));
 
   /** site tiles filter the table below instead of opening a panel */
-  const focusSites = (next: { health?: SiteHealth; unassigned?: boolean }) => {
+  const focusSites = (next: { health?: SiteHealth; unassigned?: boolean; contract?: ContractFilter }) => {
     setView('sites');
     setHealth(next.health);
+    setContract(next.contract ?? '');
     setCustomerId(next.unassigned ? NO_CUSTOMER : '');
     setAllCollapsed(false);
     setTimeout(() => sitesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
@@ -312,7 +373,7 @@ export function FleetOverviewPage() {
       )}
 
       {/* KPI row 1 — devices. Every tile opens the matching device list. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
         <Kpi label="Devices · ทั้งหมด" value={d?.total ?? 0} onClick={() => setPanel(DEVICE_PANELS.all)} />
         <Kpi label="Online · ออนไลน์" value={d?.online ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.online)} />
         <Kpi
@@ -340,7 +401,7 @@ export function FleetOverviewPage() {
       </div>
 
       {/* KPI row 2 — fleet. Site tiles filter the table below; churn tiles open a device list. */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-5 gap-2">
         <Kpi label="Sites OK · ปกติ" value={k?.sitesOk ?? 0} tone="text-green-600" onClick={() => focusSites({ health: 'OK' })} />
         <Kpi label="Sites degraded · บางส่วน" value={k?.sitesDegraded ?? 0} tone="text-amber-600" onClick={() => focusSites({ health: 'DEGRADED' })} />
         <Kpi label="Sites down · ดับทั้งสาขา" value={k?.sitesDown ?? 0} tone="text-red-600" onClick={() => focusSites({ health: 'DOWN' })} />
@@ -348,6 +409,18 @@ export function FleetOverviewPage() {
         <Kpi label="Recovered today · กลับมาวันนี้" value={k?.recoveredToday ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.recoveredToday)} />
         <Kpi label="Open alerts · แจ้งเตือน" value={overview?.openAlerts ?? 0} tone="text-amber-600" onClick={() => navigate('/monitor/alerts')} />
         <Kpi label="Unassigned sites · ยังไม่ผูกลูกค้า" value={k?.unassignedSites ?? 0} onClick={() => focusSites({ unassigned: true })} />
+        <Kpi
+          label="Contract expired · สัญญาหมด"
+          value={k?.contractExpired ?? 0}
+          tone="text-red-600"
+          onClick={() => focusSites({ contract: 'EXPIRED' })}
+        />
+        <Kpi
+          label="Expiring ≤30d · ใกล้หมด"
+          value={k?.contractExpiring ?? 0}
+          tone="text-amber-600"
+          onClick={() => focusSites({ contract: 'EXPIRING' })}
+        />
         <div className="bg-white border border-gray-200 rounded-lg p-2.5">
           <div className="text-[10px] uppercase tracking-wider text-gray-400">Last poll · โพลล์ล่าสุด</div>
           <div className="text-sm font-medium text-gray-700 mt-0.5" title={fmtDateTime(overview?.lastPolledAt)}>
@@ -383,6 +456,22 @@ export function FleetOverviewPage() {
           {SOURCES.map((s) => (
             <FilterBtn key={s} active={source === s} onClick={() => setSource(source === s ? undefined : s)}>
               {s}
+            </FilterBtn>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {CONTRACT_FILTERS.map((c) => (
+            <FilterBtn
+              key={c.value}
+              active={contract === c.value}
+              onClick={() => {
+                const next = contract === c.value ? '' : c.value;
+                setContract(next);
+                // cancelled sites are monitored=false, so they need the ?all=1 list to be visible at all
+                if (next === 'CANCELLED') setShowUnmonitored(true);
+              }}>
+              {c.label}
             </FilterBtn>
           ))}
         </div>
@@ -441,6 +530,8 @@ export function FleetOverviewPage() {
                 <th className="px-2 py-2 font-medium text-right">Offline</th>
                 <th className="px-2 py-2 font-medium">Health</th>
                 <th className="px-2 py-2 font-medium">Vendor group</th>
+                <th className="px-2 py-2 font-medium">สัญญาเริ่ม</th>
+                <th className="px-2 py-2 font-medium">สิ้นสุด</th>
                 <th className="px-2 py-2 font-medium text-center">24h</th>
                 <th className="px-2 py-2 font-medium">Customer · ลูกค้า</th>
                 <th className="px-2 py-2 font-medium text-center">Monitor</th>
@@ -458,6 +549,8 @@ export function FleetOverviewPage() {
                   onOpen={(id) => navigate(`/monitor/sites/${id}`)}
                   onPatch={(id, patch, customer) => patchSite.mutate({ id, patch, customer })}
                   onNewCustomer={(site) => setNewCustomerFor(site)}
+                  onContract={(target) => setContractFor(target)}
+                  onCancel={(site) => setCancelFor(site)}
                 />
               ))}
             </tbody>
@@ -466,6 +559,29 @@ export function FleetOverviewPage() {
       )}
 
       {panel && <FleetDevicePanel spec={panel} onClose={() => setPanel(null)} />}
+
+      {contractFor && (
+        <ContractModal
+          title={contractFor.title}
+          subtitle={contractFor.subtitle}
+          contractStart={contractFor.contractStart}
+          contractEnd={contractFor.contractEnd}
+          contractNote={contractFor.contractNote}
+          renew={contractFor.renew}
+          submitting={setContractMut.isPending}
+          onClose={() => setContractFor(null)}
+          onSubmit={(body) => setContractMut.mutate({ siteIds: contractFor.siteIds, body })}
+        />
+      )}
+
+      {cancelFor && (
+        <CancelSiteModal
+          siteName={cancelFor.plazaName}
+          submitting={cancelSite.isPending}
+          onClose={() => setCancelFor(null)}
+          onConfirm={(note) => cancelSite.mutate({ site: cancelFor, note })}
+        />
+      )}
 
       {newCustomerFor && (
         <NewCustomerModal
@@ -481,6 +597,54 @@ export function FleetOverviewPage() {
 
 // ─── Sites view ───
 
+/** What the contract modal is about to write — one site, or every site of a customer. */
+interface ContractTarget {
+  siteIds: string[];
+  title: string;
+  subtitle?: string;
+  contractStart?: string | null;
+  contractEnd?: string | null;
+  contractNote?: string | null;
+  renew?: boolean;
+}
+
+function RowMenu({ items }: { items: { label: string; onClick: () => void; danger?: boolean }[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [open]);
+
+  return (
+    <span ref={ref} className="relative inline-block">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        title="More actions · การจัดการ"
+        className="px-1 text-gray-400 hover:text-gray-700">
+        …
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl w-52 py-1 z-20 text-left">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              onClick={() => { setOpen(false); it.onClick(); }}
+              className={`block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${it.danger ? 'text-red-600' : 'text-gray-700'}`}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
 function GroupRows({
   group,
   collapsed,
@@ -490,6 +654,8 @@ function GroupRows({
   onOpen,
   onPatch,
   onNewCustomer,
+  onContract,
+  onCancel,
 }: {
   group: CustomerGroup;
   collapsed: boolean;
@@ -499,17 +665,37 @@ function GroupRows({
   onOpen: (id: string) => void;
   onPatch: (id: string, patch: SitePatch, customer?: MonitorCustomerRef | null) => void;
   onNewCustomer: (site: FleetSite) => void;
+  onContract: (target: ContractTarget) => void;
+  onCancel: (site: FleetSite) => void;
 }) {
   return (
     <>
       <tr className="bg-gray-50 border-b border-gray-200 cursor-pointer hover:bg-gray-100" onClick={onToggle}>
-        <td colSpan={9} className="px-3 py-1.5 text-xs font-semibold text-gray-700">
+        <td colSpan={11} className="px-3 py-1.5 text-xs font-semibold text-gray-700">
           <span className="inline-block w-3 text-gray-400">{collapsed ? '▸' : '▾'}</span>
           🏢 {group.name}
+          {group.expired > 0 && <span className="ml-1 text-red-600" title={`${group.expired} สาขาสัญญาหมดแล้ว`}>●</span>}
           <span className="ml-2 font-normal text-gray-400">
             {group.sites.length} sites · {group.devices} devices
             {group.offline > 0 ? <span className="text-red-600"> · {group.offline} offline</span> : ' · 0 offline'}
+            {group.expired > 0 && <span className="text-red-600"> · {group.expired} หมดสัญญา</span>}
+            {group.expiring > 0 && <span className="text-amber-600"> · {group.expiring} ใกล้หมด</span>}
           </span>
+          {editMode && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onContract({
+                  siteIds: group.sites.map((x) => x.id),
+                  title: 'ตั้งค่าสัญญาทั้งลูกค้า · Set contract for all sites',
+                  // applies to the sites currently listed for this customer — filters narrow it
+                  subtitle: `${group.name} — ${group.sites.length} สาขาที่แสดงอยู่ (ทับค่าเดิมทั้งหมด)`,
+                });
+              }}
+              className="ml-2 text-[11px] px-1.5 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-white font-normal">
+              📄 ตั้งค่าสัญญาทั้งลูกค้า
+            </button>
+          )}
         </td>
       </tr>
       {!collapsed &&
@@ -522,7 +708,14 @@ function GroupRows({
               <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border mr-1.5 ${SOURCE_COLOR[s.source]}`}>
                 {s.source}
               </span>
-              <span className="text-gray-900">{s.plazaName}</span>
+              <span className={s.cancelledAt ? 'text-gray-500 line-through' : 'text-gray-900'}>{s.plazaName}</span>
+              {s.cancelledAt && (
+                <span
+                  className="ml-1.5 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border bg-gray-100 text-gray-500 border-gray-300"
+                  title={`ยกเลิกเมื่อ ${fmtDate(s.cancelledAt)}`}>
+                  ยกเลิกแล้ว
+                </span>
+              )}
               {s.accountAmbiguous && <span className="ml-1 text-amber-500" title="vendor group matches more than one account">⚠️</span>}
             </td>
             <td className="px-2 py-1.5 text-right text-gray-600">{s.devices}</td>
@@ -534,6 +727,11 @@ function GroupRows({
               </span>
             </td>
             <td className="px-2 py-1.5 text-xs text-gray-500">{s.vendorGroupName || '—'}</td>
+            <td className="px-2 py-1.5 text-xs text-gray-500 whitespace-nowrap">{fmtDate(s.contractStart)}</td>
+            <td className="px-2 py-1.5 text-xs text-gray-500 whitespace-nowrap" title={s.contractNote || undefined}>
+              {fmtDate(s.contractEnd)}
+              <ContractChip state={s.contractState} daysLeft={s.contractDaysLeft} />
+            </td>
             <td className="px-2 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
               {editMode ? (
                 <button
@@ -580,10 +778,51 @@ function GroupRows({
                 title={editMode ? undefined : 'กด Edit เพื่อแก้ไข'}
                 onChange={(e) => onPatch(s.id, { monitored: e.target.checked })}
               />
+              {editMode && (
+                <RowMenu
+                  items={[
+                    {
+                      label: '📄 ตั้งค่าสัญญา / Set contract',
+                      onClick: () =>
+                        onContract({
+                          siteIds: [s.id],
+                          title: 'ตั้งค่าสัญญา · Set contract',
+                          subtitle: s.plazaName,
+                          contractStart: s.contractStart,
+                          contractEnd: s.contractEnd,
+                          contractNote: s.contractNote,
+                        }),
+                    },
+                    {
+                      label: '🔁 ต่อสัญญา / Renew',
+                      onClick: () =>
+                        onContract({
+                          siteIds: [s.id],
+                          title: 'ต่อสัญญา · Renew contract',
+                          subtitle: `${s.plazaName} — เดิมสิ้นสุด ${fmtDate(s.contractEnd)}`,
+                          contractStart: s.contractStart,
+                          contractEnd: s.contractEnd,
+                          contractNote: s.contractNote,
+                          renew: true,
+                        }),
+                    },
+                    { label: '🚫 ยกเลิกสาขา / Cancel site', onClick: () => onCancel(s), danger: true },
+                  ]}
+                />
+              )}
             </td>
           </tr>
         ))}
     </>
+  );
+}
+
+function ContractChip({ state, daysLeft }: { state: ContractState; daysLeft: number | null }) {
+  const chip = contractChip(state, daysLeft);
+  return (
+    <span className={`ml-1.5 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${chip.color}`}>
+      {chip.text}
+    </span>
   );
 }
 
@@ -604,6 +843,8 @@ function CustomerTable({ groups, onOpen }: { groups: CustomerGroup[]; onOpen: (g
             <th className="px-2 py-2 font-medium text-right">&gt; 24h</th>
             <th className="px-2 py-2 font-medium text-right">Online %</th>
             <th className="px-2 py-2 font-medium text-right">Alerts</th>
+            <th className="px-2 py-2 font-medium text-right">Expiring</th>
+            <th className="px-2 py-2 font-medium text-right">Expired</th>
             <th className="px-2 py-2 font-medium">Worst site · แย่สุด</th>
           </tr>
         </thead>
@@ -615,7 +856,10 @@ function CustomerTable({ groups, onOpen }: { groups: CustomerGroup[]; onOpen: (g
                 key={g.key}
                 onClick={() => onOpen(g)}
                 className="border-b border-gray-100 last:border-0 cursor-pointer hover:bg-blue-50/50">
-                <td className="px-3 py-1.5 text-gray-900">🏢 {g.name}</td>
+                <td className="px-3 py-1.5 text-gray-900">
+                  🏢 {g.name}
+                  {g.expired > 0 && <span className="ml-1 text-red-600" title={`${g.expired} สาขาสัญญาหมดแล้ว`}>●</span>}
+                </td>
                 <td className="px-2 py-1.5 text-right text-gray-600">{g.sites.length}</td>
                 <td className="px-2 py-1.5 text-right text-gray-600">{g.devices}</td>
                 <td className="px-2 py-1.5 text-right text-green-700">{g.online}</td>
@@ -631,6 +875,12 @@ function CustomerTable({ groups, onOpen }: { groups: CustomerGroup[]; onOpen: (g
                 </td>
                 <td className={`px-2 py-1.5 text-right ${g.openAlerts > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
                   {g.openAlerts}
+                </td>
+                <td className={`px-2 py-1.5 text-right ${g.expiring > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                  {g.expiring}
+                </td>
+                <td className={`px-2 py-1.5 text-right ${g.expired > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                  {g.expired}
                 </td>
                 <td className="px-2 py-1.5">
                   <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${HEALTH_COLOR[g.worst]}`}>

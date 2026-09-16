@@ -10,6 +10,8 @@ export type SiteHealth = 'OK' | 'DEGRADED' | 'DOWN' | 'EMPTY';
 export type CustomerSource = 'VENDOR' | 'MANUAL';
 /** businessHoursState() verdict for a site right now */
 export type HoursState = 'OPEN' | 'CLOSED' | 'TRANSITION';
+/** derived from contractEnd by contractStateOf() — never stored */
+export type ContractState = 'NONE' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED';
 
 export type AlertState = 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED';
 export type AlertSeverity = 'INFO' | 'WARN' | 'CRIT';
@@ -67,6 +69,14 @@ export interface FleetSite {
   /** offline devices that matter right now (0 when the site is closed) */
   offlineInHours: number;
   offlineOver24h: number;
+  contractStart: string | null;
+  contractEnd: string | null;
+  contractNote: string | null;
+  /** set by "cancel site"; such sites are monitored=false, so they need ?all=1 to show up */
+  cancelledAt: string | null;
+  contractState: ContractState;
+  /** days until contractEnd — negative once expired, null when there is no end date */
+  contractDaysLeft: number | null;
   health: SiteHealth;
 }
 
@@ -81,6 +91,9 @@ export interface FleetKpi {
   sitesDegraded: number;
   sitesDown: number;
   unassignedSites: number;
+  contractExpired: number;
+  contractExpiring: number;
+  contractNone: number;
 }
 
 export interface FleetOverview {
@@ -153,6 +166,10 @@ export interface MonitoredSiteRow {
   businessHours: BusinessHour[] | null;
   monitored: boolean;
   alwaysOpen: boolean;
+  contractStart: string | null;
+  contractEnd: string | null;
+  contractNote: string | null;
+  cancelledAt: string | null;
   vendorGroupName: string | null;
   vendorAccountName: string | null;
   accountAmbiguous: boolean;
@@ -217,6 +234,16 @@ export interface SitePatch {
   /** null clears the link and re-opens the site to vendor auto-link on next sync. */
   customerId?: string | null;
   alwaysOpen?: boolean;
+  /** ISO date ("yyyy-MM-dd" is enough) or null to clear */
+  contractStart?: string | null;
+  contractEnd?: string | null;
+  contractNote?: string | null;
+}
+
+export interface ContractInput {
+  contractStart?: string | null;
+  contractEnd?: string | null;
+  contractNote?: string | null;
 }
 
 export interface SiteAssignment {
@@ -278,6 +305,18 @@ export const monitorApi = {
 
   patchSite: (id: string, patch: SitePatch) =>
     api.patch<{ success: boolean; data: MonitoredSiteRow }>(`/monitor/sites/${id}`, patch).then((r) => r.data.data),
+
+  /** one contract across many sites — typically every site of a customer */
+  setContract: (siteIds: string[], body: ContractInput) =>
+    api
+      .post<{ success: boolean; data: { updated: number } }>('/monitor/sites/contract', { siteIds, ...body })
+      .then((r) => r.data.data),
+
+  /** customer ended service: monitored=false + cancelledAt=now; reversible with patchSite({monitored:true}) */
+  cancelSite: (id: string, note?: string) =>
+    api
+      .post<{ success: boolean; data: MonitoredSiteRow }>(`/monitor/sites/${id}/cancel`, note === undefined ? {} : { note })
+      .then((r) => r.data.data),
 
   assign: (assignments: SiteAssignment[]) =>
     api
@@ -411,6 +450,58 @@ export function downloadCsv(filename: string, headers: string[], rows: (string |
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** mirrors VION_CONTRACT_WARN_DAYS on the backend (default 30) */
+export const CONTRACT_WARN_DAYS = 30;
+
+/** Client mirror of contractStateOf() — the site detail endpoint returns raw dates, not the derived state. */
+export function contractStateOf(end: string | null | undefined, now = new Date()): { state: ContractState; daysLeft: number | null } {
+  if (!end) return { state: 'NONE', daysLeft: null };
+  const t = new Date(end).getTime();
+  if (isNaN(t)) return { state: 'NONE', daysLeft: null };
+  const daysLeft = Math.ceil((t - now.getTime()) / 86_400_000);
+  return { state: daysLeft < 0 ? 'EXPIRED' : daysLeft <= CONTRACT_WARN_DAYS ? 'EXPIRING' : 'ACTIVE', daysLeft };
+}
+
+/** Chip text + colour for a contract state. */
+export function contractChip(state: ContractState, daysLeft: number | null): { text: string; color: string } {
+  switch (state) {
+    case 'ACTIVE':
+      return { text: 'ACTIVE', color: 'bg-green-100 text-green-700 border-green-300' };
+    case 'EXPIRING':
+      return { text: `${daysLeft ?? 0} วัน`, color: 'bg-amber-100 text-amber-700 border-amber-300' };
+    case 'EXPIRED':
+      return { text: `หมด ${Math.abs(daysLeft ?? 0)} วัน`, color: 'bg-red-100 text-red-700 border-red-300' };
+    default:
+      return { text: 'ไม่ระบุ', color: 'bg-gray-100 text-gray-500 border-gray-300' };
+  }
+}
+
+/** dd/MM/yyyy — read in UTC so the calendar day never shifts with the viewer's timezone. */
+export function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+}
+
+/** ISO → "yyyy-MM-dd" for <input type="date">; '' when unset. */
+export function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+/** Date maths on "yyyy-MM-dd" strings, in UTC so nothing drifts a day. */
+export function shiftDate(dateInput: string, opts: { days?: number; years?: number }): string {
+  const [y, m, d] = dateInput.split('-').map(Number);
+  if (!y || !m || !d) return dateInput;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (opts.years) dt.setUTCFullYear(dt.getUTCFullYear() + opts.years);
+  if (opts.days) dt.setUTCDate(dt.getUTCDate() + opts.days);
+  return dt.toISOString().slice(0, 10);
 }
 
 export const UNASSIGNED = '(unassigned)';

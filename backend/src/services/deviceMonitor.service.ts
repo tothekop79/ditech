@@ -290,6 +290,15 @@ export async function sendDigest() {
 }
 
 // ── read models for the dashboard ──────────────────────────────────────────
+export type ContractState = 'NONE' | 'ACTIVE' | 'EXPIRING' | 'EXPIRED';
+const CONTRACT_WARN_DAYS = Number(process.env.VION_CONTRACT_WARN_DAYS) || 30;
+/** Derived, never stored: EXPIRED once past contractEnd; EXPIRING within CONTRACT_WARN_DAYS; NONE when no end date. */
+export function contractStateOf(end: Date | null | undefined, now = new Date()): { state: ContractState; daysLeft: number | null } {
+  if (!end) return { state: 'NONE', daysLeft: null };
+  const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86400_000);
+  return { state: daysLeft < 0 ? 'EXPIRED' : daysLeft <= CONTRACT_WARN_DAYS ? 'EXPIRING' : 'ACTIVE', daysLeft };
+}
+
 /** Bangkok local midnight as UTC instant (fleet-wide "today" for churn KPIs). */
 function bkkStartOfDay(now = new Date()): Date {
   const local = new Date(now.getTime() + 7 * 3600_000);
@@ -311,6 +320,7 @@ export async function fleetOverview(includeUnmonitored = false) {
       select: {
         id: true, source: true, plazaName: true, plazaUnid: true, customerId: true, monitored: true, alwaysOpen: true,
         timeZone: true, businessHours: true,
+        contractStart: true, contractEnd: true, contractNote: true, cancelledAt: true,
         vendorGroupName: true, vendorAccountName: true, accountAmbiguous: true, customerSource: true,
         customer: { select: { id: true, customerName: true } },
         _count: { select: { devices: true } },
@@ -331,12 +341,15 @@ export async function fleetOverview(includeUnmonitored = false) {
     const hoursState = businessHoursState(s.businessHours, s.timeZone, nowTs, s.alwaysOpen);
     const offlineInHours = hoursState === 'OPEN' ? offline : 0;
     const offlineOver24h = s.devices.filter(d => (d.currentStatus === 0 || d.currentStatus === -1) && d.statusSince && d.statusSince.getTime() < dayAgo).length;
+    const contract = contractStateOf(s.contractEnd, nowTs);
     return {
       id: s.id, source: s.source, plazaName: s.plazaName, plazaUnid: s.plazaUnid,
       monitored: s.monitored, alwaysOpen: s.alwaysOpen,
       customer: s.customer, customerSource: s.customerSource,
       vendorGroupName: s.vendorGroupName, vendorAccountName: s.vendorAccountName, accountAmbiguous: s.accountAmbiguous,
       devices: s._count.devices, online, offline, hoursState, offlineInHours, offlineOver24h,
+      contractStart: s.contractStart, contractEnd: s.contractEnd, contractNote: s.contractNote, cancelledAt: s.cancelledAt,
+      contractState: contract.state, contractDaysLeft: contract.daysLeft,
       health: s._count.devices === 0 ? 'EMPTY' : offline === 0 ? 'OK' : online === 0 ? 'DOWN' : 'DEGRADED',
     };
   });
@@ -355,7 +368,10 @@ export async function fleetOverview(includeUnmonitored = false) {
         sitesOk: m.filter(s => s.health === 'OK').length,
         sitesDegraded: m.filter(s => s.health === 'DEGRADED').length,
         sitesDown: m.filter(s => s.health === 'DOWN').length,
-        unassignedSites: m.filter(s => !s.customerId).length,
+        unassignedSites: m.filter(s => !s.customer).length,
+        contractExpired: m.filter(s => s.contractState === 'EXPIRED').length,
+        contractExpiring: m.filter(s => s.contractState === 'EXPIRING').length,
+        contractNone: m.filter(s => s.contractState === 'NONE').length,
       };
     })(),
   };

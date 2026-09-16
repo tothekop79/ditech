@@ -35,14 +35,48 @@ r.get('/sites/:id', async (req, res, next) => {
 /** Toggle monitoring / link to customer (used to hide the 26 demo/event sites) */
 r.patch('/sites/:id', async (req, res, next) => {
   try {
-    const { monitored, customerId, alwaysOpen } = req.body ?? {};
+    const { monitored, customerId, alwaysOpen, contractStart, contractEnd, contractNote } = req.body ?? {};
     const data: any = {};
     if (typeof monitored === 'boolean') data.monitored = monitored;
     if (typeof alwaysOpen === 'boolean') data.alwaysOpen = alwaysOpen;
+    const parsedDate = (v: unknown) => v === null ? null : typeof v === 'string' && !isNaN(Date.parse(v)) ? new Date(v) : undefined;
+    if (contractStart !== undefined) { const d = parsedDate(contractStart); if (d !== undefined) data.contractStart = d; }
+    if (contractEnd !== undefined)   { const d = parsedDate(contractEnd);   if (d !== undefined) data.contractEnd = d; }
+    if (contractNote === null || typeof contractNote === 'string') data.contractNote = contractNote;
     // A human assignment is MANUAL and sticks; clearing it (null) re-opens the site to vendor auto-link on next sync.
     if (customerId === null) { data.customerId = null; data.customerSource = null; }
     else if (typeof customerId === 'string') { data.customerId = customerId; data.customerSource = 'MANUAL'; }
     const site = await prisma.monitoredSite.update({ where: { id: req.params.id }, data });
+    res.json({ success: true, data: site });
+  } catch (e) { next(e); }
+});
+
+/** Bulk contract: body { siteIds: string[], contractStart?: ISO|null, contractEnd?: ISO|null, contractNote?: string|null }
+ *  Typical use: one contract covering every site of a customer → pass all its siteIds. */
+r.post('/sites/contract', async (req, res, next) => {
+  try {
+    const { siteIds, contractStart, contractEnd, contractNote } = req.body ?? {};
+    if (!Array.isArray(siteIds) || !siteIds.length) return res.status(400).json({ success: false, message: 'siteIds required' });
+    const data: any = {};
+    const parsedDate = (v: unknown) => v === null ? null : typeof v === 'string' && !isNaN(Date.parse(v)) ? new Date(v) : undefined;
+    if (contractStart !== undefined) { const d = parsedDate(contractStart); if (d !== undefined) data.contractStart = d; }
+    if (contractEnd !== undefined)   { const d = parsedDate(contractEnd);   if (d !== undefined) data.contractEnd = d; }
+    if (contractNote === null || typeof contractNote === 'string') data.contractNote = contractNote;
+    const r2 = await prisma.monitoredSite.updateMany({ where: { id: { in: siteIds } }, data });
+    res.json({ success: true, data: { updated: r2.count } });
+  } catch (e) { next(e); }
+});
+
+/** Cancel a site (customer ended service): monitored=false + cancelledAt=now (+ note). Reversible via PATCH monitored:true. */
+r.post('/sites/:id/cancel', async (req, res, next) => {
+  try {
+    const note = typeof req.body?.note === 'string' ? req.body.note : undefined;
+    const site = await prisma.monitoredSite.update({
+      where: { id: req.params.id },
+      data: { monitored: false, cancelledAt: new Date(), ...(note !== undefined ? { contractNote: note } : {}) },
+    });
+    // close whatever is still open for it — nobody will act on a cancelled site
+    await prisma.alert.updateMany({ where: { siteId: site.id, state: { in: ['OPEN', 'ACKNOWLEDGED'] } }, data: { state: 'RESOLVED', resolvedAt: new Date() } });
     res.json({ success: true, data: site });
   } catch (e) { next(e); }
 });

@@ -769,6 +769,11 @@ model MonitoredSite {
   businessHours  Json?                        // raw [{week,startTime,endTime}] from plazaInfo
   monitored      Boolean  @default(true)      // false for demo / finished events (26 empty sites)
   alwaysOpen     Boolean  @default(false)     // 24h site (airport): offline is always a problem; ignores businessHours
+  // ── contract (ours, not vendor's). State is derived from dates — never stored. ──
+  contractStart  DateTime?
+  contractEnd    DateTime?
+  contractNote   String?
+  cancelledAt    DateTime?                    // set by "cancel site" action; site also gets monitored=false
   // ── vendor grouping (Retail groupInfo + plazaInfo.groupName). Covers ~36% of sites; rest is manual. ──
   vendorGroupName   String?                   // leaf group as vendor reports it (e.g. "MCM", "Thailand")
   vendorAccountName String?                   // top-level account resolved from groupInfo tree (e.g. "PP Group", "Panpuri")

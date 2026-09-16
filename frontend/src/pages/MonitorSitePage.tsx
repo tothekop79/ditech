@@ -6,14 +6,20 @@ import {
   ALERT_STATE_COLOR,
   SOURCE_COLOR,
   WEEK_LABEL,
+  contractChip,
+  contractStateOf,
   deviceStatusMeta,
+  fmtDate,
   fmtDateTime,
   relativeTime,
+  type ContractInput,
   type MonitorAlert,
   type MonitoredDevice,
   type MonitoredSiteDetail,
+  type SitePatch,
 } from '../api/monitor';
 import { useToast } from '../components/Toast';
+import { CancelSiteModal, ContractModal } from '../components/monitor/ContractModals';
 
 const WEEKS = [1, 2, 3, 4, 5, 6, 7];
 
@@ -22,6 +28,8 @@ export function MonitorSitePage() {
   const qc = useQueryClient();
   const showToast = useToast((s) => s.show);
   const [showResolved, setShowResolved] = useState(false);
+  const [contractOpen, setContractOpen] = useState<'set' | 'renew' | null>(null);
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const { data: site, isLoading } = useQuery({
     queryKey: ['monitor-site', id],
@@ -37,13 +45,26 @@ export function MonitorSitePage() {
   });
 
   const patch = useMutation({
-    mutationFn: (body: { monitored?: boolean; alwaysOpen?: boolean }) => monitorApi.patchSite(id!, body),
+    mutationFn: (body: SitePatch) => monitorApi.patchSite(id!, body),
     onSuccess: () => {
       showToast('Site updated');
+      setContractOpen(null);
       qc.invalidateQueries({ queryKey: ['monitor-site', id] });
       qc.invalidateQueries({ queryKey: ['monitor-overview'] });
     },
     onError: (e: any) => showToast(e?.response?.data?.message || 'Failed to update site'),
+  });
+
+  const cancelSite = useMutation({
+    mutationFn: (note?: string) => monitorApi.cancelSite(id!, note),
+    onSuccess: () => {
+      setCancelOpen(false);
+      qc.invalidateQueries({ queryKey: ['monitor-site', id] });
+      qc.invalidateQueries({ queryKey: ['monitor-overview'] });
+      // undo restores monitoring only — cancelledAt stays as history
+      showToast('ยกเลิกสาขาแล้ว', { label: 'Undo', run: () => patch.mutate({ monitored: true }) });
+    },
+    onError: (e: any) => showToast(e?.response?.data?.message || 'Failed to cancel site'),
   });
 
   const ack = useMutation({
@@ -67,7 +88,12 @@ export function MonitorSitePage() {
         <Link to="/monitor" className="text-sm text-blue-600 hover:underline">← Back to Camera Monitor</Link>
       </div>
 
-      <SiteHeader site={site} onPatch={(b) => patch.mutate(b)} />
+      <SiteHeader
+        site={site}
+        onPatch={(b) => patch.mutate(b)}
+        onContract={(mode) => setContractOpen(mode)}
+        onCancel={() => setCancelOpen(true)}
+      />
 
       {/* Devices */}
       <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
@@ -118,6 +144,29 @@ export function MonitorSitePage() {
         )}
       </div>
 
+      {contractOpen && (
+        <ContractModal
+          title={contractOpen === 'renew' ? 'ต่อสัญญา · Renew contract' : 'ตั้งค่าสัญญา · Set contract'}
+          subtitle={contractOpen === 'renew' ? `${site.plazaName} — เดิมสิ้นสุด ${fmtDate(site.contractEnd)}` : site.plazaName}
+          contractStart={site.contractStart}
+          contractEnd={site.contractEnd}
+          contractNote={site.contractNote}
+          renew={contractOpen === 'renew'}
+          submitting={patch.isPending}
+          onClose={() => setContractOpen(null)}
+          onSubmit={(body: ContractInput) => patch.mutate(body)}
+        />
+      )}
+
+      {cancelOpen && (
+        <CancelSiteModal
+          siteName={site.plazaName}
+          submitting={cancelSite.isPending}
+          onClose={() => setCancelOpen(false)}
+          onConfirm={(note) => cancelSite.mutate(note)}
+        />
+      )}
+
       {/* Resolved alerts (collapsed) */}
       <div className="bg-white border border-gray-200 rounded-lg">
         <button
@@ -143,8 +192,21 @@ export function MonitorSitePage() {
 
 // ─── Header ───
 
-function SiteHeader({ site, onPatch }: { site: MonitoredSiteDetail; onPatch: (b: { monitored?: boolean; alwaysOpen?: boolean }) => void }) {
+function SiteHeader({
+  site,
+  onPatch,
+  onContract,
+  onCancel,
+}: {
+  site: MonitoredSiteDetail;
+  onPatch: (b: SitePatch) => void;
+  onContract: (mode: 'set' | 'renew') => void;
+  onCancel: () => void;
+}) {
   const hours = site.businessHours ?? [];
+  // the detail endpoint returns raw dates — derive the state the same way fleetOverview() does
+  const contract = contractStateOf(site.contractEnd);
+  const chip = contractChip(contract.state, contract.daysLeft);
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4">
       <div className="flex items-center gap-2 mb-1.5">
@@ -156,9 +218,16 @@ function SiteHeader({ site, onPatch }: { site: MonitoredSiteDetail; onPatch: (b:
             ⚠️ ambiguous group
           </span>
         )}
+        {site.cancelledAt && (
+          <span
+            className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-300"
+            title={`ยกเลิกเมื่อ ${fmtDate(site.cancelledAt)}`}>
+            ยกเลิกแล้ว
+          </span>
+        )}
       </div>
 
-      <h2 className="text-xl font-bold text-gray-900">{site.plazaName}</h2>
+      <h2 className={`text-xl font-bold ${site.cancelledAt ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{site.plazaName}</h2>
       <p className="text-sm text-gray-600 mt-1">
         🏢 {site.customer?.customerName ?? '(unassigned)'}
         {site.customerSource && <span className="text-xs text-gray-400"> · {site.customerSource}</span>}
@@ -176,6 +245,34 @@ function SiteHeader({ site, onPatch }: { site: MonitoredSiteDetail; onPatch: (b:
           <input type="checkbox" checked={site.monitored} onChange={(e) => onPatch({ monitored: e.target.checked })} />
           👁️ Monitored · มอนิเตอร์อยู่
         </label>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-gray-100">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-gray-500">สัญญา · Contract</span>
+          <span className="text-sm text-gray-700">
+            {fmtDate(site.contractStart)} → {fmtDate(site.contractEnd)}
+          </span>
+          <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${chip.color}`}>{chip.text}</span>
+          <span className="flex gap-1.5 ml-auto">
+            <button
+              onClick={() => onContract('set')}
+              className="text-[11px] px-1.5 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">
+              📄 ตั้งค่าสัญญา
+            </button>
+            <button
+              onClick={() => onContract('renew')}
+              className="text-[11px] px-1.5 py-0.5 rounded border border-blue-300 text-blue-700 hover:bg-blue-50">
+              🔁 ต่อสัญญา
+            </button>
+            <button
+              onClick={onCancel}
+              className="text-[11px] px-1.5 py-0.5 rounded border border-red-300 text-red-600 hover:bg-red-50">
+              🚫 ยกเลิกสาขา
+            </button>
+          </span>
+        </div>
+        {site.contractNote && <div className="text-xs text-gray-500 mt-1 whitespace-pre-line">📝 {site.contractNote}</div>}
       </div>
 
       <div className="mt-3 pt-3 border-t border-gray-100">
