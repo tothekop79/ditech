@@ -17,6 +17,8 @@ type Notifier = (text: string) => Promise<void>;
 let notify: Notifier = async (t) => { console.log('[monitor][telegram-stub]', t); };
 export function setNotifier(fn: Notifier) { notify = fn; }
 
+/** Vendor server clock — modifyTime is server-local (GMT+8, verified vs portal 2026-09-17), NOT site tz. */
+const VENDOR_SERVER_TZ = process.env.VION_SERVER_TZ || '+08:00';
 const POLL_CONCURRENCY = Number(process.env.VION_POLL_CONCURRENCY) || 4;
 /** Debounce: a device must be offline for this long before an alert opens (absorbs 1-poll blips). */
 const OFFLINE_GRACE_MS = Number(process.env.VION_OFFLINE_GRACE_MS) || 10 * 60 * 1000;
@@ -109,7 +111,7 @@ export async function pollDevices(clients: VionClient[] = clientsFromEnv()): Pro
 
 async function upsertDevice(siteId: string, tz: string, d: VionDevice, now: Date, stats: PollStats) {
   const existing = await prisma.monitoredDevice.findUnique({ where: { siteId_serialnum: { siteId, serialnum: d.serialnum } } });
-  const vendorModifyTime = parseVendorTime(d.modifyTime, tz);
+  const vendorModifyTime = parseVendorTime(d.modifyTime, VENDOR_SERVER_TZ);   // NOT site tz — see VENDOR_SERVER_TZ
   const base = {
     name: d.name, mac: d.mac, localIp: d.localIp, channelCount: d.channelCount ?? 1,
     channels: (d.channelList ?? []) as any, vendorModifyTime, lastPolledAt: now,
