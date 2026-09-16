@@ -19,7 +19,7 @@
 - ✅ **May 28 — "Excluded N staff" relabel shipped (commits `abd9567` → `6c5c3d6`, pushed to main)** — footnote เปลี่ยนจากนับ unique BodyID (`.nunique()` → 3) เป็น staff entrance entries (`len` → 109) เพื่อตอบ "ตัด staff ออกจาก visitor กี่ครั้ง". ตัด `(N staff)` ในวงเล็บออกตาม insight สำคัญ: เลข 3 เดิมคือ **3 uniform templates** ที่ป้อนให้ ReID ไม่ใช่ 3 คน — รายงานเป็นจำนวนคนจะทำให้ผู้จัดงานเข้าใจผิด. Verify ด้วยข้อมูลจริง SHIN RAMYUN (1,264 staff rows รวม 2 วัน) โดยไม่ regenerate. ปิดงานค้าง lesson #64.
 - ⏭️ **Branch state**: `feat/exclude-staff` + `feat/exclude-staff-config` merged (May 18). `feat/dwell-benchmark` merged to main (May 27). `main` now at `7cb681e`.
 
-Latest commit: `7cb681e` "fix: verify source files + PDF footer overlap + engine timeout"
+Latest commit: `57ad732` "feat(monitor): Fleet Overview / site detail / alerts UI + overview read-model"
 
 ## Stack & Server
 
@@ -1099,3 +1099,55 @@ curl -s http://localhost:5000/api/designs -H "Authorization: Bearer $TOKEN" | jq
 15. **After `docker exec ... prisma migrate dev`, immediately `sudo chown -R ditech:ditech backend/prisma/migrations/`.** Otherwise the new SQL files are root-owned and any branch switch or merge that touches them will fail with "unable to unlink ... Permission denied." (Lesson #58 — May 27)
 16. **When two features land in the same file, split with `git add -p` and verify with `git diff --cached <file> | grep <keyword>` before committing.** Staging is silent; the only way to confirm a hunk made it in (or stayed out) is to grep the cached diff. (Lesson #59 — May 27)
 17. **Run `docker stats --no-stream` during the slow operation BEFORE sizing up the server.** A 103% CPU reading on an 8-core box means one core saturated and seven idle — buying more vCPUs cannot help a single-threaded process. (Lesson #63 — May 27)
+---
+
+## 📷 Camera Monitor module (Sept 16–17, 2026 — 8 commits `522842f` → `57ad732`)
+
+Fleet monitoring of every Vion camera across all customers, integrated into ditech-planner (same DB / Redis / BullMQ / auth / Telegram).
+Live: 221 sites, 543 devices, polled every 5 min in ~5 s.
+
+### What it does
+- Polls both Vion cloud servers (Mall `mall.vion-cloud.com:18080`, Retail `retail.vionyun.com:18085`) → `MonitoredSite` / `MonitoredDevice`, status history in `DeviceStatusLog` (only on change).
+- **Alert only when it matters**: device offline ≥ 60 min (`VION_OFFLINE_GRACE_MS`) *during business hours* of that site (hours + tz from vendor; `00:00–00:00` = unknown → default 10:00–22:00; `alwaysOpen=true` for airports SVB/SAT 1). Offline outside hours is normal (staff power cameras off at closing). Alert state machine OPEN → ACKNOWLEDGED → RESOLVED, auto-resolve on recovery.
+- **No per-device notifications.** Telegram digest 10:00 / 16:00 / 22:00 (`VION_DIGEST_CRON`, Asia/Bangkok) via `NotificationRule` trigger `CAMERA_DIGEST` → grouped by customer › site, flags NEW, counts recovered. Skipped when nothing to say unless `VION_DIGEST_ALWAYS=true`.
+- Customer mapping: auto from vendor `groupInfo` tree (`vendorAccountName`/`vendorGroupName`, 74 sites), rest manual (`customerSource` VENDOR|MANUAL; manual never overwritten by sync). ~70 sites still unassigned → assign from `/monitor` dropdown.
+- UI: `/monitor` (KPI + customer › site table, filters, inline assign/monitored/24h toggles, Poll now / Send digest), `/monitor/sites/:id` (devices, channels, 7-day uptime lazy, alerts + ack), `/monitor/alerts` (filters, ack, CSV).
+
+### Files
+```
+backend/src/integrations/vion/vion.client.ts        one client for both servers (AES login, token re-auth on code:"-1")
+backend/src/services/deviceMonitor.service.ts       syncSites / pollDevices / businessHoursState / sendDigest / fleetOverview
+backend/src/services/cameraDigestNotifier.ts        setNotifier → telegramService via NotificationRule CAMERA_DIGEST
+backend/src/queues/deviceMonitor.queue.ts           BullMQ repeatables: poll 5m, sync-sites 60m, digest cron
+backend/src/routes/monitor.routes.ts                /api/monitor/{overview,sites/:id,sites/assign,alerts,alerts/:id/ack,devices/:id/uptime,run/{sync,poll,digest}}
+backend/prisma/schema.prisma                        MonitoredSite, MonitoredDevice, DeviceStatusLog, Alert (+ enum CAMERA_DIGEST, Customer.monitoredSites)
+frontend/src/api/monitor.ts, pages/{FleetOverviewPage,MonitorSitePage,MonitorAlertsPage}.tsx
+docs/VION_MONITOR_INSTALL.md
+```
+Env (all declared in compose `environment:`): `VION_{MALL,RETAIL}_{BASE_URL,APPKEY,USERNAME,PASSWORD}`, `VION_POLL_INTERVAL_MS`, `VION_OFFLINE_GRACE_MS`, `VION_OPEN_GRACE_MIN`, `VION_CLOSE_GRACE_MIN`, `VION_DEFAULT_OPEN/CLOSE`, `VION_SERVER_TZ`, `VION_DIGEST_CRON/TZ/ALWAYS`, `VION_MONITOR_ENABLED`.
+⚠ Vion credentials were exposed in chat during setup — rotate with vendor before treating as production.
+
+### Vion API facts (verified live — the PDFs are wrong on several)
+- Login `POST /api/v2/user/login` body `{appkey, username, password: base64(AES-ECB(appkey,password))}` works on BOTH servers; Mall v1 plain login also works and returns the same token.
+- Paths are **case-sensitive**: `plazaInfo` ✓, `plazainfo` 404. Header `Authorization: <atoken>` (no Bearer). Auth failure is HTTP 200 with `code:"-1"`.
+- `device.status`: 0 offline · 1 online · 3 disabled. Device shape identical on both servers (camelCase, `channelList[].site.gateUnid`).
+- `modifyTime` is **vendor server time GMT+8** (not site tz). For status=0 it is when the server marked it offline ≈ last heartbeat + 12 min; for status=1 the vendor touches it nightly at 00:00 → not a "last seen".
+- `plazaInfo` gives `timeZone` (Retail; blank on ~25) and `businessHours[week 1..7]`; Mall returns `00:00–00:00` unless set in portal. `groupName` present on 36% of Retail sites; `groupInfo` (Retail only, Mall 404) is the account → group tree; top-level account name = customer. Ownership of ungrouped stores is only visible in the portal account switcher.
+- `plazaName` collides heavily (Central World ×6) — key everything on `plazaUnid`.
+
+### Lessons (72–80)
+72. **Offline ≠ broken.** Mall tenants power cameras off at closing; ~25 devices go dark 20:30–01:30 every night. Any camera alerting must be business-hours-aware or it is noise.
+73. **Heartbeats miss; gate alerts on duration, not transitions.** Vendor flips offline ~12 min after a missed beat and back on the next. Alerts open only after ≥ grace continuously down; nothing on the flip itself.
+74. **Digest > firehose.** One grouped message 3×/day was the explicit ask; per-device pings were rejected. Track "new since last digest" via `Alert.notifiedAt` — no extra state table.
+75. **Vendor timestamps carry their own timezone.** `modifyTime` GMT+8 vs `counttimeLocal` site-local in the same row. Parse per field; `VION_SERVER_TZ` env.
+76. **`docker exec` needs `-i` for heredoc/stdin.** Without it psql runs nothing and prints nothing — silent no-op (burned two rounds).
+77. **`docker compose up -d` recreates → container `/tmp` is wiped.** Helper scripts belong under the bind mount, not `/tmp`.
+78. **`tsx -e` dynamic imports can load a module twice** — `setNotifier` in one instance, `sendDigest` in another → stub fired despite wiring. Test through the real server (`run/digest` route), not eval.
+79. **Placeholder text in copy-paste commands gets executed literally** (`sed … <token ใหม่>` overwrote a freshly pasted token → 404). Prefer nano for secrets; never sed with placeholders.
+80. **Atomic patch guard catches double-apply too.** Re-running a patch aborted with "anchor matched 0" because it was already applied — read that as "done", not "broken".
+
+### Next
+- Sprint 3 candidates: `SITE_DOWN` correlation (all cameras of a site down → one CRIT alert), `STALE_OFFLINE` > 30 days → suggest archive, APIPA/IP-drift flags (`169.254.x`, name≠localIp), uptime % within business hours only.
+- Counting ingestion (`gateHour`) → SILENT / ZERO / IMBALANCE / SPIKE checks.
+- Move Vion credentials from env to `ApiSource` table (encrypted).
+- Finish customer mapping (~70 sites) from portal account switcher.
