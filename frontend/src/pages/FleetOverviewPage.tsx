@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { masterApi } from '../api/master';
@@ -21,6 +21,7 @@ import {
   type SitePatch,
 } from '../api/monitor';
 import { useToast } from '../components/Toast';
+import { FleetDevicePanel, type DevicePanelSpec } from '../components/monitor/FleetDevicePanel';
 
 /** /overview and /overview?all=1 are cached separately; invalidating the prefix refreshes both. */
 const OVERVIEW_ROOT = ['monitor-overview'];
@@ -30,6 +31,29 @@ const overviewKey = (all: boolean) => [...OVERVIEW_ROOT, all];
 const COLLAPSED_KEY = 'ditech_monitor_collapsed';
 const NO_CUSTOMER = '__none__';
 const NEW_CUSTOMER = '__new__';
+
+/** One slide-over per device KPI tile. Keys double as the device query key. */
+const DEVICE_PANELS: Record<string, DevicePanelSpec> = {
+  all: { key: 'all', title: 'All devices · อุปกรณ์ทั้งหมด', params: {} },
+  online: { key: 'online', title: 'Online · ออนไลน์', params: { status: '1' } },
+  offlineInHours: {
+    key: 'offlineInHours',
+    title: 'Offline in business hours · ดับในเวลาทำการ',
+    params: { status: '0,-1', inHours: 1 },
+  },
+  offlineExpected: {
+    key: 'offlineExpected',
+    title: 'Offline — closed / expected · ดับนอกเวลาทำการ',
+    // the API has no "not in hours" flag, so fetch every offline device and cut it here
+    params: { status: '0,-1' },
+    filter: (d) => d.hoursState !== 'OPEN',
+  },
+  offlineOver24h: { key: 'offlineOver24h', title: 'Offline > 24h · ดับเกิน 24 ชม.', params: { status: '0', minOfflineHours: 24 } },
+  missing: { key: 'missing', title: 'Missing · หายจากระบบ', params: { status: '-1' } },
+  disabled: { key: 'disabled', title: 'Disabled · ปิดใช้งาน', params: { status: '3' } },
+  wentOfflineToday: { key: 'wentOfflineToday', title: 'Went offline today · ดับวันนี้', params: { status: '0', since: 'today' } },
+  recoveredToday: { key: 'recoveredToday', title: 'Recovered today · กลับมาวันนี้', params: { status: '1', since: 'today' } },
+};
 
 /** worst-first — EMPTY (no cameras registered) ranks above OK, below a real outage */
 const HEALTH_RANK: Record<SiteHealth, number> = { DOWN: 4, DEGRADED: 3, EMPTY: 2, OK: 1 };
@@ -41,6 +65,9 @@ interface CustomerGroup {
   devices: number;
   online: number;
   offline: number;
+  offlineInHours: number;
+  offlineOver24h: number;
+  openAlerts: number;
   worst: SiteHealth;
 }
 
@@ -69,6 +96,8 @@ export function FleetOverviewPage() {
   /** explicit user choices only; groups with no entry fall back to "expanded when something is offline" */
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(loadCollapsed);
   const [newCustomerFor, setNewCustomerFor] = useState<FleetSite | null>(null);
+  const [panel, setPanel] = useState<DevicePanelSpec | null>(null);
+  const sitesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -89,6 +118,14 @@ export function FleetOverviewPage() {
   });
 
   const { data: customers = [] } = useQuery({ queryKey: ['customers'], queryFn: masterApi.customers });
+
+  // per-customer alert counts — one fetch, counted client-side via siteId
+  const { data: openAlertRows = [] } = useQuery({
+    queryKey: ['monitor-alerts', { state: 'OPEN', limit: 1000 }],
+    queryFn: () => monitorApi.alerts({ state: 'OPEN', limit: 1000 }),
+    enabled: view === 'customers',
+    refetchInterval: 60_000,
+  });
 
   const patchSite = useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: SitePatch; customer?: MonitorCustomerRef | null }) =>
@@ -166,6 +203,12 @@ export function FleetOverviewPage() {
     });
   }, [sites, q, health, source, customerId]);
 
+  const alertsBySite = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const a of openAlertRows) m.set(a.siteId, (m.get(a.siteId) ?? 0) + 1);
+    return m;
+  }, [openAlertRows]);
+
   /** one grouping feeds both views — everything below comes from the overview payload */
   const groups = useMemo<CustomerGroup[]>(() => {
     const map = new Map<string, CustomerGroup>();
@@ -173,13 +216,19 @@ export function FleetOverviewPage() {
       const key = s.customer?.id ?? NO_CUSTOMER;
       let g = map.get(key);
       if (!g) {
-        g = { key, name: s.customer?.customerName ?? UNASSIGNED, sites: [], devices: 0, online: 0, offline: 0, worst: 'OK' };
+        g = {
+          key, name: s.customer?.customerName ?? UNASSIGNED, sites: [],
+          devices: 0, online: 0, offline: 0, offlineInHours: 0, offlineOver24h: 0, openAlerts: 0, worst: 'OK',
+        };
         map.set(key, g);
       }
       g.sites.push(s);
       g.devices += s.devices;
       g.online += s.online;
       g.offline += s.offline;
+      g.offlineInHours += s.offlineInHours;
+      g.offlineOver24h += s.offlineOver24h;
+      g.openAlerts += alertsBySite.get(s.id) ?? 0;
       if (HEALTH_RANK[s.health] > HEALTH_RANK[g.worst]) g.worst = s.health;
     }
     return [...map.values()].sort((a, b) => {
@@ -187,7 +236,7 @@ export function FleetOverviewPage() {
       if (b.name === UNASSIGNED) return -1;
       return a.name.localeCompare(b.name);
     });
-  }, [filtered]);
+  }, [filtered, alertsBySite]);
 
   const byOffline = useMemo(
     () =>
@@ -203,6 +252,15 @@ export function FleetOverviewPage() {
   const setAllCollapsed = (value: boolean) =>
     setCollapsed((c) => ({ ...c, ...Object.fromEntries(groups.map((g) => [g.key, value])) }));
 
+  /** site tiles filter the table below instead of opening a panel */
+  const focusSites = (next: { health?: SiteHealth; unassigned?: boolean }) => {
+    setView('sites');
+    setHealth(next.health);
+    setCustomerId(next.unassigned ? NO_CUSTOMER : '');
+    setAllCollapsed(false);
+    setTimeout(() => sitesRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
+  };
+
   const openCustomerInSites = (g: CustomerGroup) => {
     setCustomerId(g.key);
     setCollapsed((c) => ({ ...c, [g.key]: false }));
@@ -210,6 +268,7 @@ export function FleetOverviewPage() {
   };
 
   const d = overview?.devices;
+  const k = overview?.kpi;
 
   return (
     <div className="space-y-4">
@@ -252,14 +311,43 @@ export function FleetOverviewPage() {
         </div>
       )}
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2">
-        <Kpi label="Devices · ทั้งหมด" value={d?.total ?? 0} />
-        <Kpi label="Online · ออนไลน์" value={d?.online ?? 0} tone="text-green-600" />
-        <Kpi label="Offline · ออฟไลน์" value={d?.offline ?? 0} tone="text-red-600" />
-        <Kpi label="Missing · หาย" value={d?.missing ?? 0} tone="text-purple-600" />
-        <Kpi label="Disabled · ปิดใช้" value={d?.disabled ?? 0} tone="text-gray-500" />
-        <Kpi label="Open alerts · แจ้งเตือน" value={overview?.openAlerts ?? 0} tone="text-amber-600" />
+      {/* KPI row 1 — devices. Every tile opens the matching device list. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        <Kpi label="Devices · ทั้งหมด" value={d?.total ?? 0} onClick={() => setPanel(DEVICE_PANELS.all)} />
+        <Kpi label="Online · ออนไลน์" value={d?.online ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.online)} />
+        <Kpi
+          label="Offline in hours · ดับในเวลาทำการ"
+          value={k?.offlineInHours ?? 0}
+          tone="text-red-600"
+          hint="กล้องที่ดับอยู่ในเวลาทำการ — ต้องตามทันที"
+          onClick={() => setPanel(DEVICE_PANELS.offlineInHours)}
+        />
+        <Kpi
+          label="Offline closed · ดับนอกเวลา"
+          value={k?.offlineExpected ?? 0}
+          tone="text-gray-500"
+          hint="ดับนอกเวลาทำการ — ปกติ ไม่ต้องตาม"
+          onClick={() => setPanel(DEVICE_PANELS.offlineExpected)}
+        />
+        <Kpi
+          label="Offline > 24h · ดับเกิน 24 ชม."
+          value={k?.offlineOver24h ?? 0}
+          tone="text-amber-600"
+          onClick={() => setPanel(DEVICE_PANELS.offlineOver24h)}
+        />
+        <Kpi label="Missing · หาย" value={d?.missing ?? 0} tone="text-purple-600" onClick={() => setPanel(DEVICE_PANELS.missing)} />
+        <Kpi label="Disabled · ปิดใช้" value={d?.disabled ?? 0} tone="text-gray-500" onClick={() => setPanel(DEVICE_PANELS.disabled)} />
+      </div>
+
+      {/* KPI row 2 — fleet. Site tiles filter the table below; churn tiles open a device list. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        <Kpi label="Sites OK · ปกติ" value={k?.sitesOk ?? 0} tone="text-green-600" onClick={() => focusSites({ health: 'OK' })} />
+        <Kpi label="Sites degraded · บางส่วน" value={k?.sitesDegraded ?? 0} tone="text-amber-600" onClick={() => focusSites({ health: 'DEGRADED' })} />
+        <Kpi label="Sites down · ดับทั้งสาขา" value={k?.sitesDown ?? 0} tone="text-red-600" onClick={() => focusSites({ health: 'DOWN' })} />
+        <Kpi label="Went offline today · ดับวันนี้" value={k?.wentOfflineToday ?? 0} tone="text-red-600" onClick={() => setPanel(DEVICE_PANELS.wentOfflineToday)} />
+        <Kpi label="Recovered today · กลับมาวันนี้" value={k?.recoveredToday ?? 0} tone="text-green-600" onClick={() => setPanel(DEVICE_PANELS.recoveredToday)} />
+        <Kpi label="Open alerts · แจ้งเตือน" value={overview?.openAlerts ?? 0} tone="text-amber-600" onClick={() => navigate('/monitor/alerts')} />
+        <Kpi label="Unassigned sites · ยังไม่ผูกลูกค้า" value={k?.unassignedSites ?? 0} onClick={() => focusSites({ unassigned: true })} />
         <div className="bg-white border border-gray-200 rounded-lg p-2.5">
           <div className="text-[10px] uppercase tracking-wider text-gray-400">Last poll · โพลล์ล่าสุด</div>
           <div className="text-sm font-medium text-gray-700 mt-0.5" title={fmtDateTime(overview?.lastPolledAt)}>
@@ -343,7 +431,7 @@ export function FleetOverviewPage() {
       ) : view === 'customers' ? (
         <CustomerTable groups={byOffline} onOpen={openCustomerInSites} />
       ) : (
-        <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+        <div ref={sitesRef} className="bg-white border border-gray-200 rounded-lg overflow-x-auto scroll-mt-4">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-gray-400 border-b border-gray-200">
@@ -376,6 +464,8 @@ export function FleetOverviewPage() {
           </table>
         </div>
       )}
+
+      {panel && <FleetDevicePanel spec={panel} onClose={() => setPanel(null)} />}
 
       {newCustomerFor && (
         <NewCustomerModal
@@ -510,7 +600,10 @@ function CustomerTable({ groups, onOpen }: { groups: CustomerGroup[]; onOpen: (g
             <th className="px-2 py-2 font-medium text-right">Devices</th>
             <th className="px-2 py-2 font-medium text-right">Online</th>
             <th className="px-2 py-2 font-medium text-right">Offline</th>
+            <th className="px-2 py-2 font-medium text-right">In hours · ในเวลา</th>
+            <th className="px-2 py-2 font-medium text-right">&gt; 24h</th>
             <th className="px-2 py-2 font-medium text-right">Online %</th>
+            <th className="px-2 py-2 font-medium text-right">Alerts</th>
             <th className="px-2 py-2 font-medium">Worst site · แย่สุด</th>
           </tr>
         </thead>
@@ -527,8 +620,17 @@ function CustomerTable({ groups, onOpen }: { groups: CustomerGroup[]; onOpen: (g
                 <td className="px-2 py-1.5 text-right text-gray-600">{g.devices}</td>
                 <td className="px-2 py-1.5 text-right text-green-700">{g.online}</td>
                 <td className={`px-2 py-1.5 text-right ${g.offline > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>{g.offline}</td>
+                <td className={`px-2 py-1.5 text-right ${g.offlineInHours > 0 ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                  {g.offlineInHours}
+                </td>
+                <td className={`px-2 py-1.5 text-right ${g.offlineOver24h > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                  {g.offlineOver24h}
+                </td>
                 <td className={`px-2 py-1.5 text-right font-mono text-xs ${pctTone(pct)}`}>
                   {pct === null ? '—' : `${pct.toFixed(1)}%`}
+                </td>
+                <td className={`px-2 py-1.5 text-right ${g.openAlerts > 0 ? 'text-amber-600 font-medium' : 'text-gray-400'}`}>
+                  {g.openAlerts}
                 </td>
                 <td className="px-2 py-1.5">
                   <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border ${HEALTH_COLOR[g.worst]}`}>
@@ -614,12 +716,32 @@ function NewCustomerModal({
 
 // ─── Bits ───
 
-function Kpi({ label, value, tone }: { label: string; value: number; tone?: string }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-2.5">
+function Kpi({
+  label,
+  value,
+  tone,
+  hint,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+  hint?: string;
+  onClick?: () => void;
+}) {
+  const body = (
+    <>
       <div className="text-[10px] uppercase tracking-wider text-gray-400">{label}</div>
       <div className={`text-xl font-semibold mt-0.5 ${tone || 'text-gray-900'}`}>{value}</div>
-    </div>
+    </>
+  );
+  const cls = 'bg-white border border-gray-200 rounded-lg p-2.5 text-left';
+  return onClick ? (
+    <button onClick={onClick} title={hint} className={`${cls} w-full hover:border-blue-300 hover:bg-blue-50/30`}>
+      {body}
+    </button>
+  ) : (
+    <div className={cls} title={hint}>{body}</div>
   );
 }
 

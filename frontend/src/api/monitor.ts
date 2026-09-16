@@ -8,6 +8,8 @@ import { api } from './client';
 export type MonitorSource = 'MALL' | 'RETAIL';
 export type SiteHealth = 'OK' | 'DEGRADED' | 'DOWN' | 'EMPTY';
 export type CustomerSource = 'VENDOR' | 'MANUAL';
+/** businessHoursState() verdict for a site right now */
+export type HoursState = 'OPEN' | 'CLOSED' | 'TRANSITION';
 
 export type AlertState = 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED';
 export type AlertSeverity = 'INFO' | 'WARN' | 'CRIT';
@@ -60,7 +62,25 @@ export interface FleetSite {
   devices: number;
   online: number;
   offline: number;
+  /** business-hours verdict at the time the overview was built */
+  hoursState: HoursState;
+  /** offline devices that matter right now (0 when the site is closed) */
+  offlineInHours: number;
+  offlineOver24h: number;
   health: SiteHealth;
+}
+
+/** Fleet KPIs — monitored sites only, even when ?all=1 lists the unmonitored ones. */
+export interface FleetKpi {
+  offlineInHours: number;
+  offlineExpected: number;
+  offlineOver24h: number;
+  wentOfflineToday: number;
+  recoveredToday: number;
+  sitesOk: number;
+  sitesDegraded: number;
+  sitesDown: number;
+  unassignedSites: number;
 }
 
 export interface FleetOverview {
@@ -69,7 +89,57 @@ export interface FleetOverview {
   openAlerts: number;
   /** max(MonitoredDevice.lastPolledAt) across the fleet */
   lastPolledAt: string | null;
+  kpi: FleetKpi;
   sites: FleetSite[];
+}
+
+// ── GET /monitor/devices ──
+export interface FleetDeviceAlert {
+  id: string;
+  type: AlertType;
+  state: AlertState;
+  openedAt: string;
+}
+
+/** Flat fleet-wide device row from listFleetDevices(). */
+export interface FleetDevice {
+  id: string;
+  serialnum: string;
+  name: string | null;
+  localIp: string | null;
+  mac: string | null;
+  channelCount: number;
+  currentStatus: number;
+  statusSince: string | null;
+  vendorModifyTime: string | null;
+  lastSeenOnline: string | null;
+  hoursState: HoursState;
+  /** hours since statusSince; null while online or when statusSince is unknown */
+  offlineHours: number | null;
+  site: {
+    id: string;
+    plazaName: string;
+    source: MonitorSource;
+    monitored: boolean;
+    alwaysOpen: boolean;
+    customer: MonitorCustomerRef | null;
+  };
+  openAlerts: FleetDeviceAlert[];
+}
+
+export interface FleetDeviceParams {
+  /** comma-separated currentStatus list, e.g. "0,-1" */
+  status?: string;
+  /** 1 = only devices whose site is OPEN right now */
+  inHours?: 1;
+  minOfflineHours?: number;
+  /** "today" (Bangkok midnight) or an ISO timestamp */
+  since?: string;
+  /** customer id, or "none" for unassigned */
+  customerId?: string;
+  siteId?: string;
+  q?: string;
+  all?: 1;
 }
 
 // ── GET / PATCH /monitor/sites/:id ──
@@ -214,6 +284,9 @@ export const monitorApi = {
       .post<{ success: boolean; data: { updated: number } }>('/monitor/sites/assign', { assignments })
       .then((r) => r.data.data),
 
+  devices: (params?: FleetDeviceParams) =>
+    api.get<{ success: boolean; data: FleetDevice[]; count: number }>('/monitor/devices', { params }).then((r) => r.data.data),
+
   alerts: (params?: AlertFilters) =>
     api.get<{ success: boolean; data: MonitorAlertRow[] }>('/monitor/alerts', { params }).then((r) => r.data.data),
 
@@ -309,6 +382,35 @@ export function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+export const HOURS_STATE_COLOR: Record<HoursState, string> = {
+  OPEN: 'bg-blue-50 text-blue-700 border-blue-200',
+  CLOSED: 'bg-gray-100 text-gray-500 border-gray-300',
+  TRANSITION: 'bg-amber-50 text-amber-700 border-amber-200',
+};
+
+export const HOURS_STATE_LABEL: Record<HoursState, string> = {
+  OPEN: 'OPEN · เปิด',
+  CLOSED: 'CLOSED · ปิด',
+  TRANSITION: 'TRANSITION · คาบเกี่ยว',
+};
+
+function csvCell(v: string | null | undefined): string {
+  const s = v ?? '';
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Client-side CSV download. BOM so Excel (TH locale) reads UTF-8 site names correctly. */
+export function downloadCsv(filename: string, headers: string[], rows: (string | null | undefined)[][]) {
+  const lines = [headers.join(','), ...rows.map((r) => r.map(csvCell).join(','))];
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export const UNASSIGNED = '(unassigned)';

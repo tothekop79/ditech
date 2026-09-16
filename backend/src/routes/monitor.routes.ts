@@ -3,7 +3,7 @@
  */
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
-import { fleetOverview, pollDevices, syncSites, sendDigest } from '../services/deviceMonitor.service';
+import { fleetOverview, pollDevices, syncSites, sendDigest, listFleetDevices } from '../services/deviceMonitor.service';
 import { authenticate } from '../middlewares/auth.middleware';
 
 const prisma = new PrismaClient();
@@ -60,6 +60,33 @@ r.post('/sites/assign', async (req, res, next) => {
       n++;
     }
     res.json({ success: true, data: { updated: n } });
+  } catch (e) { next(e); }
+});
+
+/**
+ * Fleet device list — backs the KPI tiles.
+ *  ?status=0,-1        currentStatus in list (0 offline · 1 online · 3 disabled · -1 missing)
+ *  ?inHours=1          only devices at sites that are OPEN right now (business hours)
+ *  ?minOfflineHours=24 offline longer than N hours
+ *  ?since=today        statusSince ≥ Bangkok midnight (or an ISO timestamp)
+ *  ?customerId=…|none  filter by customer; "none" = unassigned
+ *  ?siteId=… ?q=… ?all=1
+ */
+r.get('/devices', async (req, res, next) => {
+  try {
+    const q = req.query as Record<string, string | undefined>;
+    const since = q.since === 'today'
+      ? (() => { const l = new Date(Date.now() + 7 * 3600_000); return new Date(Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate()) - 7 * 3600_000); })()
+      : q.since ? new Date(q.since) : undefined;
+    const data = await listFleetDevices({
+      status: q.status ? q.status.split(',').map(Number).filter(n => !isNaN(n)) : undefined,
+      inHoursOnly: q.inHours === '1',
+      minOfflineHours: q.minOfflineHours ? Number(q.minOfflineHours) : undefined,
+      changedSince: since && !isNaN(since.getTime()) ? since : undefined,
+      customerId: q.customerId === 'none' ? null : q.customerId || undefined,
+      siteId: q.siteId, search: q.q, includeUnmonitored: q.all === '1',
+    });
+    res.json({ success: true, data, count: data.length });
   } catch (e) { next(e); }
 });
 

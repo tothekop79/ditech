@@ -290,9 +290,18 @@ export async function sendDigest() {
 }
 
 // ── read models for the dashboard ──────────────────────────────────────────
+/** Bangkok local midnight as UTC instant (fleet-wide "today" for churn KPIs). */
+function bkkStartOfDay(now = new Date()): Date {
+  const local = new Date(now.getTime() + 7 * 3600_000);
+  return new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - 7 * 3600_000);
+}
+
 export async function fleetOverview(includeUnmonitored = false) {
   const siteWhere = includeUnmonitored ? {} : { monitored: true };
-  const [bySource, bySite, openAlerts, lastPoll] = await Promise.all([
+  const nowTs = new Date();
+  const dayAgo = nowTs.getTime() - 24 * 3600_000;
+  const startOfDay = bkkStartOfDay(nowTs);
+  const [bySource, bySite, openAlerts, lastPoll, recoveredToday, wentOfflineToday] = await Promise.all([
     prisma.monitoredDevice.groupBy({
       by: ['currentStatus'], _count: { _all: true },
       where: { site: { monitored: true } },
@@ -301,6 +310,7 @@ export async function fleetOverview(includeUnmonitored = false) {
       where: siteWhere,
       select: {
         id: true, source: true, plazaName: true, plazaUnid: true, customerId: true, monitored: true, alwaysOpen: true,
+        timeZone: true, businessHours: true,
         vendorGroupName: true, vendorAccountName: true, accountAmbiguous: true, customerSource: true,
         customer: { select: { id: true, customerName: true } },
         _count: { select: { devices: true } },
@@ -310,23 +320,93 @@ export async function fleetOverview(includeUnmonitored = false) {
     }),
     prisma.alert.count({ where: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } } }),
     prisma.monitoredDevice.aggregate({ _max: { lastPolledAt: true } }),
+    prisma.deviceStatusLog.count({ where: { toStatus: DeviceStatus.ONLINE, changedAt: { gte: startOfDay }, device: { site: { monitored: true } } } }),
+    prisma.deviceStatusLog.count({ where: { toStatus: DeviceStatus.OFFLINE, changedAt: { gte: startOfDay }, device: { site: { monitored: true } } } }),
   ]);
 
   const total = Object.fromEntries(bySource.map(r => [String(r.currentStatus), r._count._all]));
   const sites = bySite.map(s => {
     const online = s.devices.filter(d => d.currentStatus === 1).length;
     const offline = s.devices.filter(d => d.currentStatus === 0 || d.currentStatus === -1).length;
+    const hoursState = businessHoursState(s.businessHours, s.timeZone, nowTs, s.alwaysOpen);
+    const offlineInHours = hoursState === 'OPEN' ? offline : 0;
+    const offlineOver24h = s.devices.filter(d => (d.currentStatus === 0 || d.currentStatus === -1) && d.statusSince && d.statusSince.getTime() < dayAgo).length;
     return {
       id: s.id, source: s.source, plazaName: s.plazaName, plazaUnid: s.plazaUnid,
       monitored: s.monitored, alwaysOpen: s.alwaysOpen,
       customer: s.customer, customerSource: s.customerSource,
       vendorGroupName: s.vendorGroupName, vendorAccountName: s.vendorAccountName, accountAmbiguous: s.accountAmbiguous,
-      devices: s._count.devices, online, offline,
+      devices: s._count.devices, online, offline, hoursState, offlineInHours, offlineOver24h,
       health: s._count.devices === 0 ? 'EMPTY' : offline === 0 ? 'OK' : online === 0 ? 'DOWN' : 'DEGRADED',
     };
   });
   return {
     devices: { total: Object.values(total).reduce((a, b) => a + b, 0), online: total['1'] ?? 0, offline: total['0'] ?? 0, missing: total['-1'] ?? 0, disabled: total['3'] ?? 0 },
     openAlerts, sites, lastPolledAt: lastPoll._max.lastPolledAt,
+    kpi: (() => {
+      const m = sites.filter(s => s.monitored);
+      const sum = (f: (s: typeof m[number]) => number) => m.reduce((a, s) => a + f(s), 0);
+      const offlineInHours = sum(s => s.offlineInHours);
+      return {
+        offlineInHours,
+        offlineExpected: sum(s => s.offline) - offlineInHours,
+        offlineOver24h: sum(s => s.offlineOver24h),
+        wentOfflineToday, recoveredToday,
+        sitesOk: m.filter(s => s.health === 'OK').length,
+        sitesDegraded: m.filter(s => s.health === 'DEGRADED').length,
+        sitesDown: m.filter(s => s.health === 'DOWN').length,
+        unassignedSites: m.filter(s => !s.customerId).length,
+      };
+    })(),
   };
+}
+
+export interface FleetDeviceFilter {
+  status?: number[];            // e.g. [0,-1]
+  inHoursOnly?: boolean;        // only devices whose site is OPEN right now
+  minOfflineHours?: number;     // statusSince older than N hours (only meaningful with status 0/-1)
+  changedSince?: Date;          // statusSince >= (today's churn)
+  customerId?: string | null;   // null = unassigned
+  siteId?: string;
+  search?: string;
+  includeUnmonitored?: boolean;
+}
+
+/** Flat device list across the fleet — backs the clickable KPI tiles. */
+export async function listFleetDevices(f: FleetDeviceFilter) {
+  const now = new Date();
+  const rows = await prisma.monitoredDevice.findMany({
+    where: {
+      ...(f.status?.length ? { currentStatus: { in: f.status } } : {}),
+      ...(f.minOfflineHours ? { statusSince: { lte: new Date(now.getTime() - f.minOfflineHours * 3600_000) } } : {}),
+      ...(f.changedSince ? { statusSince: { gte: f.changedSince } } : {}),
+      ...(f.siteId ? { siteId: f.siteId } : {}),
+      site: {
+        ...(f.includeUnmonitored ? {} : { monitored: true }),
+        ...(f.customerId === null ? { customerId: null } : f.customerId ? { customerId: f.customerId } : {}),
+      },
+      ...(f.search ? { OR: [
+        { name: { contains: f.search, mode: 'insensitive' } },
+        { localIp: { contains: f.search } },
+        { serialnum: { contains: f.search, mode: 'insensitive' } },
+        { site: { plazaName: { contains: f.search, mode: 'insensitive' } } },
+      ] } : {}),
+    },
+    include: { site: { select: { id: true, plazaName: true, source: true, timeZone: true, businessHours: true, alwaysOpen: true, monitored: true,
+                                  customer: { select: { id: true, customerName: true } } } },
+               alerts: { where: { state: { in: ['OPEN', 'ACKNOWLEDGED'] } }, select: { id: true, type: true, state: true, openedAt: true } } },
+    orderBy: [{ currentStatus: 'asc' }, { statusSince: 'asc' }],
+    take: 2000,
+  });
+  const out = rows.map(d => {
+    const hoursState = businessHoursState(d.site.businessHours, d.site.timeZone, now, d.site.alwaysOpen);
+    return {
+      id: d.id, serialnum: d.serialnum, name: d.name, localIp: d.localIp, mac: d.mac, channelCount: d.channelCount,
+      currentStatus: d.currentStatus, statusSince: d.statusSince, vendorModifyTime: d.vendorModifyTime, lastSeenOnline: d.lastSeenOnline,
+      hoursState, offlineHours: d.currentStatus === DeviceStatus.ONLINE || !d.statusSince ? null : +((now.getTime() - d.statusSince.getTime()) / 3600_000).toFixed(1),
+      site: { id: d.site.id, plazaName: d.site.plazaName, source: d.site.source, monitored: d.site.monitored, alwaysOpen: d.site.alwaysOpen, customer: d.site.customer },
+      openAlerts: d.alerts,
+    };
+  });
+  return f.inHoursOnly ? out.filter(d => d.hoursState === 'OPEN') : out;
 }

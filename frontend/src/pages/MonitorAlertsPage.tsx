@@ -7,6 +7,7 @@ import {
   ALERT_TYPES,
   SOURCE_COLOR,
   UNASSIGNED,
+  downloadCsv,
   fmtDateTime,
   relativeTime,
   type AlertState,
@@ -201,30 +202,16 @@ const CSV_HEADERS = [
   'device', 'serialnum', 'localIp', 'message', 'openedAt', 'acknowledgedAt', 'resolvedAt',
 ];
 
-function csvCell(v: string | null | undefined): string {
-  const s = v ?? '';
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
 function exportCsv(rows: MonitorAlertRow[]) {
-  const lines = [
-    CSV_HEADERS.join(','),
-    ...rows.map((a) =>
-      [
-        a.state, a.type, a.severity,
-        a.site.customer?.customerName ?? UNASSIGNED,
-        a.site.plazaName, a.site.source,
-        a.device?.name ?? '', a.device?.serialnum ?? '', a.device?.localIp ?? '',
-        a.message, a.openedAt, a.acknowledgedAt ?? '', a.resolvedAt ?? '',
-      ].map(csvCell).join(','),
-    ),
-  ];
-  // BOM so Excel (TH locale) reads UTF-8 site names correctly
-  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `camera-alerts-${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadCsv(
+    `camera-alerts-${new Date().toISOString().slice(0, 10)}.csv`,
+    CSV_HEADERS,
+    rows.map((a) => [
+      a.state, a.type, a.severity,
+      a.site.customer?.customerName ?? UNASSIGNED,
+      a.site.plazaName, a.site.source,
+      a.device?.name ?? '', a.device?.serialnum ?? '', a.device?.localIp ?? '',
+      a.message, a.openedAt, a.acknowledgedAt ?? '', a.resolvedAt ?? '',
+    ]),
+  );
 }
