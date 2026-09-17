@@ -12,6 +12,9 @@ import { useToast } from '../components/Toast';
 import { StatusPill } from '../components/StatusPill';
 import { InlineCell } from '../components/InlineCell';
 import type { InstallationPlan } from '../api/types';
+import { PageHeader, KpiCard, FilterBar, DataTable, Pill } from '../components/ui';
+import type { Column, PillTone, RowGroup } from '../components/ui';
+import { format } from 'date-fns';
 
 const STATUSES = ['DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const READINESS = ['PENDING', 'NOT_READY', 'READY', 'ON_HOLD'];
@@ -25,12 +28,30 @@ const STATUS_COLORS: Record<string, string> = {
   CANCELLED: 'bg-red-100 text-red-700 line-through',
 };
 
-const READINESS_COLORS: Record<string, string> = {
-  PENDING: 'bg-gray-100 text-gray-600',
-  NOT_READY: 'bg-red-50 text-red-700',
-  READY: 'bg-green-50 text-green-700',
-  ON_HOLD: 'bg-amber-50 text-amber-700',
+// STATUS_COLORS above still drives the count chips; the table cells use Pill tones.
+const STATUS_TONE: Record<string, PillTone> = {
+  DRAFT: 'neutral',
+  CONFIRMED: 'info',
+  IN_PROGRESS: 'warning',
+  COMPLETED: 'success',
+  CANCELLED: 'danger',
 };
+
+const READINESS_TONE: Record<string, PillTone> = {
+  PENDING: 'neutral',
+  NOT_READY: 'danger',
+  READY: 'success',
+  ON_HOLD: 'warning',
+};
+
+const REGION_TONE: Record<string, PillTone> = {
+  BANGKOK: 'info',
+  UPC: 'warning',
+};
+
+/** filter control: same `.ui-input` base, tinted while it holds a value */
+const inputCls = (active: boolean) =>
+  `ui-input${active ? ' border-ditech-navy bg-ditech-gold-soft' : ''}`;
 
 export function PlansListPage() {
   const qc = useQueryClient();
@@ -108,8 +129,8 @@ export function PlansListPage() {
     },
   });
 
-  const saveField = async (id: string, field: string, value: any) => {
-    return updatePlan.mutateAsync({ id, payload: { [field]: value } });
+  const saveField = async (id: string, field: string, value: unknown): Promise<void> => {
+    await updatePlan.mutateAsync({ id, payload: { [field]: value } });
   };
 
   const bulkUpdate = useMutation({
@@ -141,7 +162,7 @@ export function PlansListPage() {
     setSelected(s);
   };
 
-  const setFilter = (k: string, v: string) => {
+  const setFilter = (k: string, v: string | string[]) => {
     setFilters({ ...filters, [k]: v });
     setPage(1);
   };
@@ -178,7 +199,17 @@ export function PlansListPage() {
       if (!map.has(key)) map.set(key, { label, plans: [] });
       map.get(key)!.plans.push(p);
     });
-    return Array.from(map.entries()).sort((a, b) => a[1].label.localeCompare(b[1].label));
+    return Array.from(map.entries())
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .map<RowGroup<InstallationPlan>>(([key, g]) => ({
+        key,
+        label: (
+          <>
+            ▾ {g.label} <span className="text-ink-secondary font-normal">· {g.plans.length} plans</span>
+          </>
+        ),
+        rows: g.plans,
+      }));
   }, [plans, groupBy]);
 
   // Active filters count
@@ -193,76 +224,281 @@ export function PlansListPage() {
   // Number column — global index (across pagination)
   const baseIndex = (page - 1) * limit;
 
+  // Row number has to survive grouping, so it is resolved by identity rather than
+  // by the map index — grouped rows are reordered relative to `plans`.
+  const rowNumber = useMemo(() => {
+    const m = new Map<string, number>();
+    plans.forEach((p, i) => m.set(p.id, baseIndex + i + 1));
+    return m;
+  }, [plans, baseIndex]);
+
+  const allSelected = selected.size === plans.length && plans.length > 0;
+
+  const columns: Column<InstallationPlan>[] = [
+    {
+      key: 'select',
+      width: 40,
+      header: (
+        <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="เลือกทั้งหมด" />
+      ),
+      render: (p) => (
+        <input
+          type="checkbox"
+          checked={selected.has(p.id)}
+          onChange={() => toggleOne(p.id)}
+          onClick={(e) => e.stopPropagation()}
+          aria-label={`เลือก ${p.branchName || p.storeName || p.id}`}
+        />
+      ),
+    },
+    {
+      key: 'index',
+      header: '#',
+      align: 'center',
+      width: 48,
+      render: (p) => <span className="text-xs text-ink-muted">{rowNumber.get(p.id)}</span>,
+    },
+    {
+      key: 'scheduledDate',
+      header: <SortHeader col="scheduledDate" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Scheduled</SortHeader>,
+      width: 124,
+      render: (p) => (
+        <span className="whitespace-nowrap tabular-nums">
+          <InlineCell
+            type="date"
+            value={p.scheduledDate ? p.scheduledDate.substring(0, 10) : ''}
+            display={p.scheduledDate ? p.scheduledDate.substring(0, 10) : <span className="text-ink-muted italic">— set date —</span>}
+            onSave={(v: string) => saveField(p.id, 'scheduledDate', v ? new Date(v).toISOString() : null)}
+          />
+        </span>
+      ),
+    },
+    {
+      key: 'customer',
+      header: 'Customer',
+      render: (p) => (
+        <span className="text-xs whitespace-nowrap">
+          {p.customer?.logoUrl && (
+            <img src={p.customer.logoUrl} alt="" className="inline-block w-4 h-4 mr-1 align-middle rounded-sm object-cover" />
+          )}
+          <span className="font-semibold">{p.customer?.customerCode || '—'}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'department',
+      header: 'Department',
+      render: (p) => (
+        <span className="text-xs whitespace-nowrap">{p.department?.departmentName || '—'}</span>
+      ),
+    },
+    {
+      key: 'storeName',
+      header: <SortHeader col="storeName" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Branch</SortHeader>,
+      render: (p) => (
+        <Link to={`/plans/${p.id}`} className="text-ditech-navy font-medium hover:underline">
+          {p.branchName || p.storeName || '—'}
+        </Link>
+      ),
+    },
+    {
+      key: 'storeRegion',
+      header: 'Region',
+      width: 96,
+      render: (p) => (
+        <InlineCell
+          type="select"
+          value={p.storeRegion || ''}
+          options={[{ value: '', label: '—' }, ...REGIONS.map((r) => ({ value: r, label: r }))]}
+          display={
+            p.storeRegion
+              ? <Pill tone={REGION_TONE[p.storeRegion] ?? 'neutral'} size="sm">{p.storeRegion}</Pill>
+              : <span className="text-ink-muted text-xs">—</span>
+          }
+          onSave={(v: string) => saveField(p.id, 'storeRegion', v || null)}
+        />
+      ),
+    },
+    {
+      key: 'province',
+      header: 'Province',
+      width: 128,
+      render: (p) => (
+        <InlineCell
+          type="text"
+          value={p.province || ''}
+          display={p.province || <span className="text-ink-muted">—</span>}
+          onSave={(v: string) => saveField(p.id, 'province', v || null)}
+          placeholder="Province name"
+        />
+      ),
+    },
+    {
+      key: 'team',
+      header: 'Team',
+      width: 112,
+      render: (p) => (
+        <InlineCell
+          type="select"
+          value={p.teamId || ''}
+          options={[{ value: '', label: '— Unassigned —' }, ...(teams || []).map((t: { id: string; name: string }) => ({ value: t.id, label: t.name }))]}
+          display={
+            p.team
+              ? <Pill tone="neutral" size="sm">{p.team.name}</Pill>
+              : <span className="text-xs text-warning">unassigned</span>
+          }
+          onSave={(v: string) => saveField(p.id, 'teamId', v || null)}
+        />
+      ),
+    },
+    {
+      key: 'sensorCount',
+      header: 'Sensors',
+      align: 'right',
+      width: 80,
+      render: (p) => (
+        <InlineCell
+          type="number"
+          value={p.sensorCount}
+          display={<span className="font-medium tabular-nums">{p.sensorCount}</span>}
+          align="right"
+          onSave={(v: number) => saveField(p.id, 'sensorCount', v)}
+          validate={(v: number) => (v < 0 || v > 999) ? 'Must be 0-999' : null}
+        />
+      ),
+    },
+    {
+      key: 'planStatus',
+      header: 'Status',
+      width: 128,
+      render: (p) => (
+        <InlineCell
+          type="select"
+          value={p.planStatus}
+          options={STATUSES.map((st) => ({ value: st, label: st }))}
+          display={
+            <Pill
+              tone={STATUS_TONE[p.planStatus] ?? 'neutral'}
+              className={p.planStatus === 'CANCELLED' ? 'line-through' : undefined}
+            >
+              {p.planStatus}
+            </Pill>
+          }
+          onSave={(v: string) => saveField(p.id, 'planStatus', v)}
+        />
+      ),
+    },
+    {
+      key: 'readiness',
+      header: 'Readiness',
+      width: 128,
+      render: (p) => (
+        <InlineCell
+          type="select"
+          value={p.readiness}
+          options={READINESS.map((r) => ({ value: r, label: r }))}
+          display={<Pill tone={READINESS_TONE[p.readiness] ?? 'neutral'}>{p.readiness}</Pill>}
+          onSave={(v: string) => saveField(p.id, 'readiness', v)}
+        />
+      ),
+    },
+    {
+      key: 'open',
+      header: '⋯',
+      align: 'center',
+      width: 48,
+      render: (p) => (
+        <Link to={`/plans/${p.id}`} className="text-ink-muted hover:text-ink-primary text-lg" title="Open detail">
+          ↗
+        </Link>
+      ),
+    },
+  ];
+
+  const rangeLabel = `${format(range.from, 'dd MMM yy')} – ${format(range.to, 'dd MMM yy')}`;
+
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-lg font-medium">All Plans · {pagination?.total || 0}</h2>
-          <div className="text-xs text-gray-500 mt-1 flex gap-3 flex-wrap">
-            {Object.entries(stats).map(([s, c]) => (
-              <span key={s} className={`px-1.5 rounded ${STATUS_COLORS[s] || ''}`}>
-                {s}: <strong>{c}</strong>
-              </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <DateRangeFilter value={range} onChange={setRange} />
-          <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as any)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm bg-white">
-            <option value="none">No grouping</option>
-            <option value="customer">Group by customer</option>
-            <option value="department">Group by department</option>
-            <option value="team">Group by team</option>
-            <option value="region">Group by region</option>
-            <option value="province">Group by province</option>
-            <option value="status">Group by status</option>
-          </select>
-          <button onClick={() => setShowFilters(!showFilters)}
-            className="px-3 py-1.5 border border-gray-300 rounded text-sm hover:bg-gray-50">
-            {showFilters ? 'Hide' : 'Show'} filters {activeFilterCount > 0 && <span className="ml-1 px-1.5 bg-blue-500 text-white rounded text-xs">{activeFilterCount}</span>}
-          </button>
-          <button onClick={() => setShowCreate(true)}
-            className="ditech-btn-primary text-sm">
-            + New plan
-          </button>
-        </div>
+      <PageHeader
+        title={`All Plans · ${pagination?.total || 0}`}
+        subtitle={rangeLabel}
+        actions={
+          <>
+            <DateRangeFilter value={range} onChange={setRange} />
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value as typeof groupBy)}
+              className="ui-input">
+              <option value="none">No grouping</option>
+              <option value="customer">Group by customer</option>
+              <option value="department">Group by department</option>
+              <option value="team">Group by team</option>
+              <option value="region">Group by region</option>
+              <option value="province">Group by province</option>
+              <option value="status">Group by status</option>
+            </select>
+            <button onClick={() => setShowFilters(!showFilters)}
+              className="h-9 px-3.5 rounded-lg border border-surface-border bg-surface-card text-sm font-medium hover:bg-surface-page">
+              {showFilters ? 'Hide' : 'Show'} filters {activeFilterCount > 0 && <span className="ml-1 px-1.5 bg-ditech-navy text-white rounded-full text-xs">{activeFilterCount}</span>}
+            </button>
+            <button onClick={() => setShowCreate(true)}
+              className="h-9 px-3.5 rounded-lg bg-ditech-navy text-white text-sm font-medium hover:bg-ditech-navy-light">
+              + New plan
+            </button>
+          </>
+        }
+      />
+
+      {/* Status count chips — unchanged source (`stats`, from the loaded rows) */}
+      <div className="text-xs text-ink-secondary flex gap-3 flex-wrap">
+        {Object.entries(stats).map(([s, c]) => (
+          <span key={s} className={`px-1.5 rounded ${STATUS_COLORS[s] || ''}`}>
+            {s}: <strong>{c}</strong>
+          </span>
+        ))}
+      </div>
+
+      {/* KPI — one card only; per-status cards need a server aggregate (step 5) */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <KpiCard
+          label="แผนทั้งหมด"
+          value={pagination?.total ?? 0}
+          hint="ตามตัวกรองปัจจุบัน"
+        />
       </div>
 
       {/* Filters */}
       {showFilters && (
-        <div className="bg-white border border-gray-200 rounded px-2 py-1.5 flex items-center gap-2 flex-wrap text-sm">
-          <input data-app-search placeholder="🔍 Store name..." value={filters.search}
+        <FilterBar onReset={activeFilterCount > 0 ? clearFilters : undefined}>
+          <input data-app-search placeholder="ค้นหาสาขา…" value={filters.search}
             onChange={(e) => setFilter('search', e.target.value)}
-            className="px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 w-48" />
+            className={`${inputCls(!!filters.search)} w-52`} />
 
           <select value={filters.customerId} onChange={(e) => setFilter('customerId', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.customerId ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.customerId)}>
             <option value="">All customers</option>
             {customers?.map((c: any) => <option key={c.id} value={c.id}>{c.customerCode}</option>)}
           </select>
 
           <select value={filters.departmentId} onChange={(e) => setFilter('departmentId', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.departmentId ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.departmentId)}>
             <option value="">All departments</option>
             {departments?.map((d: any) => <option key={d.id} value={d.id}>{d.departmentName}</option>)}
           </select>
 
           <select value={filters.storeRegion} onChange={(e) => setFilter('storeRegion', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.storeRegion ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.storeRegion)}>
             <option value="">All regions</option>
             {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
           </select>
 
           <select value={filters.province} onChange={(e) => setFilter('province', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.province ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.province)}>
             <option value="">All provinces</option>
             {provinceOptions.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
 
           <select value={filters.teamId} onChange={(e) => setFilter('teamId', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.teamId ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.teamId)}>
             <option value="">All teams</option>
             <option value="null">— Unassigned —</option>
             {teams?.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -281,23 +517,18 @@ export function PlansListPage() {
           />
 
           <select value={filters.readiness} onChange={(e) => setFilter('readiness', e.target.value)}
-            className={`px-2 py-1 text-xs border rounded outline-none focus:border-blue-500 ${filters.readiness ? 'border-blue-400 bg-blue-50' : 'border-gray-300'}`}>
+            className={inputCls(!!filters.readiness)}>
             <option value="">All readiness</option>
             {READINESS.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
 
-          {activeFilterCount > 0 && (
-            <button onClick={clearFilters} className="text-xs text-blue-600 hover:underline px-1.5">
-              Clear
-            </button>
-          )}
-        </div>
+        </FilterBar>
       )}
 
       {/* Bulk actions */}
       {selected.size > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded px-4 py-2 flex items-center justify-between flex-wrap gap-2">
-          <span className="text-sm font-medium text-blue-900">{selected.size} selected</span>
+        <div className="bg-ditech-gold-soft border border-ditech-gold-deep/40 rounded-xl px-4 py-2 flex items-center justify-between flex-wrap gap-2">
+          <span className="text-sm font-medium text-ink-primary">{selected.size} selected</span>
           <div className="flex gap-2 text-sm">
             <select onChange={(e) => {
               if (e.target.value) {
@@ -307,7 +538,7 @@ export function PlansListPage() {
                 });
                 e.target.value = '';
               }
-            }} className="ditech-input">
+            }} className="ui-input">
               <option value="">Bulk: assign team...</option>
               <option value="null">— Unassign —</option>
               {teams?.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -321,7 +552,7 @@ export function PlansListPage() {
                 });
                 e.target.value = '';
               }
-            }} className="ditech-input">
+            }} className="ui-input">
               <option value="">Bulk: set status...</option>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
@@ -334,83 +565,35 @@ export function PlansListPage() {
                 });
                 e.target.value = '';
               }
-            }} className="ditech-input">
+            }} className="ui-input">
               <option value="">Bulk: set readiness...</option>
               {READINESS.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
 
             <button onClick={() => setSelected(new Set())}
-              className="px-3 py-1 text-blue-700 hover:underline">Clear</button>
+              className="px-3 py-1 text-ditech-navy hover:underline">Clear</button>
           </div>
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-white border border-gray-200 rounded overflow-hidden">
-        {isLoading ? (
-          <div className="py-12 text-center text-gray-400">Loading...</div>
-        ) : plans.length === 0 ? (
-          <div className="py-12 text-center text-gray-400">No plans found</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b sticky top-0">
-                <tr className="text-left text-xs text-gray-600 uppercase tracking-wide">
-                  <th className="px-2 py-2 w-10">
-                    <input type="checkbox" checked={selected.size === plans.length && plans.length > 0}
-                      onChange={toggleAll} />
-                  </th>
-                  <th className="px-2 py-2 w-12 text-center">#</th>
-                  <Th col="scheduledDate" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Scheduled</Th>
-                  <th className="px-2 py-2">Customer</th>
-                  <th className="px-2 py-2">Department</th>
-                  <Th col="storeName" sortBy={sortBy} sortDir={sortDir} onSort={handleSort}>Branch</Th>
-                  <th className="px-2 py-2 w-24">Region</th>
-                  <th className="px-2 py-2 w-32">Province</th>
-                  <th className="px-2 py-2 w-28">Team</th>
-                  <th className="px-2 py-2 w-16 text-center">Sensors</th>
-                  <th className="px-2 py-2 w-32">Status</th>
-                  <th className="px-2 py-2 w-32">Readiness</th>
-                  <th className="px-2 py-2 w-12 text-center">⋯</th>
-                </tr>
-              </thead>
-              <tbody>
-                {grouped ? (
-                  grouped.flatMap(([key, g]) => [
-                    <tr key={`grp-${key}`} className="bg-gray-100 border-t border-gray-200">
-                      <td colSpan={12} className="px-3 py-1.5 text-xs font-semibold text-gray-700">
-                        ▾ {g.label} <span className="text-gray-500 font-normal">· {g.plans.length} plans</span>
-                      </td>
-                    </tr>,
-                    ...g.plans.map((p: any, idx: number) =>
-                      renderRow(p, idx, baseIndex, {
-                        selected, toggleOne, saveField, teams, STATUSES, READINESS, REGIONS,
-                        STATUS_COLORS, READINESS_COLORS,
-                      })
-                    ),
-                  ])
-                ) : (
-                  plans.map((p: any, idx: number) =>
-                    renderRow(p, idx, baseIndex, {
-                      selected, toggleOne, saveField, teams, STATUSES, READINESS, REGIONS,
-                      STATUS_COLORS, READINESS_COLORS,
-                    })
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <DataTable
+        columns={columns}
+        rows={plans}
+        groups={grouped ?? undefined}
+        rowKey={(p) => p.id}
+        density="compact"
+        emptyText={isLoading ? 'Loading…' : 'No plans found'}
+      />
 
       {pagination && pagination.total > limit && (
-        <div className="flex items-center justify-between text-sm text-gray-500">
+        <div className="flex items-center justify-between text-sm text-ink-secondary">
           <span>Page {page} of {Math.ceil(pagination.total / limit)} · {pagination.total} total</span>
           <div className="flex gap-2">
             <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-              className="px-3 py-1 border border-gray-300 rounded disabled:opacity-30">Previous</button>
+              className="h-9 px-3.5 rounded-lg border border-surface-border bg-surface-card disabled:opacity-30 hover:bg-surface-page">Previous</button>
             <button onClick={() => setPage(p => p + 1)} disabled={page * limit >= pagination.total}
-              className="px-3 py-1 border border-gray-300 rounded disabled:opacity-30">Next</button>
+              className="h-9 px-3.5 rounded-lg border border-surface-border bg-surface-card disabled:opacity-30 hover:bg-surface-page">Next</button>
           </div>
         </div>
       )}
@@ -420,127 +603,26 @@ export function PlansListPage() {
   );
 }
 
-function renderRow(p: any, idx: number, baseIndex: number, ctx: any) {
-  const { selected, toggleOne, saveField, teams, STATUSES, READINESS, REGIONS,
-    STATUS_COLORS, READINESS_COLORS } = ctx;
-  return (
-    <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
-      <td className="px-2 py-1 align-middle">
-        <input type="checkbox" checked={selected.has(p.id)}
-          onChange={() => toggleOne(p.id)} onClick={(e) => e.stopPropagation()} />
-      </td>
-      <td className="px-2 py-1 text-center text-xs text-gray-400 align-middle">
-        {baseIndex + idx + 1}
-      </td>
-      <td className="align-middle whitespace-nowrap">
-        <InlineCell
-          type="date"
-          value={p.scheduledDate ? p.scheduledDate.substring(0, 10) : ''}
-          display={p.scheduledDate ? p.scheduledDate.substring(0, 10) : <span className="text-gray-400 italic">— set date —</span>}
-          onSave={(v) => saveField(p.id, 'scheduledDate', v ? new Date(v).toISOString() : null)}
-        />
-      </td>
-      <td className="px-2 py-1 text-xs text-gray-700 align-middle whitespace-nowrap">
-        {p.customer?.logoUrl && (
-          <img src={p.customer.logoUrl} alt="" className="inline-block w-4 h-4 mr-1 align-middle rounded-sm object-cover" />
-        )}
-        <span className="font-semibold">{p.customer?.customerCode || '—'}</span>
-      </td>
-      <td className="px-2 py-1 text-xs text-gray-700 align-middle whitespace-nowrap">
-        {p.department?.departmentName || '—'}
-      </td>
-      <td className="px-2 py-1 align-middle">
-        <Link to={`/plans/${p.id}`} className="text-blue-700 hover:underline font-medium">
-          {p.branchName || p.storeName || '—'}
-        </Link>
-      </td>
-      <td className="align-middle">
-        <InlineCell
-          type="select"
-          value={p.storeRegion || ''}
-          options={[{ value: '', label: '—' }, ...REGIONS.map((r: string) => ({ value: r, label: r }))]}
-          display={
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-              p.storeRegion === 'BANGKOK' ? 'bg-blue-100 text-blue-700' :
-              p.storeRegion === 'UPC' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
-            }`}>{p.storeRegion || '—'}</span>
-          }
-          onSave={(v) => saveField(p.id, 'storeRegion', v || null)}
-        />
-      </td>
-      <td className="align-middle">
-        <InlineCell
-          type="text"
-          value={p.province || ''}
-          display={p.province || <span className="text-gray-400">—</span>}
-          onSave={(v) => saveField(p.id, 'province', v || null)}
-          placeholder="Province name"
-        />
-      </td>
-      <td className="align-middle">
-        <InlineCell
-          type="select"
-          value={p.teamId || ''}
-          options={[{ value: '', label: '— Unassigned —' }, ...(teams || []).map((t: any) => ({ value: t.id, label: t.name }))]}
-          display={
-            p.team ? <span className="text-xs px-1.5 py-0.5 bg-gray-100 rounded">{p.team.name}</span>
-                   : <span className="text-xs text-amber-600">unassigned</span>
-          }
-          onSave={(v) => saveField(p.id, 'teamId', v || null)}
-        />
-      </td>
-      <td className="align-middle text-center">
-        <InlineCell
-          type="number"
-          value={p.sensorCount}
-          display={<span className="font-medium">{p.sensorCount}</span>}
-          align="center"
-          onSave={(v) => saveField(p.id, 'sensorCount', v)}
-          validate={(v: number) => (v < 0 || v > 999) ? 'Must be 0-999' : null}
-        />
-      </td>
-      <td className="align-middle">
-        <InlineCell
-          type="select"
-          value={p.planStatus}
-          options={STATUSES.map((s: string) => ({ value: s, label: s }))}
-          display={
-            <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[p.planStatus] || 'bg-gray-100'}`}>
-              {p.planStatus}
-            </span>
-          }
-          onSave={(v) => saveField(p.id, 'planStatus', v)}
-        />
-      </td>
-      <td className="align-middle">
-        <InlineCell
-          type="select"
-          value={p.readiness}
-          options={READINESS.map((r: string) => ({ value: r, label: r }))}
-          display={
-            <span className={`text-xs px-2 py-0.5 rounded font-medium ${READINESS_COLORS[p.readiness] || 'bg-gray-100'}`}>
-              {p.readiness}
-            </span>
-          }
-          onSave={(v) => saveField(p.id, 'readiness', v)}
-        />
-      </td>
-      <td className="px-2 py-1 align-middle text-center">
-        <Link to={`/plans/${p.id}`}
-          className="text-gray-400 hover:text-gray-700 text-lg" title="Open detail">
-          ↗
-        </Link>
-      </td>
-    </tr>
-  );
-}
-
-function Th({ col, sortBy, sortDir, onSort, children }: any) {
+/** Sortable column header. Same toggle semantics as the table it replaced. */
+function SortHeader({ col, sortBy, sortDir, onSort, children }: {
+  col: string;
+  sortBy: string;
+  sortDir: 'asc' | 'desc';
+  onSort: (col: string) => void;
+  children: React.ReactNode;
+}) {
   const active = sortBy === col;
   return (
-    <th onClick={() => onSort(col)} className="px-2 py-2 cursor-pointer select-none whitespace-nowrap hover:bg-gray-100">
+    <button
+      type="button"
+      onClick={() => onSort(col)}
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      className="inline-flex items-center gap-1 uppercase tracking-wide hover:text-ink-primary
+                 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2
+                 focus-visible:outline-ditech-gold rounded"
+    >
       {children}
-      {active && <span className="ml-1 text-xs">{sortDir === 'asc' ? '▲' : '▼'}</span>}
-    </th>
+      {active && <span className="text-[10px]">{sortDir === 'asc' ? '▲' : '▼'}</span>}
+    </button>
   );
 }

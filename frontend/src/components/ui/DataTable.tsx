@@ -11,9 +11,19 @@ export interface Column<T> {
   render?: (row: T) => ReactNode;
 }
 
+/** one labelled block of rows, rendered under a full-width header row */
+export interface RowGroup<T> {
+  key: string;
+  label: ReactNode;
+  rows: T[];
+}
+
 export interface DataTableProps<T> {
   columns: Column<T>[];
+  /** flat rows; ignored for rendering when `groups` is supplied */
   rows: T[];
+  /** when set, rows render grouped under labelled header rows instead of flat */
+  groups?: RowGroup<T>[];
   rowKey: (row: T) => string | number;
   density?: 'compact' | 'comfortable';
   onRowClick?: (row: T) => void;
@@ -50,6 +60,7 @@ function fallbackCell<T>(row: T, key: string): ReactNode {
 export default function DataTable<T>({
   columns,
   rows,
+  groups,
   rowKey,
   density = 'compact',
   onRowClick,
@@ -58,6 +69,25 @@ export default function DataTable<T>({
   className,
 }: DataTableProps<T>) {
   const pad = CELL_PAD[density];
+  const isEmpty = groups ? groups.every((g) => g.rows.length === 0) : rows.length === 0;
+
+  const renderRow = (row: T) => (
+    <tr
+      key={rowKey(row)}
+      onClick={onRowClick === undefined ? undefined : () => onRowClick(row)}
+      className={`border-b border-surface-border last:border-b-0 hover:bg-surface-page
+                  transition-colors${onRowClick === undefined ? '' : ' cursor-pointer'}`}
+    >
+      {columns.map((col) => (
+        <td
+          key={col.key}
+          className={`${pad} text-sm text-ink-primary align-middle ${ALIGN[col.align ?? 'left']}`}
+        >
+          {col.render ? col.render(row) : fallbackCell(row, col.key)}
+        </td>
+      ))}
+    </tr>
+  );
 
   return (
     <div
@@ -84,30 +114,23 @@ export default function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.length === 0 ? (
+          {isEmpty ? (
             <tr>
               <td colSpan={columns.length} className="px-3 py-10 text-center text-sm text-ink-muted">
                 {emptyText}
               </td>
             </tr>
+          ) : groups ? (
+            groups.flatMap((g) => [
+              <tr key={`group-${g.key}`} className="bg-surface-page border-y border-surface-border">
+                <td colSpan={columns.length} className="px-3 py-1.5 text-xs font-semibold text-ink-primary">
+                  {g.label}
+                </td>
+              </tr>,
+              ...g.rows.map(renderRow),
+            ])
           ) : (
-            rows.map((row) => (
-              <tr
-                key={rowKey(row)}
-                onClick={onRowClick === undefined ? undefined : () => onRowClick(row)}
-                className={`border-b border-surface-border last:border-b-0 hover:bg-surface-page
-                            transition-colors${onRowClick === undefined ? '' : ' cursor-pointer'}`}
-              >
-                {columns.map((col) => (
-                  <td
-                    key={col.key}
-                    className={`${pad} text-sm text-ink-primary align-middle ${ALIGN[col.align ?? 'left']}`}
-                  >
-                    {col.render ? col.render(row) : fallbackCell(row, col.key)}
-                  </td>
-                ))}
-              </tr>
-            ))
+            rows.map(renderRow)
           )}
         </tbody>
       </table>

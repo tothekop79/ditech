@@ -14,4 +14,4 @@ export { default as FilterBar } from './FilterBar';
 export type { FilterBarProps } from './FilterBar';
 
 export { default as DataTable } from './DataTable';
-export type { DataTableProps, Column, ColumnAlign } from './DataTable';
+export type { DataTableProps, Column, ColumnAlign, RowGroup } from './DataTable';

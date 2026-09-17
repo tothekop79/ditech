@@ -2,7 +2,7 @@ export type StoreRegion = 'BANGKOK' | 'UPC';
 export type PlanReadiness = 'PENDING' | 'NOT_READY' | 'READY' | 'ON_HOLD';
 export type PlanStatus = 'DRAFT' | 'CONFIRMED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
-export interface Customer { id: string; customerCode: string; customerName: string; }
+export interface Customer { id: string; customerCode: string; customerName: string; logoUrl?: string | null; }
 export interface Department { id: string; departmentCode: string; departmentName: string; }
 export interface Team { id: string; name: string; region: StoreRegion; dailyCap: number; telegramChatId?: string; }
 
@@ -13,6 +13,8 @@ export interface InstallationPlan {
   departmentId: string;
   department: Department;
   storeName: string;
+  /** branch label shown in listings; falls back to storeName when null */
+  branchName?: string | null;
   storeRegion: StoreRegion;
   province?: string;
   description: string;
