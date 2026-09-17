@@ -132,16 +132,41 @@ Commit: `feat(ui): add UI kit (Card, KpiCard, Pill, PageHeader, FilterBar, DataT
 หาไฟล์หน้า Plans ก่อน (`grep -rln "All Plans" frontend/src/pages`) แล้ว:
 
 1. แทน header ด้วย `PageHeader` title `All Plans · {total}` subtitle เป็นช่วงวันที่ที่ filter อยู่
-2. เพิ่มแถว `KpiCard` 5 ใบใต้ header: **Total / Completed / In progress / Draft / Pending readiness** — คำนวณจาก data ที่ list มีอยู่แล้ว **ห้ามเพิ่ม API call ใหม่** ถ้าตัวเลขต้องมาจาก server ให้ใช้ค่าที่ response มี ถ้าไม่มีให้แสดงจาก rows ที่โหลดมาและใส่ hint "จากรายการที่โหลด"
+2. เพิ่มแถว `KpiCard` ใต้ header: **Total / Completed / In progress / Draft / Pending readiness** — **ห้ามเพิ่ม API call ใหม่**
+
+   **แหล่งข้อมูล — ต้องใช้ `stats` ตัวเดียวกับ chips ที่หน้าเดิมแสดงอยู่** (`PlansListPage.tsx:128–132`) เพื่อให้ KPI กับ chips ไม่มีทางขัดกัน:
+   ```ts
+   const stats = useMemo(() => {
+     const counts: Record<string, number> = {};
+     plans.forEach(p => { counts[p.planStatus] = (counts[p.planStatus] || 0) + 1; });
+     return counts;
+   }, [plans]);
+   ```
+   - **status ไหนไม่มีเป็น key ใน `stats` → ไม่ต้อง render card นั้น** (ห้ามใส่ 0 เอง)
+   - **Total** ใช้ `pagination.total` (ค่าเดียวกับที่ `All Plans · {total}` ใช้อยู่) ไม่ใช่ `plans.length`
+   - **Pending readiness** ไม่มีใน `stats` — ต้องนับจาก `plans` แยก หรือไม่แสดง card นี้ ตัดสินใจตอนทำ
+
+   > ⚠️ **ขัดกันเอง ต้องตัดสินใจก่อนเริ่ม Step 4** — verify แล้วเมื่อ 17 Sep 2026:
+   > `stats` ที่ chips ใช้ **นับจาก `plans` = `plansResp.data` = rows ของหน้าปัจจุบันเท่านั้น** (`limit=100`)
+   > ไม่ใช่ aggregate จาก server — `GET /api/installation-plans` คืนมาแค่
+   > `{ success, data, pagination:{ page, limit, total, totalPages } }` **ไม่มี per-status count เลย**
+   > ดังนั้น "ใช้แหล่งเดียวกับ chips" = "นับจาก rows ที่โหลด" ซึ่งชนกับข้อห้าม
+   > ทางเลือก: (ก) ยอมรับ scope แล้วใส่ hint บอกว่าเป็นค่าของหน้านี้ ·
+   > (ข) ให้ backend เพิ่ม per-status aggregate (นอก scope Phase 1 — ห้ามแตะ backend) ·
+   > (ค) ไม่แสดง KPI cards ที่เป็น per-status เลย เหลือแค่ Total
+   > หมายเหตุ: ตราบใดที่ผลลัพธ์หลัง filter ≤ 100 แถว rows ที่โหลด = ทั้งชุด ตัวเลขจึงตรง
+   > จะเพี้ยนเฉพาะตอน filter ได้เกิน 100
 3. ย้าย filter row เข้า `FilterBar` — select/search ทุกตัวเดิม, logic เดิม, query param เดิม
 4. ย้ายตารางเข้า `DataTable` density `compact` — คอลัมน์เดิมทั้งหมด (#, SCHEDULED, CUSTOMER, DEPARTMENT, BRANCH, REGION, PROVINCE, TEAM, SENSORS, STATUS, READINESS, actions), sort เดิม, checkbox เดิม, link ไป plan detail เดิม
 5. STATUS / READINESS / REGION → `Pill` ตาม mapping ข้างบน; BRANCH link เปลี่ยนจาก `text-blue-600` เป็น `text-ditech-navy font-medium hover:underline`
-6. pagination (`limit: 1000` — lesson #33 ห้ามเปลี่ยนเป็น pageSize) และ "Page X of Y" คงเดิม
+6. **pagination คงเดิมทุกอย่าง** — `limit = 100` + `page` state + ปุ่ม Prev/Next + "Page X of Y · N total" ห้ามแตะ
+   (lesson #33 ยังใช้: param ชื่อ `limit` ห้ามเปลี่ยนเป็น `pageSize` — แต่ค่าคือ **100** ไม่ใช่ 1000 ตามที่ verify แล้วใน `PlansListPage.tsx:58`)
 
 **Do not touch:** `plansApi.list` call, query keys, `PlanEditModal`, การคำนวณ readiness, GanttPage, PrintGanttPage, `print-gantt.css`, ทุกไฟล์ใน `components/coverage/`
 
 Verify:
-- 173 plans โหลดครบ (เทียบ count ก่อน/หลัง — ถ่าย screenshot ทั้งสองแบบ)
+- จำนวน plan เท่าเดิมก่อน/หลัง — เทียบ `pagination.total` ที่หัวข้อ `All Plans · N` และจำนวนแถวในหน้า (ถ่าย screenshot ทั้งสองแบบ)
+  (ค่า ณ 17 Sep 2026: total ทั้ง DB = 185, หน้า Plans default filter = 55)
 - filter ทุกตัวยังทำงาน, sort ยังทำงาน, checkbox + bulk action ยังทำงาน
 - `npx tsc --noEmit` ไม่มี error ใหม่
 - `docker compose restart frontend` แล้วเปิดใหม่ (lesson #69)
