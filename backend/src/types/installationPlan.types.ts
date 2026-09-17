@@ -58,6 +58,9 @@ export interface InstallationPlanQuery {
   scheduledFrom?: string;
   scheduledTo?: string;
   sortBy?: string;
+  /** direction sent by the frontend */
+  sortDir?: 'asc' | 'desc';
+  /** legacy alias; no caller sends it today, kept so any future one still works */
   sortOrder?: 'asc' | 'desc';
 }
 

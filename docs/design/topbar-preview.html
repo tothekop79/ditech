@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="th" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DITECH Installation Planner — Top bar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#213153; --navy-deep:#182642; --navy-line:rgba(255,255,255,.08);
+    --gold:#FFD200; --gold-soft:#FFF6C2;
+    --page:#F6F7F9; --card:#fff; --border:#E5E7EB;
+    --ink:#213153; --ink-2:#6B7280; --ink-3:#9CA3AF;
+    --live:#22C55E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#F6F7F9;color-scheme:light;color:var(--ink);font-family:"IBM Plex Sans Thai","Sarabun",system-ui,sans-serif;font-size:14px;line-height:1.45}
+  .note{max-width:1100px;margin:28px auto 10px;padding:0 20px}
+  .note h1{font-size:18px;margin:0 0 4px}
+  .note p{margin:0;color:var(--ink-2)}
+  .frame{container-type:inline-size;max-width:1440px;margin:16px auto;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--card)}
+  .frame.narrow{max-width:420px}
+  .frame-label{font-size:12px;color:var(--ink-3);padding:8px 14px;border-bottom:1px solid var(--border)}
+
+  /* ---------- Top bar ---------- */
+  .tb{white-space:nowrap;height:60px;background:var(--navy);border-bottom:1px solid var(--navy-line);display:flex;align-items:center;gap:8px;padding:0 20px;color:#fff;position:relative}
+  .tb a{color:inherit;text-decoration:none}
+  .brand{display:flex;align-items:center;gap:10px;padding-right:18px;margin-right:6px;border-right:1px solid var(--navy-line);height:36px}
+  .logo{height:24px;width:auto;display:block}
+  .word{line-height:1.05;padding-left:10px;border-left:1px solid var(--navy-line)}
+  .word span{display:block;font-size:11.5px;color:rgba(255,255,255,.72);font-weight:500;letter-spacing:.01em}
+
+  nav.primary{display:flex;align-items:stretch;height:60px;gap:2px}
+  nav.primary a{display:flex;align-items:center;padding:0 12px;font-size:13.5px;font-weight:500;color:rgba(255,255,255,.72);position:relative;border-radius:8px 8px 0 0}
+  nav.primary a:hover{color:#fff;background:rgba(255,255,255,.06)}
+  nav.primary a:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+  nav.primary a.active{color:#fff;font-weight:600}
+  nav.primary a.active::after{content:"";position:absolute;left:12px;right:12px;bottom:0;height:2px;background:var(--gold);border-radius:2px 2px 0 0}
+  nav.primary a .n{margin-left:6px;font-size:10.5px;font-weight:600;background:rgba(255,255,255,.14);padding:1px 6px;border-radius:999px;color:#fff}
+  nav.primary a.more svg{margin-left:4px;opacity:.7}
+
+  .spacer{flex:1}
+  .right{display:flex;align-items:center;gap:8px}
+  .search{flex-shrink:1;display:flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 11px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);border-radius:8px;color:rgba(255,255,255,.6);font-size:13px;min-width:180px;cursor:text}
+  .search:hover{border-color:rgba(255,255,255,.28)}
+  .search kbd{margin-left:auto;font:inherit;font-size:11px;padding:1px 6px;border:1px solid rgba(255,255,255,.18);border-radius:5px;color:rgba(255,255,255,.55)}
+  .live{display:flex;align-items:center;gap:7px;height:34px;padding:0 11px;border-radius:8px;border:1px solid rgba(255,255,255,.14);font-size:12.5px;font-variant-numeric:tabular-nums}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--live);box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
+  @media (prefers-reduced-motion:reduce){.dot{animation:none}}
+  .live .sep{width:1px;height:14px;background:rgba(255,255,255,.18)}
+  .live .st{color:rgba(255,255,255,.8);font-weight:600;letter-spacing:.04em}
+  .live .clk{color:rgba(255,255,255,.65)}
+  .icon-btn{width:34px;height:34px;border-radius:8px;border:1px solid transparent;display:grid;place-items:center;color:rgba(255,255,255,.75);position:relative;background:transparent;cursor:pointer}
+  .icon-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+  .icon-btn .badge{position:absolute;top:5px;right:5px;min-width:15px;height:15px;padding:0 4px;border-radius:999px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:700;display:grid;place-items:center;border:2px solid var(--navy)}
+  .user{display:flex;align-items:center;gap:9px;height:36px;padding:0 6px 0 4px;border-radius:9px;cursor:pointer;margin-left:2px}
+  .user:hover{background:rgba(255,255,255,.08)}
+  .avatar{width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#3D5384,#2C4170);display:grid;place-items:center;font-size:11.5px;font-weight:700}
+  .user .meta{line-height:1.1;text-align:left}
+  .user .meta b{display:block;font-size:12.5px;font-weight:600}
+  .user .meta span{display:block;font-size:10.5px;color:rgba(255,255,255,.55)}
+  .user svg{opacity:.6}
+  .hamburger{display:none}
+
+  /* dropdown */
+  .menu{position:absolute;top:56px;background:var(--card);color:var(--ink);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(16,24,40,.14);min-width:220px;padding:6px;z-index:5}
+  .menu .hd{padding:8px 10px 6px;font-size:11.5px;color:var(--ink-3)}
+  .menu a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;font-size:13.5px}
+  .menu a:hover{background:var(--page)}
+  .menu a small{margin-left:auto;color:var(--ink-3);font-size:11px}
+  .menu hr{border:0;border-top:1px solid var(--border);margin:6px 0}
+  .menu .danger{color:#DC2626}
+  .menu .who{display:flex;gap:10px;align-items:center;padding:8px 10px}
+  .menu .who .avatar{background:var(--navy);color:#fff}
+  .menu .who b{display:block;font-size:13px}
+  .menu .who span{font-size:11.5px;color:var(--ink-2)}
+  .menu .env{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;font-size:12.5px;color:var(--ink-2)}
+  .menu .env em{font-style:normal;font-family:ui-monospace,monospace;font-size:11.5px;color:var(--ink)}
+
+  /* page below the bar */
+  .page{padding:22px 24px 30px}
+  .crumb{font-size:12.5px;color:var(--ink-3);margin-bottom:8px}
+  .crumb b{color:var(--ink-2);font-weight:500}
+  .ph{display:flex;align-items:flex-end;justify-content:space-between;gap:16px}
+  .ph h2{margin:0;font-size:20px;font-weight:700}
+  .ph p{margin:2px 0 0;color:var(--ink-2);font-size:13px}
+  .btn{height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--ink);font:inherit;font-weight:500;cursor:pointer}
+  .btn.primary{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:18px}
+  .kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+  .kpi .l{font-size:12px;color:var(--ink-2)}
+  .kpi .v{font-size:24px;font-weight:700;margin:4px 0 2px;font-variant-numeric:tabular-nums}
+  .kpi .d{font-size:12px}
+  .kpi .d.up{color:#16A34A}.kpi .d.dn{color:#DC2626}.kpi .d.flat{color:var(--ink-3)}
+
+  @container (max-width:1320px){ .search{min-width:0;width:170px} .search .ph{display:none} }
+  @container (max-width:1200px){ .search{display:none} }
+  @container (max-width:1080px){ .live .clk,.live .sep{display:none} .user .meta{display:none} }
+  /* narrow */
+  .frame.narrow .tb{padding:0 12px}
+  .frame.narrow nav.primary,.frame.narrow .search,.frame.narrow .live .clk,.frame.narrow .live .sep,.frame.narrow .user .meta,.frame.narrow .user svg,.frame.narrow .brand .word{display:none}
+  .frame.narrow .hamburger{display:grid}
+  .frame.narrow .brand{border-right:0;padding-right:0}.frame.narrow .logo{height:20px}
+  .frame.narrow .page{padding:16px}
+  .frame.narrow .kpis{grid-template-columns:1fr 1fr}
+  .frame.narrow .ph{flex-direction:column;align-items:flex-start}
+</style>
+</head>
+<body>
+
+<div class="note">
+  <h1>Top bar — DITECH Installation Planner</h1>
+  <p>ทิศทาง: navy จากโลโก้ #213153 ไม่มี gradient · เหลือง #FFD200 จากโลโก้ใช้เฉพาะเส้นบอกหน้าที่เปิดอยู่ + badge · ฟอนต์ IBM Plex Sans Thai · สูง 60px</p>
+</div>
+
+<!-- 1. Desktop default -->
+<div class="frame">
+  <div class="frame-label">1 · Desktop 1440 — หน้า Plans เปิดอยู่</div>
+  <header class="tb">
+    <a class="brand" href="#">
+      <img class="logo" src="data:image/png;base64,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" alt="DITECH">
+      <span class="word"><span>Installation Planner</span></span>
+    </a>
+    <nav class="primary" aria-label="หลัก">
+      <a href="#">Calendar</a>
+      <a href="#" class="active">Plans <span class="n">173</span></a>
+      <a href="#">Events</a>
+      <a href="#">Designs</a>
+      <a href="#">Gantt</a>
+      <a href="#">Map</a>
+      <a href="#">Reports</a>
+      <a href="#">Camera Monitor</a>
+      <a href="#" class="more">More <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg></a>
+    </nav>
+    <div class="spacer"></div>
+    <div class="right">
+      <div class="search" role="button" tabindex="0">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <span class="ph">ค้นหาสาขา, ลูกค้า, แผน…</span>
+        <kbd>⌘K</kbd>
+      </div>
+      <div class="live" title="เชื่อมต่อ backend ปกติ"><span class="dot"></span><span class="st">LIVE</span><span class="sep"></span><span class="clk">14:58:31</span></div>
+      <button class="icon-btn" aria-label="การแจ้งเตือน">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg>
+        <span class="badge">3</span>
+      </button>
+      <button class="user" aria-haspopup="menu">
+        <span class="avatar">AU</span>
+        <span class="meta"><b>Admin User</b><span>Admin · BKK Team</span></span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <button class="icon-btn hamburger" aria-label="เมนู"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </header>
+  <div class="page">
+    <div class="crumb"><b>Plans</b> / All plans</div>
+    <div class="ph">
+      <div><h2>All Plans · 173</h2><p>ทุกช่วงเวลา · 01 Jan 20 – 31 Dec 26 · ไม่จัดกลุ่ม</p></div>
+      <div><button class="btn">Hide filters</button> &nbsp;<button class="btn primary">+ New plan</button></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">แผนทั้งหมด</div><div class="v">173</div><div class="d flat">ตามช่วงที่เลือก</div></div>
+      <div class="kpi"><div class="l">Completed</div><div class="v">96</div><div class="d up">▲ 4 สัปดาห์นี้</div></div>
+      <div class="kpi"><div class="l">In progress</div><div class="v">2</div><div class="d flat">Nongkai, Robinson SVB</div></div>
+      <div class="kpi"><div class="l">Draft</div><div class="v">2</div><div class="d flat">รอยืนยันวันติดตั้ง</div></div>
+      <div class="kpi"><div class="l">Readiness pending</div><div class="v">9</div><div class="d dn">▼ ต้องเตรียมอุปกรณ์</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 2. States -->
+<div class="frame">
+  <div class="frame-label">2 · States — More dropdown เปิด (ซ้าย) · User menu เปิด (ขวา)</div>
+  <header class="tb">
+    <a class="brand" href="#"><img class="logo" src="data:image/png;base64,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" alt="DITECH"><span class="word"><span>Installation Planner</span></span></a>
+    <nav class="primary">
+      <a href="#">Calendar</a><a href="#">Plans</a><a href="#" class="active">Events</a><a href="#">Designs</a><a href="#">Gantt</a><a href="#">Map</a><a href="#">Reports</a><a href="#">Camera Monitor</a>
+      <a href="#" class="more" style="background:rgba(255,255,255,.08);color:#fff">More <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m18 15-6-6-6 6"/></svg></a>
+    </nav>
+    <div class="menu" style="left:min(790px,calc(100% - 520px))">
+      <div class="hd">เครื่องมือ</div>
+      <a href="#">Command <small>ops console</small></a>
+      <a href="#">Wall <small>จอ war-room</small></a>
+      <hr>
+      <a href="#">Settings</a>
+    </div>
+    <div class="spacer"></div>
+    <div class="right">
+      <div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="ph">ค้นหาสาขา, ลูกค้า, แผน…</span><kbd>⌘K</kbd></div>
+      <div class="live"><span class="dot"></span><span class="st">LIVE</span><span class="sep"></span><span class="clk">14:58:31</span></div>
+      <button class="icon-btn" aria-label="การแจ้งเตือน"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span class="badge">3</span></button>
+      <button class="user" style="background:rgba(255,255,255,.1)"><span class="avatar">AU</span><span class="meta"><b>Admin User</b><span>Admin · BKK Team</span></span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m18 15-6-6-6 6"/></svg></button>
+    </div>
+    <div class="menu" style="right:20px;min-width:250px">
+      <div class="who"><span class="avatar">AU</span><div><b>Admin User</b><span>admin@ditech.co.th</span></div></div>
+      <hr>
+      <a href="#">โปรไฟล์ของฉัน</a>
+      <a href="#">ตั้งค่าการแจ้งเตือน <small>Telegram</small></a>
+      <a href="#">Settings</a>
+      <hr>
+      <div class="env">Environment <em>prod · 192.168.1.120</em></div>
+      <div class="env">Version <em>v1.0 · 7cb681e</em></div>
+      <hr>
+      <a href="#" class="danger">ออกจากระบบ</a>
+    </div>
+  </header>
+  <div class="page" style="height:150px"></div>
+</div>
+
+<!-- 3. Narrow -->
+<div class="frame narrow">
+  <div class="frame-label">3 · Tablet / มือถือ &lt; 1024px — nav ยุบเป็นเมนู</div>
+  <header class="tb">
+    <a class="brand" href="#"><img class="logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAsAAAACsCAYAAAB1hhrnAAAKK0lEQVR4nO3dS3LkthIFUNCh7bSH3v/4Dd0L8AK8CHqg1usSVVTxg18C50wc4WipwF/iVgokUwIAAAAAAAAAAAAAAAAAAACgvaX1AAAAalv/TmvrMVDe8ufzrPtH7YEAALQk/CIAAwAwnL3ub0oCMAAwEd1fUhKAAQAYzHfd35QEYABgErq/c3gVflMSgAEAmIwADAAMT/d3Dke6vykJwADA4IRftt5aDwAAILQfhfL1z4dm5rPP+JnxfWalf38FR7u/KekAAwADG7r7myt4lwrwFZ0JvykJwAAAcf1Y/9f054MSgAGAIQ3d/f3tr8Y/39zZ7m9K1gADANz1qou6FzKv/txnP9Zr63UHWPpwlQAMAAynavf35/J9UN0Lmq9+jpeudH9TsgQCACC+s93cAbq/V8NvSgIwADCYSdb+fnX0hrZJb3x7JAADAIzh6JKK8Esv7nR/UxKAAYCBTNv9/fBqacMASx9yEIABAAjjbvc3JQEYABjEhN3ff5/+370u7373N8ya4BzhNyUBGAAgqn92n/+7vdFt78a3K88PHoAADACEN2H395XtjW5fb3wLFn5zdX9TEoABgOCmD7/7XeDP/+X/BGAAgPieL3EYZOlDzu5vSgIwABDY9N3fD/uvVZ7+mb/PCMAAACM42tUN1v0tQQAGAELS/b0kzCPPUirT/U1JAAYAGMer7u7+UompCMAAQDi6v9/YC8HBlj6U6v6mJAADANCZkuE3JQEYAAhG9/eAbbc3WPe3tLfWAwAAoICgobd09zclHWAAIBDdX3IQgAEAIsr1RIeOngxRo/ubUqrzIQAAd+n+jq1W+E1JBxgAgMkIwABA93R/x1az+5uSAAwAwGQEYACga7q/Y6vd/U1JAAYAOib8UoIADABAEy26vykJwABAp3R/x9Yq/KYkAAMAMBkBGADoju7v2Fp2f1MSgAEAmIwADAB0Rfd3bK27vykJwAAAVNJD+E1JAAYAoIJewi8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABk0/yNHOu6dvm+72VZmu8bAADy8yrkHesvrccBAEBezbuc0UKmzjAAQGw6wCfpDAMAxNa8mzlCmNQVBuCI3HOe+QeuaX7hjBCAU1KEXrl7nCPt31HO6RoiHdeU5j620Y5Vb0qfO47PczPNPY/ubHfUbT6r+UaOOKHMcvIckfP4RtivI57PpTmusUQ4Xq31cr7MfqxyHYdI+zHHNkfa3jveWg+g9o6uUZg+PmOWkwhgdr2E3kePYzIfwWfNA3Bte0WgRPFa13VVdADG1WPwfUZjBj6bLgDveVYUchQ2RQdgPFGC75Y5Cd7degxa1AJw1LJx53eNvq8AZjFCPR9hG+CO0x3g7UUz0xqjZVmWO0XDN2+AuEYLjeYkZnaqA/zq4h+tODyToyM8w34CGMXoL0AaffvgmcMB+OjFMdNFdCcMz7SfAKKaqVbPtK1wKACfvShmvIiuhuAZ9xVABDPW5xm3mTndugmOz3LcLAdAezMHwZm3nXkUC8AzX0BnQ/DM+wqgN2qyfcD4dIALOdsNVmwA2rIs7TP7gpEVC8CWArwTggGIyrzEqHSAKxCCAfqm9sJcDgXgs91c3d+vhOA5OPfPsb9iGfV49VRzt28gdXM1lHH4TXBH34IW5Zm4LQrKmTfJreu6Knox1T5uOa8f51x59nFfWobfM+fC9t/2FNohotOvQs6t1UX86nNLTVJ3X6cMW84puKb2dZNzXqkRiH1ZY2TWAO8oWRiPFhWhBqCMWvW11jKG3J8j/DI6Afgb60bO3y0Ek4tzBPrUKkTe/VzhlxkIwCfkDsJCMEB9pWtqDzeuXR1D63FDLQLwBW46Aoip9PK23mr6nRvtYGQC8EW13xikCwzQr57D45Fg3vP4oYTmT4E4osSFmStQelwZQAylGglR5oC9J8ZEGT/kNG0HOOcds3eLqrXAADFFC4/b8UYbP+QSogNcWo7nKd7tBHuWK0A5npP7W9RxQ07TdoC/c7U7LMAC9Ef4BbYE4BdqhuAjnyVkAwDcIwAfcLYbLKQCjEv3F+ITgE+oEYJ1gQEAyhKAT/LNHyCOVq+xB/omAF/gsWUAAHEJwBeV7ALoMADcp/sL7BGACyvVBdZdBgC4RgC+QTcAYA7qPYxFAL7JUxsAAGIRgAMTrAGgjh7n3B7HFMVb6wEA8FXpiW30P+nn3H+j7yu+93gu9Rg4exxTBDrAGZQojgouAEAZAjBAZ3R0AMoSgCsxoQEA9EEAzsSSBQCAGARggMn4wg7MTgAGAGAqAjAAAFMRgAEmYvkDgAAMAMBkBGAAAKYiAAMAMBUBOBMvugAAiEEABuhMqRvV3AAH8E4ArsTEA7SkBgH89tZ6ACMosfzBkgqY20dg/agFVwLsnZ8FGJkADNCxO+F15uC7LMuSq5Gwrus6876cXaRjr3l2nCUQgUW6KAEAeiEA33Tk25agCgDQDwH4Bn9qAJiDeg9jEYCD0lUGALhGAL7oaDfgzp3bAPRDbYZxCMAXlAy/AOShBgN7BOCTdAAA4hCCgWcE4BPOhF9FF2A8miAwBgH4oFrh12PVAPomBEN83gT3jStFTvgFAOibDvCO2uEXgDJK1GZdYIhNB/iX1sWs9ecDcM66rmvExsfjfBNx/JBDiADcezisVUAUKoBrlmVZSswl0ULwdh9EGz/kYgnETTkKR+8BH2AEpYJelBq+N84o44ecBOCLll/u/h4v1QCIr+cQuf7y6t/UGg/0QAA+KVfwPfuZNT8PYFQl6+mRoFnbmfH0NnYoSQA+IXfhVGwAxtNDbb8axnsYO9QQ4ia4lmZfMwYwmlI3xD1q+aSFu9vmxjhmIABv1LjovVIZoK0aIfhDrUCZc3uEYEZ3KgC/KhiRL5ZaYxd+AfpQOwRvPzv378zt4/ebixjR6Q5w7gthpgtL+AWiL39Sm/K4Ey6jn0PQA0sgKhF+gRGM9qfxml3gZ4RZaMNTICpQ4ICRjFbTRgr0wDECcGFnJwqFGKA+tRfmIgAXJPwCxKEGf9bixU9QiwBcwJUHkCsyAO2pxe/sB0YnAGd2ZW2cQgPQj9lr8uzbzxw8BSKDOzeEKDQA/fmozaPd8PeKOYlZ6ADfdLU4WlsF0L+Z6vRM2wo6wBfc7QgoMgBxtH5WcA3mJWYjAB+Uq/gpMgDxjLokwpzErE4F4McLf5aLJmexm2WfAYxqlCBsPmJ2LwPw3kV+5z3mPSpZzEbZRwC8ixqEzUfw7tsAfOTCjvxe+NKFK+p+AeCYKEHYfASf7QbgMxdz7xd+C4oNtcxwgw59Ud++6jUIO1bwnJvgMlJovsoVzuzb8uzjfb5kcNT2Oqp93riO56ZWHbd7odiBxyk4AByRe241/8A1AvANCg8AOW3nXvMMlCEAn6AQAQDEZw3wAYIvAMA4BOAHgi4AwPi+DXxnlkEIjwAARPBH6wEAAAAAAAAAAAAAAAAAAAAAAAAAs/kPMR+RFqRg8V0AAAAASUVORK5CYII=" alt="DITECH"></a>
+    <div class="spacer"></div>
+    <div class="right">
+      <div class="live"><span class="dot"></span><span class="st">LIVE</span></div>
+      <button class="icon-btn" aria-label="การแจ้งเตือน"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10 21a2 2 0 0 0 4 0"/></svg><span class="badge">3</span></button>
+      <button class="user"><span class="avatar">AU</span></button>
+      <button class="icon-btn hamburger" aria-label="เมนู"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    </div>
+  </header>
+  <div class="page">
+    <div class="crumb"><b>Plans</b> / All plans</div>
+    <div class="ph"><div><h2>All Plans · 173</h2><p>ทุกช่วงเวลา</p></div><button class="btn primary">+ New plan</button></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">แผนทั้งหมด</div><div class="v">173</div></div>
+      <div class="kpi"><div class="l">Completed</div><div class="v">96</div></div>
+      <div class="kpi"><div class="l">In progress</div><div class="v">2</div></div>
+      <div class="kpi"><div class="l">Draft</div><div class="v">2</div></div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

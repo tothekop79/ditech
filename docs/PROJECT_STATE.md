@@ -21,6 +21,98 @@
 
 Latest commit: `57ad732` "feat(monitor): Fleet Overview / site detail / alerts UI + overview read-model"
 
+## UI restyle Phase 1 (Sep 17, 2026) — merged to main
+
+Presentation-layer restyle of the whole frontend to the DITECH Retail Intelligence
+design system, plus two backend fixes the pilot page forced out into the open.
+Branch `feat/ui-restyle-phase1`, 7 commits, merged `--no-ff`.
+
+```
+10f20e8  feat(plans): stats endpoint + KPI cards counted by the database
+f5a1b11  fix(plans): sort direction ignored — service read sortOrder, frontend sends sortDir
+73de279  feat(plans): migrate Plans page to new UI kit (pilot)
+caf51dd  feat(ui): add UI kit (Card, KpiCard, Pill, PageHeader, FilterBar, DataTable)
+92815c9  docs(design): correct Step 4 spec — real pagination limit, real KPI data source
+8cdd516  feat(ui): enterprise top bar — brand mark, gold active indicator, search, live status, user menu
+28d949e  feat(ui): add DITECH design tokens + Thai font stack
+```
+
+**Key files**
+
+| file | what |
+|---|---|
+| `frontend/tailwind.config.js` | `ditech.navy/gold/*`, `surface.*`, `ink.*`, `scale.1..5`, flat `positive/negative/warning`. Legacy `ditech.primary/accent/bg/text` left in place — pre-restyle screens still use them |
+| `frontend/src/theme/tokens.ts` | same hex values as a typed JS object — the one source for react-konva / recharts / FunctionColorSet, which need raw colours not classes. Not wired into canvas yet |
+| `frontend/src/components/layout/TopBar.tsx` + `navConfig.ts` | 60px navy bar, gold active rule, More ▾, global search (⌘K → /plans), LIVE + clock, user menu, hamburger drawer. `Layout.tsx` fell 211 → 20 lines |
+| `frontend/src/components/ui/*` | Card, KpiCard, Pill, PageHeader, FilterBar, DataTable + barrel. Dev-only gallery at `/ui-kit` (registered under `import.meta.env.DEV`; Rollup drops it from prod) |
+| `frontend/src/pages/PlansListPage.tsx` | pilot migration — PageHeader, 5 KpiCards, FilterBar, DataTable. `plansApi.list`, query key, `limit = 100`, pagination and every handler unchanged |
+| `frontend/src/hooks/usePlansStats.ts` | `['plans-stats', filters]`, same filter object the list sends |
+| `backend/.../installationPlan.service.ts` | `buildPlansWhere()` extracted so list + aggregate share one `where`; `getStats()` via `prisma.groupBy` + `count`, loads no rows |
+| `backend/.../installationPlan.validation.ts` | `plansFilterQuerySchema` — the 10 filter params, derived by grepping every caller |
+| `GET /api/installation-plans/stats` | `{ total, byStatus, byReadiness }`, declared before `/:id` |
+
+**Old bugs fixed**
+
+1. **Sort direction was a no-op everywhere.** `installationPlan.service.getAll` built
+   orderBy from `query.sortOrder`, but every caller sends `sortDir`. `sortOrder` was
+   always undefined so `|| 'asc'` fired on every request — descending sort had never
+   worked. Confirmed at the API: `sortDir=asc` and `sortDir=desc` returned identical
+   rows. Fixed to read `sortDir` with `sortOrder` as fallback, normalised so only
+   'desc' means descending. (`f5a1b11`)
+2. **Plans status chips counted the loaded page, not the filter.** The chips summed
+   `plansResp.data`, i.e. up to `limit = 100` rows, so any filter matching more
+   under-reported — COMPLETED read 0 whenever completed plans fell past row 100.
+   Now both the chips and the 5 KPI cards read the server aggregate. Verified against
+   SQL on a 173-row filter: COMPLETED = 118 while the table holds 100 rows. (`10f20e8`)
+
+**Old bugs found, NOT fixed — see TODO below:** `teamId="null"` unassigned filter,
+unvalidated list query, unwhitelisted `sortBy`, missing `/designs` index route.
+
+**TS baseline after Phase 1 — replaces the "~20 errors" figure in lesson #56**
+
+- **Frontend: 28** (was 31 at the start of Phase 1; `branchName`/`logoUrl` added to
+  `api/types.ts` and a widened `setFilter` cleared 3).
+  `PlanDetailPage.tsx` 11 · `CalendarPage.tsx` 6 · `PlanEditModal.tsx` 3 ·
+  `coverage/SensorListPanel.tsx` 3 · `coverage/SensorSettingsPanel.tsx` 1 ·
+  `coverage/CoverageSummaryBar.tsx` 1 · `hooks/useDesignEditor.ts` 1 ·
+  `pages/NotifyPage.tsx` 1 · `pages/EventDetailPage.tsx` 1
+- **Backend: 10**, none in plans files.
+  `services/pdf.service.ts` 3 · `controllers/team.controller.ts` 2 ·
+  `controllers/user.controller.ts` 1 · `routes/event.routes.ts` 1 ·
+  `routes/master.routes.ts` 1 · `services/capacity.service.ts` 1 ·
+  `services/photo.service.ts` 1
+
+**TODO Phase 2** (moved here from `docs/design/PROMPT_ui-restyle-phase1.md`)
+
+1. **Apply `plansFilterQuerySchema` to the list route.** It currently guards `/stats`
+   only; `GET /api/installation-plans` still takes raw `req.query` with no validation.
+   Before applying: verify all 7 callers and add `page`/`limit`/`sortBy`/`sortDir` to
+   the schema, or requests that pass today start returning 400.
+2. **Whitelist `sortBy`.** The service puts `query.sortBy` straight into Prisma
+   `orderBy`; a non-column value makes Prisma throw → 500 instead of 400. Direction is
+   already guarded (see fix 1); only the field name is open.
+3. **`teamId="null"`.** The Plans team filter sends the literal string `"null"` for
+   "— Unassigned —", so `buildPlansWhere` sets `where.teamId = "null"`, which matches
+   nothing — the unassigned filter has always returned empty. The Zod schema
+   deliberately allows it so list behaviour is unchanged until this is fixed properly.
+4. **Legacy `ditech.primary` / `ditech.accent`.** Two navy shades now coexist
+   (`#0a3052` legacy vs `#213153` from the logo). grep the screens still on the old
+   tokens and retire them.
+5. **LIVE indicator** derives from `navigator.onLine` + any observed query in error.
+   Should poll `/api/health` lightly instead — there is no health store today.
+6. **`VITE_APP_VERSION` / `VITE_GIT_SHA`** in compose, so the Environment and Version
+   rows in the user menu render (hidden today because no `VITE_*` var is defined).
+7. **`/designs` has no index route.** The nav item exists but `App.tsx` only declares
+   `/designs/:id`, `/designs/by-plan/:planId`, `/designs/by-event/:eventId`, so the
+   link redirects to `/calendar`.
+8. **TS debt above** — the `(x as any)` drift of lessons #14 / #20 is still live in
+   PlanDetailPage and the coverage panels.
+
+**Out of scope, still Phase 2:** Events, Camera Monitor, Reports, Calendar, Designs
+(react-konva colours), Gantt screen colours, Handlebars PDF templates, the Python
+engine's Dashboard.html, dark mode.
+
+
 ## Stack & Server
 
 - **Server:** root@ditech-planer (192.168.1.120), user `ditech`
@@ -36,7 +128,15 @@ Latest commit: `57ad732` "feat(monitor): Fleet Overview / site detail / alerts U
 ## Git history (recent)
 
 ```
-7cb681e  fix: verify source files + PDF footer overlap + engine timeout         ← HEAD = origin/main (May 27)
+10f20e8  feat(plans): stats endpoint + KPI cards counted by the database        ← UI restyle Phase 1 (Sep 17)
+f5a1b11  fix(plans): sort direction ignored — service read sortOrder, fe sends sortDir
+73de279  feat(plans): migrate Plans page to new UI kit (pilot)
+caf51dd  feat(ui): add UI kit (Card, KpiCard, Pill, PageHeader, FilterBar, DataTable)
+92815c9  docs(design): correct Step 4 spec — real pagination limit, real KPI data source
+8cdd516  feat(ui): enterprise top bar — brand, gold active rule, search, live status, user menu
+28d949e  feat(ui): add DITECH design tokens + Thai font stack
+f0a1a64  docs(vion): verified API catalog (51 endpoints × 2 servers) + vion CLI + skill
+7cb681e  fix: verify source files + PDF footer overlap + engine timeout         (May 27)
 f59f5a4  feat(event): add dwell time benchmark by zone with per-zone direction
 146a635  docs(state): May 18 update — excludeStaff feature + 8 lessons
 2d4917f  feat(event): add excludeStaff toggle to Event config                  ← May 18
@@ -832,6 +932,9 @@ Additional tech debt (gluing onto C1.10d):
     ship. But those 20 errors are real tech debt — `(x as any)` casts from lessons
     #14 and #20 have continued to drift. Don't dismiss them; capture them for a
     cleanup pass.
+    **Updated Sep 17, 2026:** the count is no longer ~20. Current baseline is
+    **frontend 28, backend 10**, with the per-file breakdown in the "UI restyle
+    Phase 1" section above. Compare against that list, not this paragraph.
 
 57. **Verify downstream of patches even when upstream is "done".** Part 1 (engine)
     looked complete after `be40b55` shipped. The engine printed `Staff exclusion: enabled`
@@ -1145,6 +1248,51 @@ Env (all declared in compose `environment:`): `VION_{MALL,RETAIL}_{BASE_URL,APPK
 78. **`tsx -e` dynamic imports can load a module twice** — `setNotifier` in one instance, `sendDigest` in another → stub fired despite wiring. Test through the real server (`run/digest` route), not eval.
 79. **Placeholder text in copy-paste commands gets executed literally** (`sed … <token ใหม่>` overwrote a freshly pasted token → 404). Prefer nano for secrets; never sed with placeholders.
 80. **Atomic patch guard catches double-apply too.** Re-running a patch aborted with "anchor matched 0" because it was already applied — read that as "done", not "broken".
+
+### From Sep 17 session (UI restyle Phase 1)
+
+81. **A count derived from paginated rows is a bug with a plausible face.** The Plans
+    status chips summed `plansResp.data`, which holds at most `limit` rows. With
+    `limit = 100` and 173 matches, COMPLETED showed 0 because every completed plan sat
+    past row 100 — and the number looked reasonable, so nobody questioned it for
+    months. It only agreed with reality while the filtered set fit on one page.
+    **Rule:** any chip, KPI or total that describes "all matching X" must come from a
+    server aggregate (`groupBy` / `count`), never from the array the table renders.
+    Test it with a filter that deliberately exceeds one page — if the headline number
+    can never exceed the page size, it is being counted from the page.
+
+82. **A query param the service never reads makes a feature a convincing no-op.** The
+    frontend sent `sortDir`; `installationPlan.service` read `query.sortOrder`, which
+    no caller has ever sent. Every request fell through to `|| 'asc'`, so descending
+    sort had never worked — yet the UI looked correct end to end: the header arrow
+    flipped, React Query saw a new key, a real request went out, fresh rows came back.
+    Nothing errored, because a silently-ignored param never does.
+    **Rule:** when a control "works" but nothing changes, diff the param names across
+    the boundary before debugging either side — `grep -rn "<param>" backend/src` and
+    confirm somebody reads it. Also check whether the name is even validated: here
+    the route had no Zod at all, so nothing would have flagged the mismatch.
+
+83. **Breakpoints must be measured, not taken from the spec.** The brief said collapse
+    the nav below `lg` (1024px). Built to spec, the bar overflowed horizontally
+    between 1024 and 1279 because eight nav items plus More simply do not fit — and it
+    was invisible at the two widths first tested (900 and 1440). Sweeping 375 → 1920
+    and asserting `documentElement.scrollWidth > innerWidth` found it immediately;
+    moving the collapse to `xl` fixed it.
+    **Rule:** after any responsive change, sweep the breakpoint boundaries and both
+    sides of each one, and assert on overflow rather than eyeballing a screenshot. A
+    layout that looks right at your two favourite widths is not evidence.
+
+84. **`validate()` in this repo parses `req.body` only — it cannot guard a query
+    string.** `backend/src/middlewares/validation.middleware.ts` does
+    `req.body = schema.parse(req.body)` and nothing else, so mounting it on a GET
+    route validates an empty object and passes anything in `req.query` straight
+    through. That is why `GET /api/installation-plans` has no effective validation
+    despite the codebase looking Zod-covered. For a query schema, `safeParse(req.query)`
+    inside the handler (as `/stats` now does) or a separate query middleware.
+    **Corollary to #19:** be as careful about a schema that is too strict. A query
+    schema written from assumption will 400 requests the route accepts today — grep
+    every caller first. Doing that here caught `teamId="null"`, which a `.uuid()`
+    would have rejected.
 
 ### Next
 - Sprint 3 candidates: `SITE_DOWN` correlation (all cameras of a site down → one CRIT alert), `STALE_OFFLINE` > 30 days → suggest archive, APIPA/IP-drift flags (`169.254.x`, name≠localIp), uptime % within business hours only.
