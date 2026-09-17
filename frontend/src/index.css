@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,10 +6,10 @@
 
 @layer base {
   html {
-    font-family: 'Sarabun', system-ui, sans-serif;
+    font-family: 'IBM Plex Sans Thai', 'Sarabun', system-ui, sans-serif;
   }
   body {
-    @apply bg-ditech-bg text-ditech-text;
+    @apply bg-surface-page text-ink-primary;
   }
 }
 
