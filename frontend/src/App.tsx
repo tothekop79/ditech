@@ -27,6 +27,7 @@ import { DesignEditorPage } from './pages/DesignEditorPage';
 import { FleetOverviewPage } from './pages/FleetOverviewPage';
 import { MonitorSitePage } from './pages/MonitorSitePage';
 import { MonitorAlertsPage } from './pages/MonitorAlertsPage';
+import UiKitPage from './pages/UiKitPage';
 
 export function App() {
   const { token } = useAuth();
@@ -75,6 +76,8 @@ export function App() {
             <Route path="/designs/:id" element={<DesignEditorPage />} />
             <Route path="/designs/by-plan/:planId" element={<DesignEditorPage />} />
             <Route path="/designs/by-event/:eventId" element={<DesignEditorPage />} />
+            {/* dev-only gallery for components/ui — not registered in a production build */}
+            {import.meta.env.DEV ? <Route path="/ui-kit" element={<UiKitPage />} /> : null}
             <Route path="*" element={<Navigate to="/calendar" replace />} />
           </Routes>
         </Layout>

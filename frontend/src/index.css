@@ -42,6 +42,19 @@
   .live-dot-off {
     @apply w-2 h-2 rounded-full bg-negative;
   }
+
+  /* Inputs and selects inside <FilterBar>. */
+  .ui-input {
+    @apply h-9 px-2.5 text-sm rounded-lg bg-surface-card text-ink-primary
+           border border-surface-border placeholder:text-ink-muted
+           focus:outline-none focus:border-ditech-navy
+           focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px]
+           focus-visible:outline-ditech-gold
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  select.ui-input {
+    @apply pr-8;
+  }
 }
 
 @keyframes live-ring {
