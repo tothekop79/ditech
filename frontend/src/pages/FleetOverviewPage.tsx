@@ -252,6 +252,12 @@ export function FleetOverviewPage() {
     onError: (e: any) => showToast(e?.response?.data?.message || 'Poll failed'),
   });
 
+  const exportXlsx = useMutation({
+    mutationFn: () => monitorApi.downloadExport({ source, all: showUnmonitored }),
+    onSuccess: (name) => showToast(`Downloaded ${name}`),
+    onError: (e: any) => showToast(e?.message || 'Export failed'),
+  });
+
   const runDigest = useMutation({
     mutationFn: () => monitorApi.runDigest(),
     onSuccess: (r) =>
@@ -395,6 +401,20 @@ export function FleetOverviewPage() {
             disabled={runDigest.isPending}
             className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50">
             {runDigest.isPending ? 'Sending…' : '📨 Send digest'}
+          </button>
+          <button
+            onClick={() => exportXlsx.mutate()}
+            disabled={exportXlsx.isPending}
+            title="ไฟล์ Excel ตามขอบเขตที่เลือกอยู่ — ใช้เวลาสักครู่"
+            className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded hover:bg-gray-50 disabled:opacity-50 inline-flex items-center gap-1.5">
+            {exportXlsx.isPending ? (
+              <>
+                <span className="w-3 h-3 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                Exporting…
+              </>
+            ) : (
+              '📥 Export Excel'
+            )}
           </button>
         </div>
       </div>

@@ -341,6 +341,23 @@ export const monitorApi = {
       .get<{ success: boolean; data: UptimeResult }>(`/monitor/devices/${deviceId}/uptime`, { params: { days } })
       .then((r) => r.data.data),
 
+  /** query string shared by the export endpoint — same scope the page is showing */
+  exportParams: (opts: { source?: MonitorSource; all?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (opts.source) p.set('source', opts.source);
+    if (opts.all) p.set('all', '1');
+    return p;
+  },
+
+  exportUrl: (opts: { source?: MonitorSource; all?: boolean } = {}) => {
+    const qs = monitorApi.exportParams(opts).toString();
+    return `/api/monitor/export.xlsx${qs ? `?${qs}` : ''}`;
+  },
+
+  /** The workbook needs the Bearer header, so it can't be a plain link — fetch it and hand the blob to an anchor. */
+  downloadExport: (opts: { source?: MonitorSource; all?: boolean } = {}) =>
+    downloadAuthedFile(monitorApi.exportUrl(opts), 'camera-monitor.xlsx'),
+
   runPoll: () =>
     api.post<{ success: boolean; data: PollResult }>('/monitor/run/poll').then((r) => r.data.data),
 
@@ -506,6 +523,43 @@ export function shiftDate(dateInput: string, opts: { days?: number; years?: numb
   if (opts.years) dt.setUTCFullYear(dt.getUTCFullYear() + opts.years);
   if (opts.days) dt.setUTCDate(dt.getUTCDate() + opts.days);
   return dt.toISOString().slice(0, 10);
+}
+
+/** filename="x.xlsx" / filename*=UTF-8''x.xlsx → x.xlsx */
+function filenameFromDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (star) { try { return decodeURIComponent(star[1]); } catch { return star[1]; } }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1] : null;
+}
+
+/**
+ * Download a protected file: fetch with the Bearer header (the same token axios uses),
+ * then hand the blob to an anchor. Filename comes from Content-Disposition when the server sends one.
+ */
+export async function downloadAuthedFile(url: string, fallbackName: string): Promise<string> {
+  const token = localStorage.getItem('ditech_token');
+  const res = await fetch(url, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  if (!res.ok) {
+    let message = `Download failed (${res.status})`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      /* not JSON — keep the status message */
+    }
+    throw new Error(message);
+  }
+  const name = filenameFromDisposition(res.headers.get('Content-Disposition')) ?? fallbackName;
+  const blob = await res.blob();
+  const href = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = href;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(href);
+  return name;
 }
 
 export const UNASSIGNED = '(unassigned)';

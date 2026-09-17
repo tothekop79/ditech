@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { fleetOverview, pollDevices, syncSites, sendDigest, listFleetDevices } from '../services/deviceMonitor.service';
+import { buildMonitorWorkbook } from '../services/monitorExport.service';
 import { authenticate } from '../middlewares/auth.middleware';
 
 const prisma = new PrismaClient();
@@ -179,5 +180,17 @@ r.get('/devices/:id/uptime', async (req, res, next) => {
 r.post('/run/sync', async (_req, res, next) => { try { res.json({ success: true, data: await syncSites() }); } catch (e) { next(e); } });
 r.post('/run/poll', async (_req, res, next) => { try { res.json({ success: true, data: await pollDevices() }); } catch (e) { next(e); } });
 r.post('/run/digest', async (_req, res, next) => { try { res.json({ success: true, data: await sendDigest() }); } catch (e) { next(e); } });
+
+/** Excel export — 5 sheets (Sites, Devices, Alerts, StatusLog 7d, Customers) + README. ?source=MALL|RETAIL &all=1 */
+r.get('/export.xlsx', async (req, res, next) => {
+  try {
+    const source = req.query.source as string | undefined;
+    const wb = await buildMonitorWorkbook({ source, includeUnmonitored: req.query.all === '1' });
+    const stamp = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/(\d{8})(\d{4})/, '$1-$2');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="camera-monitor_${source ?? 'ALL'}_${stamp}.xlsx"`);
+    await wb.xlsx.write(res); res.end();
+  } catch (e) { next(e); }
+});
 
 export default r;
