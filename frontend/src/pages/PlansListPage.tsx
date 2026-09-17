@@ -233,7 +233,7 @@ export function PlansListPage() {
       {/* Filters */}
       {showFilters && (
         <div className="bg-white border border-gray-200 rounded px-2 py-1.5 flex items-center gap-2 flex-wrap text-sm">
-          <input placeholder="🔍 Store name..." value={filters.search}
+          <input data-app-search placeholder="🔍 Store name..." value={filters.search}
             onChange={(e) => setFilter('search', e.target.value)}
             className="px-2 py-1 text-xs border border-gray-300 rounded outline-none focus:border-blue-500 w-48" />
 
