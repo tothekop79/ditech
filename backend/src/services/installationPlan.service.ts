@@ -63,8 +63,13 @@ export class InstallationPlanService {
       if (query.scheduledTo) where.scheduledDate.lte = new Date(query.scheduledTo);
     }
 
+    // The frontend sends `sortDir`; this read `sortOrder` only, so it was always
+    // undefined and every sort came back ascending. `sortOrder` stays as a fallback.
+    const requested = query.sortDir ?? query.sortOrder;
+    const direction: Prisma.SortOrder = requested === 'desc' ? 'desc' : 'asc';
+
     const orderBy: Prisma.InstallationPlanOrderByWithRelationInput = query.sortBy
-      ? { [query.sortBy]: query.sortOrder || 'asc' }
+      ? { [query.sortBy]: direction }
       : { createdAt: 'desc' };
 
     const [data, total] = await Promise.all([
