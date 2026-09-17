@@ -15,6 +15,7 @@ import type { InstallationPlan } from '../api/types';
 import { PageHeader, KpiCard, FilterBar, DataTable, Pill } from '../components/ui';
 import type { Column, PillTone, RowGroup } from '../components/ui';
 import { format } from 'date-fns';
+import { usePlansStats } from '../hooks/usePlansStats';
 
 const STATUSES = ['DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const READINESS = ['PENDING', 'NOT_READY', 'READY', 'ON_HOLD'];
@@ -78,26 +79,34 @@ export function PlansListPage() {
   const [showFilters, setShowFilters] = useState(true);
   const limit = 100;
 
+  // Exactly the filter params the list sends — reused verbatim for /stats so the
+  // KPI row and the table can never describe different sets of plans.
+  const filterParams = useMemo(() => ({
+    ...Object.fromEntries(
+      Object.entries(filters)
+        .filter(([k, v]) => {
+          if (k === 'planStatuses') return Array.isArray(v) && v.length > 0;
+          return v;
+        })
+        .map(([k, v]) => k === 'planStatuses' ? ['planStatus', (v as string[]).join(',')] : [k, v])
+    ),
+    scheduledFrom: range.from.toISOString(),
+    scheduledTo: range.to.toISOString(),
+  }), [filters, range]);
+
   const { data: plansResp, isLoading } = useQuery({
     queryKey: ['plans-list', filters, sortBy, sortDir, page, range.from.toISOString(), range.to.toISOString()],
     queryFn: () =>
       plansApi.list({
-        ...Object.fromEntries(
-          Object.entries(filters)
-            .filter(([k, v]) => {
-              if (k === 'planStatuses') return Array.isArray(v) && v.length > 0;
-              return v;
-            })
-            .map(([k, v]) => k === 'planStatuses' ? ['planStatus', (v as string[]).join(',')] : [k, v])
-        ),
-        scheduledFrom: range.from.toISOString(),
-        scheduledTo: range.to.toISOString(),
+        ...filterParams,
         sortBy,
         sortDir,
         page,
         limit,
       }),
   });
+
+  const { data: stats } = usePlansStats(filterParams);
 
   const { data: teams } = useQuery({ queryKey: ['teams'], queryFn: teamsApi.list });
   const { data: customers } = useQuery({ queryKey: ['customers'], queryFn: masterApi.customers });
@@ -145,12 +154,6 @@ export function PlansListPage() {
     },
     onError: (e: any) => showToast(e.message || 'Bulk update failed'),
   });
-
-  const stats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    plans.forEach(p => { counts[p.planStatus] = (counts[p.planStatus] || 0) + 1; });
-    return counts;
-  }, [plans]);
 
   const toggleAll = () => {
     if (selected.size === plans.length) setSelected(new Set());
@@ -421,7 +424,7 @@ export function PlansListPage() {
     <div className="space-y-3">
       {/* Header */}
       <PageHeader
-        title={`All Plans · ${pagination?.total || 0}`}
+        title={`All Plans · ${stats?.total ?? pagination?.total ?? 0}`}
         subtitle={rangeLabel}
         actions={
           <>
@@ -448,21 +451,25 @@ export function PlansListPage() {
         }
       />
 
-      {/* Status count chips — unchanged source (`stats`, from the loaded rows) */}
+      {/* Status count chips — same server aggregate as the KPI row */}
       <div className="text-xs text-ink-secondary flex gap-3 flex-wrap">
-        {Object.entries(stats).map(([s, c]) => (
-          <span key={s} className={`px-1.5 rounded ${STATUS_COLORS[s] || ''}`}>
-            {s}: <strong>{c}</strong>
+        {Object.entries(stats?.byStatus ?? {}).map(([st, c]) => (
+          <span key={st} className={`px-1.5 rounded ${STATUS_COLORS[st] || ''}`}>
+            {st}: <strong>{c}</strong>
           </span>
         ))}
       </div>
 
-      {/* KPI — one card only; per-status cards need a server aggregate (step 5) */}
+      {/* KPI — counted by the database over the whole filtered set, not one page */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <KpiCard label="แผนทั้งหมด" value={stats?.total ?? 0} hint="ตามตัวกรองปัจจุบัน" />
+        <KpiCard label="Completed" value={stats?.byStatus.COMPLETED ?? 0} />
+        <KpiCard label="In progress" value={stats?.byStatus.IN_PROGRESS ?? 0} />
+        <KpiCard label="Draft" value={stats?.byStatus.DRAFT ?? 0} />
         <KpiCard
-          label="แผนทั้งหมด"
-          value={pagination?.total ?? 0}
-          hint="ตามตัวกรองปัจจุบัน"
+          label="Readiness pending"
+          value={stats?.byReadiness.PENDING ?? 0}
+          hint="รอเตรียมพร้อมหน้างาน"
         />
       </div>
 

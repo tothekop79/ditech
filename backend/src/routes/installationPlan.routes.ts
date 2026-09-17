@@ -3,6 +3,8 @@ import { InstallationPlanController } from '../controllers/installationPlan.cont
 import { authenticate, authorize } from '../middlewares/auth.middleware';
 import { validate } from '../middlewares/validation.middleware';
 import { createPlanSchema, updatePlanSchema, rescheduleSchema, bulkImportSchema } from '../middlewares/installationPlan.validation';
+import { plansFilterQuerySchema } from '../middlewares/installationPlan.validation';
+import { installationPlanService } from '../services/installationPlan.service';
 import * as ExcelJS from 'exceljs';
 import { PrismaClient } from '@prisma/client';
 const router = Router();
@@ -11,6 +13,26 @@ const ctrl = new InstallationPlanController();
 router.use(authenticate);
 router.get('/', (req, res) => ctrl.getAll(req, res));
 router.get('/statistics', (req, res) => ctrl.statistics(req, res));
+
+// Filtered counts for the Plans KPI row. Declared before '/:id' so "stats" is not
+// read as an id. The shared `validate()` middleware only parses req.body, so the
+// query schema is applied here directly.
+router.get('/stats', async (req, res) => {
+  const parsed = plansFilterQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      errors: parsed.error.errors.map((e) => ({ path: e.path.join('.'), message: e.message })),
+    });
+  }
+  try {
+    const data = await installationPlanService.getStats(parsed.data);
+    return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(400).json({ success: false, message: e instanceof Error ? e.message : 'Failed' });
+  }
+});
 const _xprisma = new PrismaClient();
 
 router.get('/export.xlsx', async (req: any, res: any) => {

@@ -186,6 +186,37 @@ Commit: `feat(plans): migrate Plans page to new UI kit (pilot)`
 - ทำงานเสร็จแต่ละ step → รายงาน: ไฟล์ที่แก้ + จำนวนบรรทัด, commit hash, screenshot, สิ่งที่พบว่าผิดจากที่คาด แล้ว **หยุดรอ**
 - ถ้าเจอว่า reality ≠ PROJECT_STATE.md (ชื่อไฟล์, โครงสร้าง Layout ไม่ตรง) ให้เชื่อ reality รายงานความต่าง แล้วทำต่อ — ไม่ต้องหยุดถามเว้นแต่กระทบ scope
 
+## TODO Phase 2 (เปิดไว้จาก Phase 1 — verified แล้วว่ามีจริง)
+
+1. **apply `plansFilterQuerySchema` กับ `GET /api/installation-plans` (list route)**
+   ตอนนี้ schema ใช้กับ `/stats` อย่างเดียว list ยังรับ `req.query` ดิบ ไม่มี validation เลย
+   ก่อน apply ต้องไล่ verify caller ทุกตัวก่อน (`PlansListPage`, `CalendarPage`, `MapPage`,
+   `CapacityPage`, `GanttPage`, `PrintGanttPage`, `ProvincesPage`) เพราะ schema เข้มเกินจะ
+   ทำให้ request ที่เคยผ่านกลายเป็น 400 — ต้องเพิ่ม `page`/`limit`/`sortBy`/`sortDir` เข้า schema ด้วย
+
+2. **whitelist `sortBy`** — `installationPlan.service` ยัด `query.sortBy` เข้า Prisma `orderBy`
+   ตรง ๆ ค่าที่ไม่ใช่ชื่อคอลัมน์จะทำให้ Prisma throw → ตอบ 500 แทนที่จะเป็น 400
+   (direction กันไว้แล้วใน 5a เหลือแต่ field name)
+
+3. **`teamId=null`** — หน้า Plans ส่ง string `"null"` สำหรับตัวเลือก "— Unassigned —"
+   `buildPlansWhere` ทำ `where.teamId = "null"` ซึ่งไม่ match อะไรเลย ตัวกรอง unassigned
+   จึงคืนผลว่างมาตลอด (บั๊กเก่า พบตอนเขียน schema — schema จงใจปล่อยผ่านเพื่อไม่เปลี่ยนพฤติกรรม list)
+
+4. **legacy `ditech.primary` / `ditech.accent`** — grep หน้าที่ยังใช้แล้วสรุปเป็น TODO ตอนปิด Phase 1
+
+5. **LIVE indicator** — ตอนนี้ derive จาก `navigator.onLine` + query error ควร poll `/api/health` เบา ๆ
+
+6. **`VITE_APP_VERSION` / `VITE_GIT_SHA`** — ใส่ใน compose เพื่อให้แถว Environment/Version
+   ใน user menu แสดงผล (ตอนนี้ซ่อนอยู่เพราะไม่มีค่า)
+
+7. **`/designs` ไม่มี index route** — nav มีปุ่ม แต่ `App.tsx` มีแค่ `/designs/:id` และ by-plan/by-event
+   กดแล้ว redirect ไป `/calendar`
+
+8. **TS baseline** — frontend 28 errors, backend 10 errors (team/user controller, event/master
+   routes, capacity/pdf/photo service) ยังไม่มีตัวไหนอยู่ในไฟล์ plans
+
+---
+
 ## Out of scope (ไว้ Phase 2 — ห้ามทำในรอบนี้)
 
 Events, Camera Monitor, Reports, Calendar, Designs (react-konva colors), Gantt screen colors, Handlebars PDF templates, Dashboard.html จาก Python engine, dark mode

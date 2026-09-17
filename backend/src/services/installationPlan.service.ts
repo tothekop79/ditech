@@ -3,6 +3,63 @@ import { prisma } from '../config/db';
 import { CreateInstallationPlanDTO, UpdateInstallationPlanDTO, InstallationPlanQuery, BulkImportRow } from '../types/installationPlan.types';
 import { commandBus } from './eventBus.service';
 
+/**
+ * The ten filter params the plans list honours. `InstallationPlanQuery` (raw
+ * `req.query` from the list route) and `PlansFilterQuery` (Zod-parsed, used by
+ * /stats) are both structurally assignable to this, so one `where` serves both.
+ */
+export interface PlansFilterInput {
+  search?: string;
+  customerId?: string;
+  departmentId?: string;
+  storeRegion?: string;
+  province?: string;
+  readiness?: string;
+  planStatus?: string;
+  teamId?: string;
+  scheduledFrom?: string;
+  scheduledTo?: string;
+}
+
+/**
+ * Single source of truth for "which plans match these filters".
+ * Moved out of getAll unchanged so the list and the aggregate can never drift.
+ */
+export function buildPlansWhere(query: PlansFilterInput): Prisma.InstallationPlanWhereInput {
+  const where: Prisma.InstallationPlanWhereInput = {};
+  if (query.customerId) where.customerId = query.customerId;
+  if (query.departmentId) where.departmentId = query.departmentId;
+  if (query.storeRegion) where.storeRegion = query.storeRegion as Prisma.InstallationPlanWhereInput['storeRegion'];
+  if (query.province) where.province = query.province;
+  if (query.readiness) {
+    const arr = String(query.readiness).split(",").filter(Boolean);
+    where.readiness = arr.length > 1 ? { in: arr as any } : (arr[0] as any);
+  }
+  if (query.planStatus) {
+    const arr = String(query.planStatus).split(",").filter(Boolean);
+    where.planStatus = arr.length > 1 ? { in: arr as any } : (arr[0] as any);
+  }
+  if (query.teamId) where.teamId = query.teamId;
+  if (query.search) {
+    where.OR = [
+      { storeName: { contains: query.search, mode: 'insensitive' } },
+      { detail: { contains: query.search, mode: 'insensitive' } },
+    ];
+  }
+  if (query.scheduledFrom || query.scheduledTo) {
+    where.scheduledDate = {};
+    if (query.scheduledFrom) where.scheduledDate.gte = new Date(query.scheduledFrom);
+    if (query.scheduledTo) where.scheduledDate.lte = new Date(query.scheduledTo);
+  }
+  return where;
+}
+
+export interface PlansStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byReadiness: Record<string, number>;
+}
+
 export class InstallationPlanService {
   private include = {
     customer: { select: { id: true, customerCode: true, customerName: true, logoUrl: true } },
@@ -32,36 +89,34 @@ export class InstallationPlanService {
     return plan;
   }
 
+  /**
+   * Counts for the current filter, straight from the database. Uses groupBy and
+   * count only — no rows are loaded, so this stays correct past any page size.
+   */
+  async getStats(filters: PlansFilterInput): Promise<PlansStats> {
+    const where = buildPlansWhere(filters);
+
+    const [total, statusRows, readinessRows] = await Promise.all([
+      prisma.installationPlan.count({ where }),
+      prisma.installationPlan.groupBy({ by: ['planStatus'], where, _count: { _all: true } }),
+      prisma.installationPlan.groupBy({ by: ['readiness'], where, _count: { _all: true } }),
+    ]);
+
+    const byStatus: Record<string, number> = {};
+    statusRows.forEach((r) => { byStatus[r.planStatus] = r._count._all; });
+
+    const byReadiness: Record<string, number> = {};
+    readinessRows.forEach((r) => { byReadiness[r.readiness] = r._count._all; });
+
+    return { total, byStatus, byReadiness };
+  }
+
   async getAll(query: InstallationPlanQuery) {
     const page = Math.max(1, Number(query.page) || 1);
     const limit = Math.min(1000, Math.max(1, Number(query.limit) || 20));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.InstallationPlanWhereInput = {};
-    if (query.customerId) where.customerId = query.customerId;
-    if (query.departmentId) where.departmentId = query.departmentId;
-    if (query.storeRegion) where.storeRegion = query.storeRegion;
-    if (query.province) where.province = query.province;
-    if (query.readiness) {
-      const arr = String(query.readiness).split(",").filter(Boolean);
-      where.readiness = arr.length > 1 ? { in: arr as any } : (arr[0] as any);
-    }
-    if (query.planStatus) {
-      const arr = String(query.planStatus).split(",").filter(Boolean);
-      where.planStatus = arr.length > 1 ? { in: arr as any } : (arr[0] as any);
-    }
-    if (query.teamId) where.teamId = query.teamId;
-    if (query.search) {
-      where.OR = [
-        { storeName: { contains: query.search, mode: 'insensitive' } },
-        { detail: { contains: query.search, mode: 'insensitive' } },
-      ];
-    }
-    if (query.scheduledFrom || query.scheduledTo) {
-      where.scheduledDate = {};
-      if (query.scheduledFrom) where.scheduledDate.gte = new Date(query.scheduledFrom);
-      if (query.scheduledTo) where.scheduledDate.lte = new Date(query.scheduledTo);
-    }
+    const where = buildPlansWhere(query);
 
     // The frontend sends `sortDir`; this read `sortOrder` only, so it was always
     // undefined and every sort came back ascending. `sortOrder` stays as a fallback.

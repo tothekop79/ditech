@@ -1,10 +1,20 @@
 import { api } from './client';
 import type { InstallationPlan } from './types';
 
+export interface PlansStats {
+  total: number;
+  byStatus: Record<string, number>;
+  byReadiness: Record<string, number>;
+}
+
 export const plansApi = {
   list: (params?: any) =>
     api.get<{ success: boolean; data: InstallationPlan[]; pagination: any }>('/installation-plans', { params })
       .then((r) => r.data),
+  /** filtered counts straight from the DB — accepts the same filter params as list() */
+  stats: (params?: Record<string, string | undefined>) =>
+    api.get<{ success: boolean; data: PlansStats }>('/installation-plans/stats', { params })
+      .then((r) => r.data.data),
   get: (id: string) =>
     api.get<{ success: boolean; data: InstallationPlan & { statusHistory: any[] } }>(`/installation-plans/${id}`)
       .then((r) => r.data.data),
