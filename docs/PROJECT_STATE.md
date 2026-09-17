@@ -1132,7 +1132,7 @@ Env (all declared in compose `environment:`): `VION_{MALL,RETAIL}_{BASE_URL,APPK
 - Paths are **case-sensitive**: `plazaInfo` ✓, `plazainfo` 404. Header `Authorization: <atoken>` (no Bearer). Auth failure is HTTP 200 with `code:"-1"`.
 - `device.status`: 0 offline · 1 online · 3 disabled. Device shape identical on both servers (camelCase, `channelList[].site.gateUnid`).
 - `modifyTime` is **vendor server time GMT+8** (not site tz). For status=0 it is when the server marked it offline ≈ last heartbeat + 12 min; for status=1 the vendor touches it nightly at 00:00 → not a "last seen".
-- `plazaInfo` gives `timeZone` (Retail; blank on ~25) and `businessHours[week 1..7]`; Mall returns `00:00–00:00` unless set in portal. `groupName` present on 36% of Retail sites; `groupInfo` (Retail only, Mall 404) is the account → group tree; top-level account name = customer. Ownership of ungrouped stores is only visible in the portal account switcher.
+- `plazaInfo` gives `timeZone` (Retail; blank on ~25) and `businessHours[week 1..7]`; Mall returns `00:00–00:00` unless set in portal. `groupName` present on 36% of Retail sites; `groupInfo` is the account → group tree on both servers, but at different paths and in different shapes: Retail `/api/v2/base/groupInfo` → `[{name, groups[{id,parentId,name}]}]`; Mall **`/api/v1/base/groupInfo`** (v2 → 404) → flat `[{id, pid, name, name_en}]` in the v1 envelope `{msg_code, msg_info, data}`, which needs the v1 plain-password login; top-level account name = customer. Ownership of ungrouped stores is only visible in the portal account switcher.
 - `plazaName` collides heavily (Central World ×6) — key everything on `plazaUnid`.
 
 ### Lessons (72–80)

@@ -1,0 +1,4372 @@
+{
+  "generatedAt": "2026-09-17T02:01:28.214Z",
+  "finishedAt": "2026-09-17T02:02:36.807Z",
+  "window": {
+    "day": "2026-09-16",
+    "tz": "Asia/Bangkok",
+    "note": "startTime/endTime must stay inside one site-local day"
+  },
+  "tally": {
+    "mall": {
+      "ok": 30,
+      "empty": 0,
+      "rejected": 0,
+      "missing": 8,
+      "skipped": 0,
+      "total": 38
+    },
+    "retail": {
+      "ok": 22,
+      "empty": 2,
+      "rejected": 0,
+      "missing": 9,
+      "skipped": 5,
+      "total": 38
+    }
+  },
+  "servers": [
+    {
+      "server": "mall",
+      "baseUrl": "http://mall.vion-cloud.com:18080",
+      "loginOk": true,
+      "login": {
+        "path": "/api/v2/user/login",
+        "params": {
+          "appkey": "***",
+          "username": "***",
+          "password": "*** (AES)"
+        },
+        "httpStatus": 200,
+        "code": "200",
+        "message": "success",
+        "elapsedMs": 266
+      },
+      "altLogins": {
+        "v1_plain_password": {
+          "path": "/api/v1/user/login",
+          "params": {
+            "appkey": "***",
+            "username": "***",
+            "password": "*** (plain)"
+          },
+          "httpStatus": 200,
+          "code": "200",
+          "message": "success",
+          "elapsedMs": 49
+        },
+        "v1_aes_password": {
+          "path": "/api/v1/user/login",
+          "params": {
+            "appkey": "***",
+            "username": "***",
+            "password": "*** (AES)"
+          },
+          "httpStatus": 200,
+          "code": "503",
+          "message": "Login Failed",
+          "body": "{\"msg_code\":503,\"msg_info\":\"Login Failed\"}",
+          "elapsedMs": 48
+        }
+      },
+      "plazaCount": 5,
+      "ids": {
+        "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+        "plazaName": "SVB",
+        "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+        "mallGateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0",
+        "zonePlazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+        "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+        "floorPlazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+        "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+      },
+      "probes": [
+        {
+          "server": "mall",
+          "key": "plazaInfo",
+          "name": "Mall/Store Info List",
+          "docPath": "/api/v2/base/plazainfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/plazaInfo",
+          "finalParams": {},
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/plazainfo",
+              "params": {},
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:29\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/plazainfo\"}",
+              "elapsedMs": 47
+            },
+            {
+              "path": "/api/v2/base/plazaInfo",
+              "params": {},
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 57
+            }
+          ],
+          "elapsedMs": 57,
+          "dataType": "array",
+          "rowCount": 5,
+          "keys": [
+            "provinceName",
+            "cityName",
+            "businessHours",
+            "businessHours[].startTime",
+            "businessHours[].endTime",
+            "businessHours[].week",
+            "plazaName",
+            "plazaExternalid",
+            "plazaUnid"
+          ],
+          "sample": {
+            "provinceName": "",
+            "cityName": "",
+            "businessHours": "[{\"startTime\":\"00:00:00\",\"endTime\":\"00:…"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "gateInfo",
+          "name": "Entrance Info List",
+          "docPath": "/api/v2/base/gateinfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/gateInfo",
+          "finalParams": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/gateinfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:30\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/gateinfo\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v2/base/gateInfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 52
+            }
+          ],
+          "elapsedMs": 52,
+          "dataType": "array",
+          "rowCount": 164,
+          "keys": [
+            "isMallGate",
+            "plazaUnid",
+            "flag",
+            "gateName",
+            "gateStatus",
+            "gateExternalId",
+            "gateUnid"
+          ],
+          "sample": {
+            "isMallGate": "0",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "flag": "3"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "zoneInfo",
+          "name": "Store/Zone Info List",
+          "docPath": "/api/v2/base/zoneinfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/zoneInfo",
+          "finalParams": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/zoneinfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:31\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/zoneinfo\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v2/base/zoneInfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 46
+            }
+          ],
+          "elapsedMs": 46,
+          "dataType": "array",
+          "rowCount": 53,
+          "keys": [
+            "area",
+            "plazaUnid",
+            "floorUnid",
+            "zoneName",
+            "zoneType",
+            "zoneStatus",
+            "zoneExternalId",
+            "zoneUnid"
+          ],
+          "sample": {
+            "area": "0",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorInfo",
+          "name": "Floor Info List",
+          "docPath": "/api/v2/base/floorinfo",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/floorInfo",
+          "finalParams": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/floorinfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:32\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/floorinfo\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v2/base/floorInfo",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 41
+            }
+          ],
+          "elapsedMs": 41,
+          "dataType": "array",
+          "rowCount": 4,
+          "keys": [
+            "plazaUnid",
+            "floorName",
+            "floorExternalid",
+            "floorStatus",
+            "floorUnid"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorName": "Floor 1",
+            "floorExternalid": ""
+          }
+        },
+        {
+          "server": "mall",
+          "key": "groupInfo",
+          "name": "Account → group tree",
+          "docPath": "/api/v2/base/groupInfo",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v1/base/groupInfo",
+          "finalParams": {},
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/groupInfo",
+              "params": {},
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:32\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/groupInfo\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/base/groupInfo",
+              "params": {},
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 81
+            }
+          ],
+          "elapsedMs": 81,
+          "dataType": "array",
+          "rowCount": 2,
+          "keys": [
+            "id",
+            "name",
+            "name_en",
+            "pid"
+          ],
+          "sample": {
+            "id": "1",
+            "name": "SVB Team",
+            "name_en": "Duty Fee at Suvarnabhumi Airport"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "device",
+          "name": "Device Info",
+          "docPath": "/api/v1/base/device",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v1/base/device",
+          "finalParams": {
+            "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [
+            "snake_case"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v1/base/device",
+              "params": {
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "Parameter error, please enter correct parameter",
+              "body": "{\"msg_code\":508,\"msg_info\":\"Parameter error, please enter correct parameter\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v1/base/device",
+              "params": {
+                "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 51
+            }
+          ],
+          "elapsedMs": 51,
+          "dataType": "array",
+          "rowCount": 140,
+          "keys": [
+            "serialnum",
+            "name",
+            "channel_count",
+            "mac",
+            "local_ip",
+            "status",
+            "modify_time"
+          ],
+          "sample": {
+            "serialnum": "ECE5-3992-F989-ACFB",
+            "name": "172.17.21.47",
+            "channel_count": "1"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorGateInfo",
+          "name": "Floor-Entrance Info List",
+          "docPath": "/api/v2/base/floorGateinfo",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/floorGateInfo",
+          "finalParams": {
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/floorGateinfo",
+              "params": {
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:36\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/floorGateinfo\"}",
+              "elapsedMs": 54
+            },
+            {
+              "path": "/api/v2/base/floorGateInfo",
+              "params": {
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 48
+            }
+          ],
+          "elapsedMs": 48,
+          "dataType": "array",
+          "rowCount": 118,
+          "keys": [
+            "floorUnid",
+            "gateName",
+            "gateStatus",
+            "gateUnid"
+          ],
+          "sample": {
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "gateName": "DE3_Entrance_5",
+            "gateStatus": "1"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "zoneGateInfo",
+          "name": "Store-Entrance Info List",
+          "docPath": "/api/v2/base/zoneGateInfo",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/zoneGateInfo",
+          "finalParams": {
+            "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+          },
+          "paramFixes": [
+            "+storeUnid"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/base/zoneGateInfo",
+              "params": {
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "storeUnid cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"storeUnid cannot be empty.\"}",
+              "elapsedMs": 41
+            },
+            {
+              "path": "/api/v2/base/zoneGateInfo",
+              "params": {
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+                "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 42
+            }
+          ],
+          "elapsedMs": 42,
+          "dataType": "array",
+          "rowCount": 10,
+          "keys": [
+            "gateName",
+            "gateStatus",
+            "gateUnid"
+          ],
+          "sample": {
+            "gateName": "DE4_Entrance_1",
+            "gateStatus": "1",
+            "gateUnid": "90648c15-c1f7-4cb8-8c13-4ced9cfffe0b"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "mallCountingDataHourly",
+          "name": "Mall Counting Data Hourly",
+          "docPath": "/api/v2/reid/mallCountingDataHourly",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 67
+            }
+          ],
+          "elapsedMs": 67,
+          "dataType": "array",
+          "rowCount": 24,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "SVB"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "mallCountingDataDaily",
+          "name": "Mall Counting Data Daily",
+          "docPath": "/api/v2/reid/mallCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 40
+            },
+            {
+              "path": "/api/v2/reid/mallCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 44
+            }
+          ],
+          "elapsedMs": 44,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "avgDwellTime",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "SVB"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorCountingDataHourly",
+          "name": "Floor Counting Data Hourly",
+          "docPath": "/api/v2/reid/floorCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/floorCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 49
+            }
+          ],
+          "elapsedMs": 49,
+          "dataType": "array",
+          "rowCount": 24,
+          "keys": [
+            "floorUnid",
+            "floorExternalid",
+            "floorName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "floorExternalid": "",
+            "floorName": "Floor 4"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorCountingDataDaily",
+          "name": "Floor Counting Data Daily",
+          "docPath": "/api/v2/reid/floorCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/floorCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 41
+            },
+            {
+              "path": "/api/v2/reid/floorCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 42
+            }
+          ],
+          "elapsedMs": 42,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "floorUnid",
+            "floorExternalid",
+            "floorName",
+            "countdate",
+            "innum",
+            "outnum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "floorExternalid": "",
+            "floorName": "Floor 4"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "mallEntranceCountingDataHourly",
+          "name": "Mall Entrance Counting Hourly",
+          "docPath": "/api/v2/reid/mallEntranceCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallEntranceCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallEntranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 51
+            }
+          ],
+          "elapsedMs": 51,
+          "dataType": "array",
+          "rowCount": 24,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "gateName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0",
+            "gateExternalid": ""
+          }
+        },
+        {
+          "server": "mall",
+          "key": "mallEntranceCountingDataDaily",
+          "name": "Mall Entrance Counting Daily",
+          "docPath": "/api/v2/reid/mallEntranceCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallEntranceCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 39
+            },
+            {
+              "path": "/api/v2/reid/mallEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "gateName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "874fbd20-2fb5-40a4-95aa-c081f96cebb0",
+            "gateExternalid": ""
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorEntranceCountingDataHourly",
+          "name": "Floor Entrance Counting Hourly",
+          "docPath": "/api/v2/reid/floorEntranceCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/floorEntranceCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorEntranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 49
+            }
+          ],
+          "elapsedMs": 49,
+          "dataType": "array",
+          "rowCount": 23,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "gateName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          }
+        },
+        {
+          "server": "mall",
+          "key": "floorEntranceCountingDataDaily",
+          "name": "Floor Entrance Counting Daily",
+          "docPath": "/api/v2/reid/floorEntranceCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/floorEntranceCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 43
+            },
+            {
+              "path": "/api/v2/reid/floorEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "floorUnid": "bb9fea08-9104-4fb4-8fc7-77a50ca4f0ac",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "gateName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "storeCountingDataHourly",
+          "name": "Store Counting Data Hourly",
+          "docPath": "/api/v2/reid/storeCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/storeCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+          },
+          "paramFixes": [
+            "+storeUnid"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/storeCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "storeUnid cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"storeUnid cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/reid/storeCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+                "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 48
+            }
+          ],
+          "elapsedMs": 48,
+          "dataType": "array",
+          "rowCount": 24,
+          "keys": [
+            "storeUnid",
+            "storeExternalid",
+            "storeName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "storeExternalid": "",
+            "storeName": "DE4"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "storeCountingDataDaily",
+          "name": "Store Counting Data Daily",
+          "docPath": "/api/v2/reid/storeCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/storeCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "countdate": "2026-09-16",
+            "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+          },
+          "paramFixes": [
+            "+countdate",
+            "+storeUnid"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/storeCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/reid/storeCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "storeUnid cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"storeUnid cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/reid/storeCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+                "countdate": "2026-09-16",
+                "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 65
+            }
+          ],
+          "elapsedMs": 65,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "storeUnid",
+            "storeExternalid",
+            "storeName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "visitors",
+            "staff",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "avgDwellTime",
+            "dwellTimeDistribution",
+            "dwellTimeDistribution[].dwellNum",
+            "dwellTimeDistribution[].percent",
+            "dwellTimeDistribution[].dwellTimeGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "storeUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "storeExternalid": "",
+            "storeName": "DE4"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "entranceCountingDataHourly",
+          "name": "Entrance Hourly Data",
+          "docPath": "/api/v2/reid/entranceCountingDataHourly",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/entranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:47\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/entranceCountingDataHourly\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v1/reid/entranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:47\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/reid/entranceCountingDataHourly\"}",
+              "elapsedMs": 48
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "zoneDwellTime",
+          "name": "Store DwellTime (zone)",
+          "docPath": "/api/v2/reid/zoneDwellTime",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/zoneDwellTime",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/zoneDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/reid/zoneDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 51
+            }
+          ],
+          "elapsedMs": 51,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "zoneUnid",
+            "zoneName",
+            "countdate",
+            "totalDwellTime",
+            "avgDwellTime",
+            "dwellTime",
+            "dwellTime[].dwellNum",
+            "dwellTime[].dwellTimeGroup"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863",
+            "zoneName": "DE4"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "mallDwellTime",
+          "name": "Store DwellTime (whole site)",
+          "docPath": "/api/v2/reid/mallDwellTime",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallDwellTime",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "-1",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":-1,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 41
+            },
+            {
+              "path": "/api/v2/reid/mallDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 260
+            }
+          ],
+          "elapsedMs": 260,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaName",
+            "countdate",
+            "totalDwellTime",
+            "avgDwellTime",
+            "dwellTime",
+            "dwellTime[].dwellNum",
+            "dwellTime[].dwellTimeGroup"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "plazaName": "SVB",
+            "countdate": "2026-09-16"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "mall",
+          "key": "plazaResidence",
+          "name": "DwellTime, every customer (site)",
+          "docPath": "/api/v1/residence/plazaResidence",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v1/residence/plazaResidence",
+          "finalParams": {
+            "countdate": "2026-09-16",
+            "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [
+            "snake_case"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v1/residence/plazaResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "Parameter error, please enter correct parameter",
+              "body": "{\"msg_code\":508,\"msg_info\":\"Parameter error, please enter correct parameter\"}",
+              "elapsedMs": 48
+            },
+            {
+              "path": "/api/v1/residence/plazaResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 326
+            }
+          ],
+          "elapsedMs": 326,
+          "dataType": "array",
+          "rowCount": 23120,
+          "keys": [
+            "plaza_unid",
+            "person_unid",
+            "plaza_name",
+            "intime",
+            "outtime",
+            "residence_time",
+            "countdate",
+            "plaza_externalid"
+          ],
+          "sample": {
+            "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "person_unid": "02841472-b5a4-450a-b329-cec2b8254b0f",
+            "plaza_name": "SVB"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "zoneResidence",
+          "name": "DwellTime, every customer (zone)",
+          "docPath": "/api/v1/residence/zoneResidence",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v1/residence/zoneResidence",
+          "finalParams": {
+            "countdate": "2026-09-16",
+            "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "zone_unid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+          },
+          "paramFixes": [
+            "snake_case"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v1/residence/zoneResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "Parameter error, please enter correct parameter",
+              "body": "{\"msg_code\":508,\"msg_info\":\"Parameter error, please enter correct parameter\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/residence/zoneResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zone_unid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 66
+            }
+          ],
+          "elapsedMs": 66,
+          "dataType": "array",
+          "rowCount": 1642,
+          "keys": [
+            "person_unid",
+            "plaza_name",
+            "zone_unid",
+            "zone_name",
+            "intime",
+            "outtime",
+            "residence_time",
+            "countdate"
+          ],
+          "sample": {
+            "person_unid": "e084116d-2e9a-48ac-a716-edde6abc1921",
+            "plaza_name": "SVB",
+            "zone_unid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "captureRecord",
+          "name": "Capture / ReID record",
+          "docPath": "/api/v2/captureRecord",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/captureRecord",
+          "finalParams": {
+            "countdate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "page": "1",
+            "pageSize": "1000"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/captureRecord",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "page": "1",
+                "pageSize": "1000"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 1718
+            }
+          ],
+          "elapsedMs": 1718,
+          "dataType": "object{list[]}",
+          "rowCount": 1000,
+          "keys": [
+            "unid",
+            "personUnid",
+            "personType",
+            "gateUnid",
+            "plazaUnid",
+            "age",
+            "gender",
+            "direction",
+            "counttimeLocal",
+            "countdate"
+          ],
+          "sample": {
+            "unid": "78f85bfe-3de7-4844-90b1-420a7473d013",
+            "personUnid": "78f85bfe-3de7-4844-90b1-420a7473d013",
+            "personType": "0"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "gateHour",
+          "name": "Entrance Counting Hourly",
+          "docPath": "/api/v1/passenger/gateHour",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [
+            "snake_case"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v1/passenger/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "500",
+              "message": "System error!",
+              "body": "{\"msg_code\":500,\"msg_info\":\"System error!\"}",
+              "elapsedMs": 43
+            },
+            {
+              "path": "/api/v1/passenger/gateHour",
+              "params": {
+                "start_time": "2026-09-16 00:00:00",
+                "end_time": "2026-09-16 23:59:59",
+                "plaza_unid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gate_unid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "506",
+              "message": "Data does not exist or search error",
+              "body": "{\"msg_code\":506,\"msg_info\":\"Data does not exist or search error\"}",
+              "elapsedMs": 48
+            },
+            {
+              "path": "/api/v2/passenger/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 23,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "customerNum",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 32,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "gateDay",
+          "name": "Entrance Counting Daily",
+          "docPath": "/api/v2/passenger/gateDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/gateDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 42
+            }
+          ],
+          "elapsedMs": 42,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "countdate",
+            "innum",
+            "outnum",
+            "customerNum",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 2,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "gateTenMins",
+          "name": "Entrance Counting (10 minutes)",
+          "docPath": "/api/v2/passenger/gateTenMins",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateTenMins",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/gateTenMins",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 53
+            }
+          ],
+          "elapsedMs": 53,
+          "dataType": "array",
+          "rowCount": 128,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          }
+        },
+        {
+          "server": "mall",
+          "key": "passengerPlazaHour",
+          "name": "Site Hourly Counting (passenger)",
+          "docPath": "/api/v2/passenger/plazaHour",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/plazaHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/plazaHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 57
+            }
+          ],
+          "elapsedMs": 57,
+          "dataType": "array",
+          "rowCount": 24,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "customerNum",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "SVB"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 34,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "plazaDay",
+          "name": "Site Daily Counting (passenger)",
+          "docPath": "/api/v2/passenger/plazaDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/plazaDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/plazaDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "innum",
+            "outnum",
+            "customerNum",
+            "weather",
+            "ltemp",
+            "htemp",
+            "provinceName",
+            "cityName",
+            "dwellTime",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "SVB"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 2,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "plazaHour",
+          "name": "Site Hourly Customer Segment (reid)",
+          "docPath": "/api/v2/reid/plazaHour",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/plazaHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:59\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/plazaHour\"}",
+              "elapsedMs": 41
+            },
+            {
+              "path": "/api/v1/reid/plazaHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:01:59\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/reid/plazaHour\"}",
+              "elapsedMs": 53
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "reidGateDay",
+          "name": "Entrance Daily Demographics",
+          "docPath": "/api/v2/reid/gateDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/gateDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/gateDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 44
+            }
+          ],
+          "elapsedMs": 44,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "countdate",
+            "customerNum",
+            "modifyTime",
+            "gender",
+            "gender.maleCount",
+            "gender.femalCount",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 2,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "reidGateHour",
+          "name": "Entrance Hourly Demographics",
+          "docPath": "/api/v2/reid/gateHour",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/gateHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 23,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "gateExternalid",
+            "countdate",
+            "counttimeLocal",
+            "customerNum",
+            "modifyTime",
+            "gender",
+            "gender.maleCount",
+            "gender.femalCount",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+            "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788",
+            "gateExternalid": ""
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 32,
+            "message": "success"
+          }
+        },
+        {
+          "server": "mall",
+          "key": "heatMap",
+          "name": "Heatmap",
+          "docPath": "/api/v2/heatMap",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/heatMap",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:02\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/heatMap\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v1/heatMap",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:02\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/heatMap\"}",
+              "elapsedMs": 44
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "gateFlowDirection",
+          "name": "Entrance Visitor Flow",
+          "docPath": "/api/v2/gateFlowDirection",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/gateFlowDirection",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:02\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/gateFlowDirection\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/gateFlowDirection",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "gateUnid": "05f4fdb3-d133-45f0-becd-8c98fd63a788"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:03\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/gateFlowDirection\"}",
+              "elapsedMs": 47
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "zoneStat",
+          "name": "Store zone data (daily)",
+          "docPath": "/api/v2/zoneStat",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/zoneStat",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:03\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/zoneStat\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v1/zoneStat",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:04\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/zoneStat\"}",
+              "elapsedMs": 48
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "zoneHourStat",
+          "name": "Store zone data (hourly)",
+          "docPath": "/api/v2/zoneHourStat",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/zoneHourStat",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:04\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/zoneHourStat\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v1/zoneHourStat",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59",
+                "zoneUnid": "4ea0bb3c-4081-4530-be4e-e3e8b7d3c863"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:04\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/zoneHourStat\"}",
+              "elapsedMs": 46
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "queueDay",
+          "name": "Queue daily data",
+          "docPath": "/api/v2/queue/day",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/queue/day",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:05\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/queue/day\"}",
+              "elapsedMs": 58
+            },
+            {
+              "path": "/api/v1/queue/day",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:05\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/queue/day\"}",
+              "elapsedMs": 48
+            }
+          ]
+        },
+        {
+          "server": "mall",
+          "key": "queueHour",
+          "name": "Queue hourly data",
+          "docPath": "/api/v2/queue/hour",
+          "documentedOn": "retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/queue/hour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:06\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/queue/hour\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v1/queue/hour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "55b7aac2-0e12-11f0-aa38-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:06\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v1/queue/hour\"}",
+              "elapsedMs": 142
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "server": "retail",
+      "baseUrl": "http://retail.vionyun.com:18085",
+      "loginOk": true,
+      "login": {
+        "path": "/api/v2/user/login",
+        "params": {
+          "appkey": "***",
+          "username": "***",
+          "password": "*** (AES)"
+        },
+        "httpStatus": 200,
+        "code": "200",
+        "message": "success",
+        "elapsedMs": 256
+      },
+      "altLogins": {
+        "v1_plain_password": {
+          "path": "/api/v1/user/login",
+          "params": {
+            "appkey": "***",
+            "username": "***",
+            "password": "*** (plain)"
+          },
+          "httpStatus": 200,
+          "code": "503",
+          "message": "Login Failed",
+          "body": "{\"msg_code\":503,\"msg_info\":\"Login Failed\"}",
+          "elapsedMs": 202
+        },
+        "v1_aes_password": {
+          "path": "/api/v1/user/login",
+          "params": {
+            "appkey": "***",
+            "username": "***",
+            "password": "*** (AES)"
+          },
+          "httpStatus": 200,
+          "code": "503",
+          "message": "Login Failed",
+          "body": "{\"msg_code\":503,\"msg_info\":\"Login Failed\"}",
+          "elapsedMs": 197
+        }
+      },
+      "plazaCount": 216,
+      "ids": {
+        "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+        "plazaName": "Central World",
+        "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+        "mallGateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+        "zonePlazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+        "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+      },
+      "probes": [
+        {
+          "server": "retail",
+          "key": "plazaInfo",
+          "name": "Mall/Store Info List",
+          "docPath": "/api/v2/base/plazainfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/plazaInfo",
+          "finalParams": {},
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/plazainfo",
+              "params": {},
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:08\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/plazainfo\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v2/base/plazaInfo",
+              "params": {},
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 111
+            }
+          ],
+          "elapsedMs": 111,
+          "dataType": "array",
+          "rowCount": 216,
+          "keys": [
+            "provinceName",
+            "cityName",
+            "countyName",
+            "timeZone",
+            "businessHours",
+            "businessHours[].startTime",
+            "businessHours[].endTime",
+            "businessHours[].week",
+            "configs",
+            "configs.passTrafficConfig",
+            "configs.stayTimeConfig",
+            "configs.longDwellThreshold",
+            "labelNameList",
+            "plazaName",
+            "launchTime",
+            "plazaExternalid",
+            "plazaUnid"
+          ],
+          "sample": {
+            "provinceName": "",
+            "cityName": "",
+            "countyName": ""
+          }
+        },
+        {
+          "server": "retail",
+          "key": "gateInfo",
+          "name": "Entrance Info List",
+          "docPath": "/api/v2/base/gateinfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/gateInfo",
+          "finalParams": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/gateinfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:09\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/gateinfo\"}",
+              "elapsedMs": 46
+            },
+            {
+              "path": "/api/v2/base/gateInfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 50
+            }
+          ],
+          "elapsedMs": 50,
+          "dataType": "array",
+          "rowCount": 7,
+          "keys": [
+            "isMallGate",
+            "plazaUnid",
+            "isPassBy",
+            "gateName",
+            "gateStatus",
+            "gateUnid"
+          ],
+          "sample": {
+            "isMallGate": "1",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "isPassBy": "0"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "zoneInfo",
+          "name": "Store/Zone Info List",
+          "docPath": "/api/v2/base/zoneinfo",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/zoneInfo",
+          "finalParams": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/zoneinfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:10\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/zoneinfo\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v2/base/zoneInfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 49
+            }
+          ],
+          "elapsedMs": 49,
+          "dataType": "array",
+          "rowCount": 10,
+          "keys": [
+            "plazaUnid",
+            "channel",
+            "channel[].rareaInfo",
+            "zoneName",
+            "zoneStatus",
+            "zoneExternalId",
+            "zoneUnid"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "channel": "[{\"rareaInfo\":\"{\\\"directxysets\\\":[{\\\"x\\…",
+            "zoneName": "E1"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "floorInfo",
+          "name": "Floor Info List",
+          "docPath": "/api/v2/base/floorinfo",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/floorinfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:10\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/floorinfo\"}",
+              "elapsedMs": 46
+            },
+            {
+              "path": "/api/v2/base/floorInfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:11\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/floorInfo\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/base/floorinfo",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 42
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "groupInfo",
+          "name": "Account → group tree",
+          "docPath": "/api/v2/base/groupInfo",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/groupInfo",
+          "finalParams": {},
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/groupInfo",
+              "params": {},
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 46
+            }
+          ],
+          "elapsedMs": 46,
+          "dataType": "array",
+          "rowCount": 10,
+          "keys": [
+            "name",
+            "groups",
+            "groups[].id",
+            "groups[].parentId",
+            "groups[].name"
+          ],
+          "sample": {
+            "name": "Proplugin",
+            "groups": "[{\"id\":35,\"parentId\":-1,\"name\":\"Proplug…"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "device",
+          "name": "Device Info",
+          "docPath": "/api/v1/base/device",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/base/device",
+          "finalParams": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v1/base/device",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/base/device",
+              "params": {
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 50
+            }
+          ],
+          "elapsedMs": 50,
+          "dataType": "array",
+          "rowCount": 6,
+          "keys": [
+            "serialnum",
+            "name",
+            "channelCount",
+            "mac",
+            "localIp",
+            "hardware",
+            "status",
+            "modifyTime",
+            "bindTime",
+            "channelList",
+            "channelList[].serialnum",
+            "channelList[].channelNo",
+            "channelList[].site"
+          ],
+          "sample": {
+            "serialnum": "AEF7-6C9C-B925-53E2",
+            "name": "192.168.1.243",
+            "channelCount": "10"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "floorGateInfo",
+          "name": "Floor-Entrance Info List",
+          "docPath": "/api/v2/base/floorGateinfo",
+          "documentedOn": "mall",
+          "verdict": "skipped",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/floorGateinfo",
+              "params": {},
+              "httpStatus": 0,
+              "code": null,
+              "message": "skipped — no sample floorUnid exists on this server",
+              "elapsedMs": 0
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "zoneGateInfo",
+          "name": "Store-Entrance Info List",
+          "docPath": "/api/v2/base/zoneGateInfo",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/base/zoneGateInfo",
+              "params": {
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:13\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/base/zoneGateInfo\"}",
+              "elapsedMs": 43
+            },
+            {
+              "path": "/api/v1/base/zoneGateInfo",
+              "params": {
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 42
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "mallCountingDataHourly",
+          "name": "Mall Counting Data Hourly",
+          "docPath": "/api/v2/reid/mallCountingDataHourly",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 55
+            }
+          ],
+          "elapsedMs": 55,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideToLeft",
+            "outsideToRight",
+            "visitorTraffic",
+            "visitors",
+            "visitorsOut",
+            "staff",
+            "staffOut",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "Central World"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "mallCountingDataDaily",
+          "name": "Mall Counting Data Daily",
+          "docPath": "/api/v2/reid/mallCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallCountingDataDaily",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/reid/mallCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 54
+            }
+          ],
+          "elapsedMs": 54,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideToLeft",
+            "outsideToRight",
+            "visitorTraffic",
+            "visitors",
+            "visitorsOut",
+            "staff",
+            "staffOut",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "Central World"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "retail",
+          "key": "floorCountingDataHourly",
+          "name": "Floor Counting Data Hourly",
+          "docPath": "/api/v2/reid/floorCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "skipped",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 0,
+              "code": null,
+              "message": "skipped — no sample floorUnid exists on this server",
+              "elapsedMs": 0
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "floorCountingDataDaily",
+          "name": "Floor Counting Data Daily",
+          "docPath": "/api/v2/reid/floorCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "skipped",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 0,
+              "code": null,
+              "message": "skipped — no sample floorUnid exists on this server",
+              "elapsedMs": 0
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "mallEntranceCountingDataHourly",
+          "name": "Mall Entrance Counting Hourly",
+          "docPath": "/api/v2/reid/mallEntranceCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallEntranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:15\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/mallEntranceCountingDataHourly\"}",
+              "elapsedMs": 46
+            },
+            {
+              "path": "/api/v1/reid/mallEntranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 41
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "mallEntranceCountingDataDaily",
+          "name": "Mall Entrance Counting Daily",
+          "docPath": "/api/v2/reid/mallEntranceCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:16\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/mallEntranceCountingDataDaily\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/reid/mallEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 41
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "floorEntranceCountingDataHourly",
+          "name": "Floor Entrance Counting Hourly",
+          "docPath": "/api/v2/reid/floorEntranceCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "skipped",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorEntranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 0,
+              "code": null,
+              "message": "skipped — no sample floorUnid exists on this server",
+              "elapsedMs": 0
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "floorEntranceCountingDataDaily",
+          "name": "Floor Entrance Counting Daily",
+          "docPath": "/api/v2/reid/floorEntranceCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "skipped",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/floorEntranceCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 0,
+              "code": null,
+              "message": "skipped — no sample floorUnid exists on this server",
+              "elapsedMs": 0
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "storeCountingDataHourly",
+          "name": "Store Counting Data Hourly",
+          "docPath": "/api/v2/reid/storeCountingDataHourly",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/storeCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:17\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/storeCountingDataHourly\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v1/reid/storeCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 47
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "storeCountingDataDaily",
+          "name": "Store Counting Data Daily",
+          "docPath": "/api/v2/reid/storeCountingDataDaily",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/storeCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:18\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/storeCountingDataDaily\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v1/reid/storeCountingDataDaily",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 40
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "entranceCountingDataHourly",
+          "name": "Entrance Hourly Data",
+          "docPath": "/api/v2/reid/entranceCountingDataHourly",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/entranceCountingDataHourly",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/entranceCountingDataHourly",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 53
+            }
+          ],
+          "elapsedMs": 53,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "counttime",
+            "innum",
+            "outnum",
+            "outsideToLeft",
+            "outsideToRight",
+            "visitorTraffic",
+            "visitors",
+            "visitorsOut",
+            "staff",
+            "staffOut",
+            "adult",
+            "child",
+            "male",
+            "female",
+            "group",
+            "oneVisitorGroup",
+            "twoVisitorGroup",
+            "moreThanTwoVisitorGroup",
+            "ageDistribution",
+            "ageDistribution.juvenile",
+            "ageDistribution.youth",
+            "ageDistribution.middleAged",
+            "ageDistribution.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "zoneDwellTime",
+          "name": "Store DwellTime (zone)",
+          "docPath": "/api/v2/reid/zoneDwellTime",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/zoneDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:19\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/reid/zoneDwellTime\"}",
+              "elapsedMs": 47
+            },
+            {
+              "path": "/api/v1/reid/zoneDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 40
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "mallDwellTime",
+          "name": "Store DwellTime (whole site)",
+          "docPath": "/api/v2/reid/mallDwellTime",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/mallDwellTime",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/mallDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 43
+            },
+            {
+              "path": "/api/v2/reid/mallDwellTime",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 52
+            }
+          ],
+          "elapsedMs": 52,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaName",
+            "countdate",
+            "totalDwellTime",
+            "avgDwellTime",
+            "dwellTime",
+            "dwellTime[].dwellNum",
+            "dwellTime[].dwellTimeGroup"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaName": "Central World",
+            "countdate": "2026-09-16"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 1,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "retail",
+          "key": "plazaResidence",
+          "name": "DwellTime, every customer (site)",
+          "docPath": "/api/v1/residence/plazaResidence",
+          "documentedOn": "mall+retail",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v1/residence/plazaResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 44
+            },
+            {
+              "path": "/api/v2/residence/plazaResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:22\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/residence/plazaResidence\"}",
+              "elapsedMs": 44
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "zoneResidence",
+          "name": "DwellTime, every customer (zone)",
+          "docPath": "/api/v1/residence/zoneResidence",
+          "documentedOn": "mall",
+          "verdict": "missing",
+          "finalPath": null,
+          "finalParams": null,
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v1/residence/zoneResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 41
+            },
+            {
+              "path": "/api/v2/residence/zoneResidence",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 404,
+              "code": null,
+              "message": "Not Found",
+              "body": "{\"timestamp\":\"2026-09-17 10:02:23\",\"status\":404,\"error\":\"Not Found\",\"path\":\"/api/v2/residence/zoneResidence\"}",
+              "elapsedMs": 45
+            }
+          ]
+        },
+        {
+          "server": "retail",
+          "key": "captureRecord",
+          "name": "Capture / ReID record",
+          "docPath": "/api/v2/captureRecord",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/captureRecord",
+          "finalParams": {
+            "countdate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "page": "1",
+            "pageSize": "1000"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/captureRecord",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "page": "1",
+                "pageSize": "1000"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 87
+            }
+          ],
+          "elapsedMs": 87,
+          "dataType": "object{list[]}",
+          "rowCount": 1000,
+          "keys": [
+            "unid",
+            "personUnid",
+            "personType",
+            "gateUnid",
+            "plazaUnid",
+            "age",
+            "gender",
+            "direction",
+            "counttimeLocal",
+            "countdate"
+          ],
+          "sample": {
+            "unid": "4f81707c-6b6b-40cb-bdb1-cd2015bff4d5",
+            "personUnid": "4f81707c-6b6b-40cb-bdb1-cd2015bff4d5",
+            "personType": "0"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "gateHour",
+          "name": "Entrance Counting Hourly",
+          "docPath": "/api/v1/passenger/gateHour",
+          "documentedOn": "mall+retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v1/passenger/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "501",
+              "message": "atoken verification failed",
+              "body": "{\"msg_code\":501,\"msg_info\":\"atoken verification failed\"}",
+              "elapsedMs": 40
+            },
+            {
+              "path": "/api/v2/passenger/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 46
+            }
+          ],
+          "elapsedMs": 46,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "outsideToLeft",
+            "outsideToRight",
+            "customerTraffic",
+            "customerNum",
+            "modifyTime",
+            "groupNum",
+            "singleGroupNum",
+            "doubleGroupNum",
+            "multipleGroupNum",
+            "familyGroupNum",
+            "loverGroupNum",
+            "partnerGroupNum"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 12,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "gateDay",
+          "name": "Entrance Counting Daily",
+          "docPath": "/api/v2/passenger/gateDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/gateDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 59
+            }
+          ],
+          "elapsedMs": 59,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "outsideToLeft",
+            "outsideToRight",
+            "customerTraffic",
+            "customerNum",
+            "groupNum",
+            "singleGroupNum",
+            "doubleGroupNum",
+            "multipleGroupNum",
+            "familyGroupNum",
+            "loverGroupNum",
+            "partnerGroupNum"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 1,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "gateTenMins",
+          "name": "Entrance Counting (10 minutes)",
+          "docPath": "/api/v2/passenger/gateTenMins",
+          "documentedOn": "mall",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/gateTenMins",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/gateTenMins",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 66
+            }
+          ],
+          "elapsedMs": 66,
+          "dataType": "array",
+          "rowCount": 71,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "modifyTime"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "passengerPlazaHour",
+          "name": "Site Hourly Counting (passenger)",
+          "docPath": "/api/v2/passenger/plazaHour",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/plazaHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/plazaHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 111
+            }
+          ],
+          "elapsedMs": 111,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "counttimeLocal",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "passerBy",
+            "customerTraffic",
+            "customerNum",
+            "staffCount",
+            "outsideInnum",
+            "outsideOutnum",
+            "throughTraffic",
+            "effectVisitors",
+            "deepShoppingNum",
+            "groupName",
+            "residenceTimeSecond",
+            "modifyTime",
+            "groupNum",
+            "singleGroupNum",
+            "doubleGroupNum",
+            "multipleGroupNum",
+            "familyGroupNum",
+            "loverGroupNum",
+            "partnerGroupNum"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "Central World"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 12,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "plazaDay",
+          "name": "Site Daily Counting (passenger)",
+          "docPath": "/api/v2/passenger/plazaDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/passenger/plazaDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/passenger/plazaDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 68
+            }
+          ],
+          "elapsedMs": 68,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "innum",
+            "outnum",
+            "outsideNum",
+            "passerBy",
+            "customerTraffic",
+            "customerNum",
+            "staffCount",
+            "outsideInnum",
+            "outsideOutnum",
+            "throughTraffic",
+            "effectVisitors",
+            "provinceName",
+            "cityName",
+            "countyName",
+            "entryRate",
+            "deepShoppingNum",
+            "deepShoppingRate",
+            "groupName",
+            "residenceTimeSecond",
+            "groupNum",
+            "singleGroupNum",
+            "doubleGroupNum",
+            "multipleGroupNum",
+            "familyGroupNum",
+            "loverGroupNum",
+            "partnerGroupNum"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "Central World"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 1,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "plazaHour",
+          "name": "Site Hourly Customer Segment (reid)",
+          "docPath": "/api/v2/reid/plazaHour",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/plazaHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/plazaHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 49
+            }
+          ],
+          "elapsedMs": 49,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "plazaExternalid",
+            "plazaName",
+            "countdate",
+            "counttimeLocal",
+            "customerNum",
+            "modifyTime",
+            "gender",
+            "gender.maleCount",
+            "gender.femaleCount",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "plazaExternalid": "",
+            "plazaName": "Central World"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 12,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "reidGateDay",
+          "name": "Entrance Daily Demographics",
+          "docPath": "/api/v2/reid/gateDay",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/gateDay",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/gateDay",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 47
+            }
+          ],
+          "elapsedMs": 47,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "customerNum",
+            "modifyTime",
+            "gender",
+            "gender.maleCount",
+            "gender.femaleCount",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 1,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "reidGateHour",
+          "name": "Entrance Hourly Demographics",
+          "docPath": "/api/v2/reid/gateHour",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/reid/gateHour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/reid/gateHour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 48
+            }
+          ],
+          "elapsedMs": 48,
+          "dataType": "array",
+          "rowCount": 12,
+          "keys": [
+            "plazaUnid",
+            "gateUnid",
+            "countdate",
+            "counttimeLocal",
+            "customerNum",
+            "modifyTime",
+            "gender",
+            "gender.maleCount",
+            "gender.femaleCount",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly"
+          ],
+          "sample": {
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "altModifyTime": {
+            "accepted": true,
+            "code": "200",
+            "rowCount": 12,
+            "message": "success"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "heatMap",
+          "name": "Heatmap",
+          "docPath": "/api/v2/heatMap",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/heatMap",
+          "finalParams": {
+            "countdate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/heatMap",
+              "params": {
+                "countdate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 240
+            }
+          ],
+          "elapsedMs": 240,
+          "dataType": "array",
+          "rowCount": 1,
+          "keys": [
+            "imgUrl",
+            "heat",
+            "heat[].residenceTimeTotal",
+            "heat[].rx",
+            "heat[].ry"
+          ],
+          "sample": {
+            "imgUrl": "https://retail.vionyun.com/images/repor…",
+            "heat": "[{\"residenceTimeTotal\":1,\"rx\":97.36,\"ry…"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "gateFlowDirection",
+          "name": "Entrance Visitor Flow",
+          "docPath": "/api/v2/gateFlowDirection",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/gateFlowDirection",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/gateFlowDirection",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/gateFlowDirection",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "gateUnid": "b28579cc-8baf-11ef-b325-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 415
+            }
+          ],
+          "elapsedMs": 415,
+          "dataType": "array",
+          "rowCount": 86,
+          "keys": [
+            "source",
+            "target",
+            "value"
+          ],
+          "sample": {
+            "source": "Entrance-01",
+            "target": "Entrance-05",
+            "value": "23"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 86,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "retail",
+          "key": "zoneStat",
+          "name": "Store zone data (daily)",
+          "docPath": "/api/v2/zoneStat",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/zoneStat",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/zoneStat",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/zoneStat",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 53
+            }
+          ],
+          "elapsedMs": 53,
+          "dataType": "array",
+          "rowCount": 11,
+          "keys": [
+            "zoneUnid",
+            "zoneName"
+          ],
+          "sample": {
+            "zoneUnid": "614993a2-9296-11ef-9d60-00163e0d4a59",
+            "zoneName": "1.226-102"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 11,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "retail",
+          "key": "zoneHourStat",
+          "name": "Store zone data (hourly)",
+          "docPath": "/api/v2/zoneHourStat",
+          "documentedOn": "retail",
+          "verdict": "ok",
+          "finalPath": "/api/v2/zoneHourStat",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284",
+            "countdate": "2026-09-16"
+          },
+          "paramFixes": [
+            "+countdate"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/zoneHourStat",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 45
+            },
+            {
+              "path": "/api/v2/zoneHourStat",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "zoneUnid": "ec0674c8-d0be-458f-9c3e-adc1c40fd284",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 109
+            }
+          ],
+          "elapsedMs": 109,
+          "dataType": "array",
+          "rowCount": 120,
+          "keys": [
+            "counttimeLocal",
+            "personMantime",
+            "personMantimeOut",
+            "customerMantime",
+            "customerMantimeOut",
+            "personCount",
+            "personCountOut",
+            "staffMantime",
+            "staffMantimeOut",
+            "age",
+            "age.juvenile",
+            "age.youth",
+            "age.middleAged",
+            "age.elderly",
+            "gender",
+            "gender.maleCount",
+            "gender.femaleCount",
+            "zoneUnid",
+            "zoneName"
+          ],
+          "sample": {
+            "counttimeLocal": "2026-09-16 15:00:00",
+            "personMantime": "92",
+            "personMantimeOut": "91"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 120,
+            "sameAsDocumented": true
+          }
+        },
+        {
+          "server": "retail",
+          "key": "queueDay",
+          "name": "Queue daily data",
+          "docPath": "/api/v2/queue/day",
+          "documentedOn": "retail",
+          "verdict": "empty",
+          "finalPath": "/api/v2/queue/day",
+          "finalParams": {
+            "startDate": "2026-09-16",
+            "endDate": "2026-09-16",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+          },
+          "paramFixes": [],
+          "attempts": [
+            {
+              "path": "/api/v2/queue/day",
+              "params": {
+                "startDate": "2026-09-16",
+                "endDate": "2026-09-16",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 48
+            }
+          ],
+          "elapsedMs": 48,
+          "dataType": "array",
+          "rowCount": 0,
+          "keys": [],
+          "sample": {
+            "value": "undefined"
+          }
+        },
+        {
+          "server": "retail",
+          "key": "queueHour",
+          "name": "Queue hourly data",
+          "docPath": "/api/v2/queue/hour",
+          "documentedOn": "retail",
+          "verdict": "empty",
+          "finalPath": "/api/v2/queue/hour",
+          "finalParams": {
+            "startTime": "2026-09-16 00:00:00",
+            "endTime": "2026-09-16 23:59:59",
+            "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+            "countdate": "2026-09-16",
+            "timeInterval": "60"
+          },
+          "paramFixes": [
+            "+countdate",
+            "+timeInterval=60"
+          ],
+          "attempts": [
+            {
+              "path": "/api/v2/queue/hour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "countdate cannot be empty.",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"countdate cannot be empty.\"}",
+              "elapsedMs": 42
+            },
+            {
+              "path": "/api/v2/queue/hour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "countdate": "2026-09-16"
+              },
+              "httpStatus": 200,
+              "code": "508",
+              "message": "'timeInterval' must be one of [1, 5, 60].",
+              "body": "{\"code\":508,\"success\":false,\"message\":\"'timeInterval' must be one of [1, 5, 60].\"}",
+              "elapsedMs": 43
+            },
+            {
+              "path": "/api/v2/queue/hour",
+              "params": {
+                "startTime": "2026-09-16 00:00:00",
+                "endTime": "2026-09-16 23:59:59",
+                "plazaUnid": "a286e056-8baf-11ef-b325-00163e0d4a59",
+                "countdate": "2026-09-16",
+                "timeInterval": "60"
+              },
+              "httpStatus": 200,
+              "code": "200",
+              "message": "success",
+              "elapsedMs": 46
+            }
+          ],
+          "elapsedMs": 46,
+          "dataType": "array",
+          "rowCount": 0,
+          "keys": [],
+          "sample": {
+            "value": "undefined"
+          },
+          "countdateOnly": {
+            "accepted": true,
+            "rowCount": 0,
+            "sameAsDocumented": true
+          }
+        }
+      ]
+    }
+  ]
+}
