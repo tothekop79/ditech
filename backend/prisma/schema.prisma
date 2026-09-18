@@ -334,6 +334,10 @@ model Event {
   excludeStaff           Boolean              @default(true)
   showDwellBenchmark     Boolean              @default(false)
   sponsorZones           String?
+  // ─── Event Report v2 — Vion data source. All optional/defaulted: existing rows stay valid. ───
+  dataSource             EventDataSource      @default(UPLOAD)
+  vionServer             VionServerKey?
+  vionPlazaId            String?
   customerId             String?
   createdById            String?
   createdAt              DateTime             @default(now())
@@ -480,6 +484,16 @@ enum PlanStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+enum EventDataSource {
+  UPLOAD
+  VION
+}
+
+enum VionServerKey {
+  MALL
+  RETAIL
 }
 
 enum NotificationTrigger {
