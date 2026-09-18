@@ -348,6 +348,7 @@ model Event {
   days                   EventDay[]
   gates                  EventGate[]
   reports                EventReport[]
+  fetchRuns              EventFetchRun[]
   zones                  EventZone[]
   plans                  InstallationPlan[]
   // ─── C1.1 BACK-RELATIONS ─── Event
@@ -484,6 +485,48 @@ enum PlanStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+/// Event Report v2 — one row per (event, day) fetch attempt from the Vion API.
+model EventFetchRun {
+  id            String            @id @default(uuid())
+  eventId       String
+  /// site-local YYYY-MM-DD
+  date          String
+  status        EventFetchStatus  @default(QUEUED)
+  triggeredBy   EventFetchTrigger @default(MANUAL)
+  triggeredById String?
+  force         Boolean           @default(false)
+  /// rows written to the file the engine reads (clipped to operating hours)
+  rows          Int?
+  /// rows written to the unclipped source/_fullday/ copy
+  fullDayRows   Int?
+  /// what the vendor claimed before dedupe — it overcounts on busy days
+  reportedTotal Int?
+  durationMs    Int?
+  errorMessage  String?
+  attempt       Int               @default(1)
+  createdAt     DateTime          @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([eventId, date])
+  @@index([status])
+}
+
+enum EventFetchStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum EventFetchTrigger {
+  MANUAL
+  SCHEDULE
 }
 
 enum EventDataSource {

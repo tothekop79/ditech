@@ -2,10 +2,13 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { authenticate, authorize } from '../middlewares/auth.middleware';
+import { authenticate, authorize, type AuthRequest } from '../middlewares/auth.middleware';
 import { eventService } from '../services/event.service';
 import { rawdataFilesService } from '../services/rawdataFiles.service';
 import { eventReportService } from '../services/eventReport.service';
+import { eventFetchService, EventNotVionError } from '../services/eventFetch.service';
+import { enqueueFetchRuns } from '../queues/eventFetch.queue';
+import { isEventV2Enabled } from '../services/vionRawdata.service';
 import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
@@ -403,6 +406,71 @@ router.get('/:id/dashboard.xlsx', async (req: Request, res: Response) => {
     res.send(buf);
   } catch (err: any) {
     res.status(404).json({ success: false, message: 'Dashboard XLSX not available' });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Event Report v2 — Vion data source  (nothing above this line changed)
+// Every route here is dark unless EVENT_V2_ENABLED=true.
+// ═══════════════════════════════════════════════════════════════
+
+/** Feature gate. Off → the routes answer 404, exactly as if they did not exist. */
+function v2Gate(_req: Request, res: Response, next: () => void) {
+  if (!isEventV2Enabled()) {
+    res.status(404).json({ success: false, message: 'Not found' });
+    return;
+  }
+  next();
+}
+
+/** EventNotVionError is a client mistake (wrong data source / missing plaza), not a server fault. */
+function vionError(res: Response, err: any) {
+  const status = err instanceof EventNotVionError ? 400 : 500;
+  res.status(status).json({ success: false, message: err?.message ?? String(err) });
+}
+
+// Connection test for the "ทดสอบการเชื่อมต่อ" button.
+router.post('/:id/vion/probe', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
+  try {
+    res.json({ success: true, data: await eventFetchService.probe(req.params.id) });
+  } catch (err: any) {
+    vionError(res, err);
+  }
+});
+
+// Queue a fetch. No `dates` → every day of the event still inside the retention window.
+router.post('/:id/vion/fetch', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const { dates, force } = req.body ?? {};
+    if (dates !== undefined && (!Array.isArray(dates) || dates.some((d: unknown) => typeof d !== 'string'))) {
+      res.status(400).json({ success: false, message: 'dates must be an array of YYYY-MM-DD strings' });
+      return;
+    }
+    const runs = await eventFetchService.createRuns(req.params.id, {
+      dates,
+      force: force === true,
+      triggeredById: (req as AuthRequest).user?.userId ?? null,
+    });
+    await enqueueFetchRuns(runs);
+    res.json({ success: true, data: runs });
+  } catch (err: any) {
+    vionError(res, err);
+  }
+});
+
+// Fetch history + the dates that came from the API (drives the API/Upload badge).
+router.get('/:id/vion/fetches', v2Gate, async (req: Request, res: Response) => {
+  try {
+    const [runs, apiDates] = await Promise.all([
+      eventFetchService.listRuns(req.params.id),
+      eventFetchService.apiDates(req.params.id),
+    ]);
+    res.json({
+      success: true,
+      data: { runs, apiDates, retentionFloor: eventFetchService.retentionFloor(), retentionDays: eventFetchService.VION_RETENTION_DAYS },
+    });
+  } catch (err: any) {
+    vionError(res, err);
   }
 });
 

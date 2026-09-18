@@ -104,6 +104,10 @@ export interface Event {
   excludeStaff: boolean;
   showDwellBenchmark: boolean;
   sponsorZones?: string | null;
+  // ─── Event Report v2 — Vion data source (optional: absent on older payloads) ───
+  dataSource?: 'UPLOAD' | 'VION';
+  vionServer?: 'MALL' | 'RETAIL' | null;
+  vionPlazaId?: string | null;
   customerId?: string | null;
   customer?: { id: string; customerCode: string; customerName: string } | null;
   days?: EventDay[];
@@ -141,6 +145,9 @@ export interface EventCreateInput {
   excludeStaff?: boolean;
   showDwellBenchmark?: boolean;
   sponsorZones?: string;
+  dataSource?: 'UPLOAD' | 'VION';
+  vionServer?: 'MALL' | 'RETAIL' | null;
+  vionPlazaId?: string | null;
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
   gates?: Array<{ name: string; gateType: GateType; sortOrder?: number }>;
   zones?: Array<{ name: string; abbrev?: string; sortOrder?: number }>;
