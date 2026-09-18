@@ -254,6 +254,8 @@ export interface FetchDayResult {
   /** unclipped copy kept for diagnostics, outside the merge path */
   fullDayFilePath: string;
   fullDayRows: number;
+  /** the vendor has nothing for this day, so no file was written at all */
+  empty: boolean;
 }
 
 export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
@@ -292,7 +294,7 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
     return {
       rows: 0, filePath, skipped: true, reportedTotal: 0,
       durationMs: Date.now() - startedAt, duplicatesDropped: 0, clippedOutOfHours: 0,
-      hoursStart, hoursEnd, fullDayFilePath, fullDayRows: 0,
+      hoursStart, hoursEnd, fullDayFilePath, fullDayRows: 0, empty: false,
       warnings: { unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0 },
     };
   }
@@ -316,6 +318,18 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
   const first = await client.captureRecord(plazaId, date, 1, PAGE_SIZE);
   const reportedTotal = first.total;
   const pageCount = first.pages;
+
+  // A day the vendor has nothing for — before the cameras were bound, after they were removed,
+  // or simply still in the future. Writing a header-only file would put an empty data_<date>
+  // sheet into the merge, so write nothing and let the caller record a 0-row run.
+  if (reportedTotal === 0 || pageCount === 0) {
+    return {
+      rows: 0, filePath, skipped: false, reportedTotal: 0,
+      durationMs: Date.now() - startedAt, duplicatesDropped: 0, clippedOutOfHours: 0,
+      hoursStart, hoursEnd, fullDayFilePath, fullDayRows: 0, empty: true,
+      warnings: { unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0 },
+    };
+  }
 
   const warnings: DerivedWarnings = {
     unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0,
@@ -409,7 +423,7 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
   return {
     rows, filePath, skipped: false, reportedTotal, durationMs, warnings,
     duplicatesDropped, clippedOutOfHours, hoursStart, hoursEnd,
-    fullDayFilePath, fullDayRows,
+    fullDayFilePath, fullDayRows, empty: false,
   };
 }
 

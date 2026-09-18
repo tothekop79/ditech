@@ -5,9 +5,12 @@
  * and a stalled report must never requeue a fetch.
  */
 import { Queue, Worker, QueueOptions, WorkerOptions } from 'bullmq';
+import { PrismaClient } from '@prisma/client';
 import { redis } from '../config/redis';
-import { eventFetchService } from '../services/eventFetch.service';
+import { eventFetchService, scheduleStillActive } from '../services/eventFetch.service';
 import { FETCH_TIMEOUT_MS, isEventV2Enabled } from '../services/vionRawdata.service';
+
+const prisma = new PrismaClient();
 
 const QUEUE_NAME = 'event-fetch';
 
@@ -34,7 +37,14 @@ const workerOpts: WorkerOptions = {
   maxStalledCount: 0,
 };
 
-export interface EventFetchJob { runId: string; eventId: string; date: string }
+/** `fetch-day` carries a run row; `scheduled-fetch` is the repeatable tick and knows only the event. */
+export interface EventFetchJob { runId?: string; eventId: string; date?: string }
+
+const JOB_FETCH_DAY = 'fetch-day';
+const JOB_SCHEDULED = 'scheduled-fetch';
+
+/** BullMQ rejects ':' in a custom/repeatable job id — use '--'. */
+export const repeatableJobId = (eventId: string) => `event-fetch--${eventId}`;
 
 export const eventFetchQueue = new Queue<EventFetchJob>(QUEUE_NAME, queueOpts);
 
@@ -49,6 +59,19 @@ export function startEventFetchWorker() {
   _worker = new Worker<EventFetchJob>(
     QUEUE_NAME,
     async (job) => {
+      if (job.name === JOB_SCHEDULED) {
+        console.log(`[eventFetch] scheduled tick for ${job.data.eventId}`);
+        const r = await eventFetchService.runScheduledFetch(job.data.eventId);
+        if (r.stopped) {
+          // the event finished, went back to UPLOAD, lost its schedule or was deleted
+          await removeEventRepeatable(job.data.eventId);
+          console.log(`[eventFetch] repeatable removed for ${job.data.eventId}`);
+        } else {
+          console.log(`[eventFetch] scheduled ${job.data.eventId}: ${r.ran.length} day(s), report=${r.generated}`);
+        }
+        return;
+      }
+      if (!job.data.runId) throw new Error(`job ${job.id} has no runId`);
       console.log(`[eventFetch] ${job.data.eventId} ${job.data.date} (attempt ${job.attemptsMade + 1})`);
       await eventFetchService.runFetch(job.data.runId, job.attemptsMade + 1);
     },
@@ -56,7 +79,7 @@ export function startEventFetchWorker() {
   );
 
   _worker.on('completed', (job) => {
-    console.log(`[eventFetch] ✓ ${job.data.eventId} ${job.data.date}`);
+    console.log(`[eventFetch] ✓ ${job.data.eventId} ${job.data.date ?? job.name}`);
   });
   _worker.on('failed', (job, err) => {
     console.error(`[eventFetch] ✗ ${job?.data.eventId} ${job?.data.date}: ${err.message}`);
@@ -75,7 +98,7 @@ export async function enqueueFetchRuns(runs: { id: string; eventId: string; date
   const sorted = [...runs].sort((a, b) => a.date.localeCompare(b.date));
   for (const r of sorted) {
     await eventFetchQueue.add(
-      'fetch-day',
+      JOB_FETCH_DAY,
       { runId: r.id, eventId: r.eventId, date: r.date },
       // one job per run row; re-adding the same run is a no-op.
       // NOTE: BullMQ rejects ':' in a custom jobId ("Custom Id cannot contain :") — use '--'.
@@ -83,4 +106,89 @@ export async function enqueueFetchRuns(runs: { id: string; eventId: string; date
     );
   }
   return sorted.length;
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Repeatable jobs — one per scheduled event
+// ──────────────────────────────────────────────────────────────────
+
+/**
+ * Drop this event's schedule.
+ *
+ * NOTE: getRepeatableJobs() does NOT echo back a custom jobId — its `key` is an opaque hash —
+ * so a repeatable cannot be found by the id it was added with. BullMQ 5's Job Scheduler API
+ * does key on an id we choose, so everything here goes through that instead.
+ */
+export async function removeEventRepeatable(eventId: string): Promise<boolean> {
+  return eventFetchQueue.removeJobScheduler(repeatableJobId(eventId));
+}
+
+/**
+ * Make the queue match the DB for one event: exactly one scheduler while the event is a
+ * scheduled VION source that has not finished, and none otherwise.
+ * upsertJobScheduler replaces an existing pattern in place, so changing the time cannot
+ * leave the old one firing.
+ */
+export async function syncEventRepeatable(eventId: string): Promise<'added' | 'removed' | 'skipped'> {
+  if (!isEventV2Enabled()) return 'skipped';
+
+  const ev = await prisma.event.findUnique({
+    where: { id: eventId },
+    select: { id: true, name: true, dataSource: true, fetchSchedule: true, fetchTz: true, endDate: true },
+  });
+
+  if (!ev || ev.dataSource !== 'VION' || !ev.fetchSchedule || !scheduleStillActive(ev)) {
+    await removeEventRepeatable(eventId);
+    return 'removed';
+  }
+
+  await eventFetchQueue.upsertJobScheduler(
+    repeatableJobId(eventId),
+    // BullMQ 5 takes `pattern` + `tz`; `cron` is the v3 spelling and is ignored here.
+    { pattern: ev.fetchSchedule, tz: ev.fetchTz || 'Asia/Bangkok' },
+    { name: JOB_SCHEDULED, data: { eventId }, opts: { removeOnComplete: 50, removeOnFail: 50 } },
+  );
+  return 'added';
+}
+
+/**
+ * Boot-time reconciliation: add what the DB says should exist, drop everything else.
+ * Called from server.ts; a no-op unless EVENT_V2_ENABLED=true.
+ */
+export async function syncAllRepeatables(): Promise<{ added: number; removed: number }> {
+  if (!isEventV2Enabled()) {
+    // Off means inert, not dormant: tear down anything a previous run left in Redis, so no
+    // delayed job is sitting there waiting for a worker. The DB keeps the schedules, and
+    // turning the flag back on re-creates them from it on the next boot.
+    let removed = 0;
+    for (const sched of await eventFetchQueue.getJobSchedulers()) {
+      if (sched.key) { await eventFetchQueue.removeJobScheduler(sched.key); removed++; }
+    }
+    console.log(`[eventFetch] EVENT_V2_ENABLED is not true — ${removed} repeatable(s) removed, none synced`);
+    return { added: 0, removed };
+  }
+
+  const events = await prisma.event.findMany({
+    where: { dataSource: 'VION', fetchSchedule: { not: null } },
+    select: { id: true, name: true, endDate: true, fetchSchedule: true, fetchTz: true, dataSource: true },
+  });
+  const active = events.filter((e) => scheduleStillActive(e));
+  const wanted = new Set(active.map((e) => repeatableJobId(e.id)));
+
+  // drop strays first: events deleted, finished, or switched back to UPLOAD while we were down
+  let removed = 0;
+  for (const sched of await eventFetchQueue.getJobSchedulers()) {
+    if (sched.key && !wanted.has(sched.key)) {
+      await eventFetchQueue.removeJobScheduler(sched.key);
+      removed++;
+    }
+  }
+
+  let added = 0;
+  for (const e of active) {
+    if ((await syncEventRepeatable(e.id)) === 'added') added++;
+  }
+
+  console.log(`[eventFetch] repeatables synced: ${added} active, ${removed} stale removed`);
+  return { added, removed };
 }

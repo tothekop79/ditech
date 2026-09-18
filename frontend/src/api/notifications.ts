@@ -4,7 +4,9 @@ import { api } from './client';
 export type NotificationTrigger =
   | 'DAILY_AT' | 'EVENING_DAY_BEFORE' | 'WEEKLY_AT'
   | 'STATUS_CHANGE' | 'READINESS_READY' | 'NOT_READY_NEAR'
-  | 'CAPACITY_OVERFLOW' | 'HANDOVER_GENERATED' | 'RESCHEDULED' | 'TEAM_CHANGED' | 'PLAN_CREATED' | 'PHOTO_UPLOADED';
+  | 'CAPACITY_OVERFLOW' | 'HANDOVER_GENERATED' | 'RESCHEDULED' | 'TEAM_CHANGED' | 'PLAN_CREATED' | 'PHOTO_UPLOADED'
+  // present in the Prisma enum since Event Reports shipped; the union had simply not caught up
+  | 'EVENT_REPORT_READY' | 'CAMERA_DIGEST';
 
 export type NotificationStatus = 'PENDING' | 'SENT' | 'FAILED';
 

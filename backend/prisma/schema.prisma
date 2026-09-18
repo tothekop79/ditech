@@ -338,6 +338,12 @@ model Event {
   dataSource             EventDataSource      @default(UPLOAD)
   vionServer             VionServerKey?
   vionPlazaId            String?
+  /// 5-field cron, always daily in practice (e.g. "30 23 * * *"). Required once dataSource=VION.
+  fetchSchedule          String?
+  fetchTz                String               @default("Asia/Bangkok")
+  autoGenerate           Boolean              @default(true)
+  /// NotificationRule to notify when the auto-generated report is ready (Step 4 attaches the PDF)
+  autoSendRuleId         String?
   customerId             String?
   createdById            String?
   createdAt              DateTime             @default(now())

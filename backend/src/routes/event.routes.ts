@@ -458,6 +458,30 @@ router.post('/:id/vion/fetch', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), as
   }
 });
 
+// The v2 config write path: validates the schedule, re-syncs the repeatable job and,
+// the first time an event becomes a VION source, queues the initial backfill.
+router.put('/:id/vion/config', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const b = req.body ?? {};
+    if (b.dataSource !== 'UPLOAD' && b.dataSource !== 'VION') {
+      res.status(400).json({ success: false, message: 'dataSource must be UPLOAD or VION' });
+      return;
+    }
+    const result = await eventFetchService.saveConfig(req.params.id, {
+      dataSource: b.dataSource,
+      vionServer: b.vionServer ?? null,
+      vionPlazaId: b.vionPlazaId ?? null,
+      fetchSchedule: b.fetchSchedule ?? null,
+      fetchTz: b.fetchTz ?? null,
+      autoGenerate: b.autoGenerate,
+      autoSendRuleId: b.autoSendRuleId ?? null,
+    }, (req as AuthRequest).user?.userId ?? null);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    vionError(res, err);
+  }
+});
+
 // Fetch history + the dates that came from the API (drives the API/Upload badge).
 router.get('/:id/vion/fetches', v2Gate, async (req: Request, res: Response) => {
   try {

@@ -100,6 +100,12 @@ export function RawdataFilesPanel({ eventId, configuredDates = [], apiDates = []
   };
 
   const apiDateSet = new Set(apiDates);
+  // A file counts as API-sourced if a fetch run recorded that day, or if it still carries the
+  // exact name vionRawdata.service writes. The second test keeps the badge right when fetch
+  // history has been pruned; a hand-uploaded file never matches, because the manual export is
+  // named CaptureRecordsDetails-<EventName>-YYYYMMDD.xlsx.
+  const isApiFile = (f: SourceFile) =>
+    (!!f.date && apiDateSet.has(f.date)) || /^CaptureRecordsDetails-\d{4}-\d{2}-\d{2}\.xlsx$/i.test(f.filename);
 
   // Match configured dates to files
   const fileByDate = new Map<string, SourceFile>();
@@ -199,7 +205,7 @@ export function RawdataFilesPanel({ eventId, configuredDates = [], apiDates = []
                     <span className="mx-1">·</span>
                     <span>{(f.size / 1024 / 1024).toFixed(2)} MB</span>
                     <span className="mx-1">·</span>
-                    <SourceBadge fromApi={!!f.date && apiDateSet.has(f.date)} />
+                    <SourceBadge fromApi={isApiFile(f)} />
                   </div>
                 </div>
                 <button onClick={() => {

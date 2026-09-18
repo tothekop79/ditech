@@ -55,7 +55,59 @@ export const VION_SERVERS: { value: VionServer; label: string; host: string }[] 
   { value: 'RETAIL', label: 'Retail', host: 'retail.vionyun.com' },
 ];
 
+export interface VionConfigInput {
+  dataSource: EventDataSource;
+  vionServer?: VionServer | null;
+  vionPlazaId?: string | null;
+  /** 5-field daily cron, "M H * * *" */
+  fetchSchedule?: string | null;
+  fetchTz?: string | null;
+  autoGenerate?: boolean;
+  autoSendRuleId?: string | null;
+}
+
+/** "23:30" → "30 23 * * *" */
+export function cronFromTime(hhmm: string): string {
+  const m = hhmm.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!m) throw new Error(`bad time ${hhmm}`);
+  return `${Number(m[2])} ${Number(m[1])} * * *`;
+}
+
+/** "30 23 * * *" → "23:30", or null when it is not a plain daily cron */
+export function timeFromCron(cron?: string | null): string | null {
+  const m = (cron ?? '').match(/^([0-5]?\d) ([01]?\d|2[0-3]) \* \* \*$/);
+  return m ? `${m[2].padStart(2, '0')}:${m[1].padStart(2, '0')}` : null;
+}
+
+/**
+ * Next occurrence of a daily HH:MM in `tz`, as a local-readable string.
+ * Only daily crons are produced by this UI, so no cron library is needed.
+ */
+export function nextRunLabel(cron?: string | null, tz = 'Asia/Bangkok'): string | null {
+  const hhmm = timeFromCron(cron);
+  if (!hhmm) return null;
+  const [h, m] = hhmm.split(':').map(Number);
+  const now = new Date();
+  // what time is it right now at the site?
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const todayPassed = get('hour') * 60 + get('minute') >= h * 60 + m;
+  const base = new Date(Date.UTC(get('year'), get('month') - 1, get('day')));
+  if (todayPassed) base.setUTCDate(base.getUTCDate() + 1);
+  const day = base.toISOString().slice(0, 10);
+  const label = todayPassed ? 'พรุ่งนี้' : 'วันนี้';
+  return `${label} ${day} ${hhmm} (${tz})`;
+}
+
 export const vionApi = {
+  saveConfig: (eventId: string, body: VionConfigInput) =>
+    api.put<{ success: boolean; data: { event: unknown; backfillQueued: number } }>(
+      `/events/${eventId}/vion/config`, body,
+    ).then((r) => r.data.data),
+
   probe: (eventId: string) =>
     api.post<{ success: boolean; data: VionProbeResult }>(`/events/${eventId}/vion/probe`).then((r) => r.data.data),
 

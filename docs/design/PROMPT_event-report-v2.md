@@ -93,7 +93,14 @@ Commit: `feat(event): Vion data source config UI + fetch API + fetch history`
 ## Step 3 — Schedule
 
 - Schema เพิ่มใน `Event`: `fetchSchedule` (String? cron 5 ช่อง เช่น `30 23 * * *`), `fetchTz` (default `Asia/Bangkok`), `autoGenerate` (Bool default true), `autoSendRuleId` (String? → NotificationRule)
-- BullMQ repeatable job ต่อ event (`repeat: {pattern, tz}` — BullMQ 5.76 ใช้ `pattern` ไม่ใช่ `cron`, ดู lesson Sprint 1.7 ใน `areas/vion-camera-monitor`) · jobId = `event-fetch:<eventId>` · เมื่อ schedule เปลี่ยน/ปิด ต้อง `removeRepeatable` ตัวเก่าก่อน · ตอน backend boot ให้ sync repeatable jobs จาก DB (event ที่ `dataSource=VION` และ `fetchSchedule` ไม่ว่าง และวันนี้ ≤ endDate + 1)
+- BullMQ repeatable job ต่อ event (`pattern` + `tz` — BullMQ 5.76 ใช้ `pattern` ไม่ใช่ `cron`)
+  · **jobId = `event-fetch--<eventId>`** (BullMQ ห้าม `:` ใน custom id — `"Custom Id cannot contain :"`)
+  · **ใช้ `upsertJobScheduler` / `removeJobScheduler` / `getJobSchedulers` ไม่ใช่ `getRepeatableJobs`**
+    (แก้เมื่อ 2026-09-18 ตอน Step 3: `getRepeatableJobs()` ไม่คืน jobId ที่เราตั้ง — `key` เป็น hash
+    ทึบ หา repeatable จาก id ที่ add ไว้ไม่เจอ ลบตัวเก่าไม่ออก เกิด key ซ้อนสองตัวตอนเปลี่ยนเวลา
+    ส่วน Job Scheduler API คีย์ด้วย id ที่เราตั้งเอง และ upsert ทับ pattern เดิมให้ในตัว)
+  · ตอน backend boot ให้ sync จาก DB (event ที่ `dataSource=VION` และ `fetchSchedule` ไม่ว่าง และวันนี้ ≤ endDate + 1)
+  · **flag ปิด → ลบ scheduler ทิ้งทั้งหมด** (ปิดแล้วต้องไม่เหลือ key ค้างใน redis)
 - Flow ของ job: ดึงวันที่ยังไม่มีไฟล์ (ปกติ = เมื่อวาน ถ้ารันหลังเที่ยงคืน) → ถ้า `autoGenerate` enqueue report ผ่าน `enqueueReport()` เดิม → ผลต่อไปเป็น pipeline เดิม
 - UI: ใน section แหล่งข้อมูล เพิ่ม **ดึงอัตโนมัติทุกวันเวลา** (time picker → แปลงเป็น cron, แสดง "ครั้งถัดไป: …" คำนวณจาก pattern) · toggle generate อัตโนมัติ · select rule Telegram สำหรับส่ง
 - หลัง endDate ผ่านไป 1 วัน job ต้องหยุดเอง (ไม่ดึงว่างเปล่าทุกวันตลอดไป)

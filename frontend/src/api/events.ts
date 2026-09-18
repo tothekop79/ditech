@@ -108,6 +108,10 @@ export interface Event {
   dataSource?: 'UPLOAD' | 'VION';
   vionServer?: 'MALL' | 'RETAIL' | null;
   vionPlazaId?: string | null;
+  fetchSchedule?: string | null;
+  fetchTz?: string | null;
+  autoGenerate?: boolean;
+  autoSendRuleId?: string | null;
   customerId?: string | null;
   customer?: { id: string; customerCode: string; customerName: string } | null;
   days?: EventDay[];

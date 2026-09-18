@@ -6,14 +6,23 @@
  */
 import { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { eventsApi, type Event } from '../../api/events';
+import { type Event } from '../../api/events';
 import {
-  vionApi, isFeatureOff, VION_SERVERS,
+  vionApi, isFeatureOff, VION_SERVERS, cronFromTime, timeFromCron, nextRunLabel,
   type VionServer, type EventDataSource, type VionProbeResult, type EventFetchRun,
 } from '../../api/vion';
+import { notificationsApi } from '../../api/notifications';
 import { useToast } from '../Toast';
 
+/** The default the retention window makes sensible: after the site closes, before midnight. */
+const DEFAULT_FETCH_TIME = '23:30';
+
 const ymd = (d: string | Date) => (typeof d === 'string' ? d.slice(0, 10) : d.toISOString().slice(0, 10));
+
+/** cronFromTime throws on a half-typed time; the "next run" preview must not. */
+function cronFromTimeSafe(hhmm: string): string | null {
+  try { return cronFromTime(hhmm); } catch { return null; }
+}
 
 /** Inclusive YYYY-MM-DD range. */
 function eachDay(from: string, to: string): string[] {
@@ -36,12 +45,25 @@ export function VionDataSourceSection({ event }: { event: Event }) {
   const [probe, setProbe] = useState<VionProbeResult | null>(null);
   const [pickedDates, setPickedDates] = useState<string[]>([]);
   const [force, setForce] = useState(false);
+  const [fetchTime, setFetchTime] = useState(timeFromCron(event.fetchSchedule) ?? DEFAULT_FETCH_TIME);
+  const [autoGenerate, setAutoGenerate] = useState(event.autoGenerate ?? true);
+  const [autoSendRuleId, setAutoSendRuleId] = useState(event.autoSendRuleId ?? '');
+
+  // Telegram rules that fire when a report is ready — the only ones worth offering here.
+  const rules = useQuery({
+    queryKey: ['notification-rules'],
+    queryFn: () => notificationsApi.rules(),
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (editing) return;
     setDataSource(event.dataSource ?? 'UPLOAD');
     setServer(event.vionServer ?? 'RETAIL');
     setPlazaId(event.vionPlazaId ?? '');
+    setFetchTime(timeFromCron(event.fetchSchedule) ?? DEFAULT_FETCH_TIME);
+    setAutoGenerate(event.autoGenerate ?? true);
+    setAutoSendRuleId(event.autoSendRuleId ?? '');
   }, [event, editing]);
 
   // Doubles as the feature probe: 404 → the whole section hides.
@@ -56,14 +78,21 @@ export function VionDataSourceSection({ event }: { event: Event }) {
   });
 
   const save = useMutation({
-    mutationFn: () => eventsApi.update(event.id, {
+    mutationFn: () => vionApi.saveConfig(event.id, {
       dataSource,
       vionServer: dataSource === 'VION' ? server : null,
       vionPlazaId: dataSource === 'VION' ? plazaId.trim() : null,
+      fetchSchedule: dataSource === 'VION' ? cronFromTime(fetchTime) : null,
+      fetchTz: event.fetchTz ?? 'Asia/Bangkok',
+      autoGenerate,
+      autoSendRuleId: dataSource === 'VION' ? (autoSendRuleId || null) : null,
     }),
-    onSuccess: () => {
-      showToast('บันทึกแหล่งข้อมูลแล้ว');
+    onSuccess: (r) => {
+      showToast(r.backfillQueued > 0
+        ? `บันทึกแล้ว — สั่งดึงย้อนหลัง ${r.backfillQueued} วันให้อัตโนมัติ`
+        : 'บันทึกแหล่งข้อมูลแล้ว');
       qc.invalidateQueries({ queryKey: ['event', event.id] });
+      qc.invalidateQueries({ queryKey: ['event-vion-fetches', event.id] });
       setEditing(false);
     },
     onError: (e: any) => showToast(e?.response?.data?.message || 'บันทึกไม่สำเร็จ'),
@@ -111,7 +140,17 @@ export function VionDataSourceSection({ event }: { event: Event }) {
 
   const dirty =
     dataSource !== (event.dataSource ?? 'UPLOAD') ||
-    (dataSource === 'VION' && (server !== (event.vionServer ?? 'RETAIL') || plazaId.trim() !== (event.vionPlazaId ?? '')));
+    autoGenerate !== (event.autoGenerate ?? true) ||
+    (dataSource === 'VION' && (
+      server !== (event.vionServer ?? 'RETAIL') ||
+      plazaId.trim() !== (event.vionPlazaId ?? '') ||
+      fetchTime !== (timeFromCron(event.fetchSchedule) ?? DEFAULT_FETCH_TIME) ||
+      (autoSendRuleId || '') !== (event.autoSendRuleId ?? '')
+    ));
+
+  const tz = event.fetchTz ?? 'Asia/Bangkok';
+  const nextRun = nextRunLabel(cronFromTimeSafe(fetchTime), tz);
+  const reportRules = (rules.data ?? []).filter((r) => r.trigger === 'EVENT_REPORT_READY');
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 md:col-span-2">
@@ -124,7 +163,10 @@ export function VionDataSourceSection({ event }: { event: Event }) {
             <button onClick={() => setEditing(false)} className="text-xs px-2 py-0.5 text-gray-500 hover:text-gray-700">Cancel</button>
             <button
               onClick={() => save.mutate()}
-              disabled={save.isPending || !dirty || (dataSource === 'VION' && !plazaId.trim())}
+              disabled={
+                save.isPending || !dirty ||
+                (dataSource === 'VION' && (!plazaId.trim() || !cronFromTimeSafe(fetchTime)))
+              }
               className="text-xs px-2.5 py-0.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
             >
               {save.isPending ? 'Saving…' : 'Save'}
@@ -236,6 +278,66 @@ export function VionDataSourceSection({ event }: { event: Event }) {
               — วันที่เก่ากว่านี้ดึงย้อนหลังไม่ได้แล้ว
             </p>
           )}
+
+          {/* ── schedule ── */}
+          <div className="border border-gray-200 rounded p-2 space-y-2">
+            <div className="flex flex-wrap items-end gap-3 text-xs">
+              <label className="flex flex-col gap-1">
+                <span className="text-gray-500">ดึงอัตโนมัติทุกวันเวลา</span>
+                <input
+                  type="time"
+                  value={fetchTime}
+                  disabled={!editing}
+                  onChange={(e) => setFetchTime(e.target.value)}
+                  className="px-2 py-1 border border-gray-200 rounded font-mono disabled:bg-gray-50 disabled:text-gray-500"
+                />
+              </label>
+              <div className="flex flex-col gap-1">
+                <span className="text-gray-500">ครั้งถัดไป</span>
+                <span className="px-2 py-1 font-mono text-gray-700">
+                  {dataSource === 'VION' && event.fetchSchedule && !editing
+                    ? (nextRun ?? '—')
+                    : (nextRun ? `${nextRun} (หลังบันทึก)` : '—')}
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-400 pb-1.5 font-mono">
+                cron: {cronFromTimeSafe(fetchTime) ?? '—'} · {tz}
+              </span>
+            </div>
+
+            <p className="text-[10px] text-gray-500">
+              ทุกคืนจะดึง <b>เมื่อวาน</b> และ <b>2 วันก่อน</b> ทับของเดิมเสมอ (รับ ReID ที่ vendor เขียนย้อนหลัง)
+              · วันเก่ากว่านั้นดึงเฉพาะวันที่ยังไม่มีไฟล์ · หยุดเองหลังวันสุดท้ายของงาน 1 วัน
+            </p>
+
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoGenerate}
+                disabled={!editing}
+                onChange={(e) => setAutoGenerate(e.target.checked)}
+              />
+              <span className={autoGenerate ? 'text-gray-800' : 'text-gray-500'}>
+                generate รายงานอัตโนมัติหลังดึงข้อมูลเสร็จ
+              </span>
+            </label>
+
+            <label className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-gray-500">แจ้งเตือน Telegram เมื่อรายงานเสร็จ</span>
+              <select
+                value={autoSendRuleId}
+                disabled={!editing}
+                onChange={(e) => setAutoSendRuleId(e.target.value)}
+                className="px-2 py-1 border border-gray-200 rounded disabled:bg-gray-50 disabled:text-gray-500 max-w-[320px]"
+              >
+                <option value="">— ไม่เลือก (ใช้ rule ทั้งหมดตามเดิม) —</option>
+                {reportRules.map((r) => (
+                  <option key={r.id} value={r.id}>{r.name}{r.enabled ? '' : ' (ปิดอยู่)'}</option>
+                ))}
+              </select>
+              <span className="text-[10px] text-gray-400">แนบไฟล์ PDF เป็นงาน Step 4</span>
+            </label>
+          </div>
 
           {/* ── fetch now ── */}
           <div className="border border-gray-200 rounded p-2">
