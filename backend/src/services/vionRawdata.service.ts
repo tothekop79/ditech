@@ -30,6 +30,10 @@
  *    displayHours 10–22: inside 10:00:00–22:00:00 the API and the manual file
  *    hold exactly the same 16,326 rows; all 339 API-only rows sit outside that window.
  *    Writing the unclipped day would inflate every unique-visitor and total-traffic KPI.
+ *    The unclipped day is still kept, under source/_fullday/, for diagnostics. That folder is
+ *    invisible to rawdataFiles.service: list()/clearAll() call fs.readdir() non-recursively and
+ *    keep only names matching /\.(xlsx|xlsm)$/i, which a directory name never does — so the
+ *    merge path cannot pick these files up. Re-check that if the listing ever goes recursive.
  */
 import ExcelJS from 'exceljs';
 import { promises as fs } from 'fs';
@@ -43,6 +47,8 @@ const prisma = new PrismaClient();
 
 const UPLOADS_ROOT = process.env.EVENT_UPLOADS_ROOT || '/app/uploads/events';
 const SOURCE_DIRNAME = 'source';
+/** Unclipped copies live here. Must stay a SUBDIRECTORY of source/ with a non-xlsx name. */
+const FULLDAY_DIRNAME = '_fullday';
 const PAGE_SIZE = 1000;
 
 /** Overall budget for one day's fetch. Default sized from the worst case measured in Step 0: */
@@ -196,8 +202,16 @@ export function sourceFileName(date: string): string {
   return `CaptureRecordsDetails-${date}.xlsx`;
 }
 
+export function fullDayFileName(date: string): string {
+  return `CaptureRecordsDetails-${date}-fullday.xlsx`;
+}
+
 function sourceDir(eventId: string): string {
   return path.join(UPLOADS_ROOT, eventId, SOURCE_DIRNAME);
+}
+
+function fullDayDir(eventId: string): string {
+  return path.join(sourceDir(eventId), FULLDAY_DIRNAME);
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -237,6 +251,9 @@ export interface FetchDayResult {
   clippedOutOfHours: number;
   hoursStart: number;
   hoursEnd: number;
+  /** unclipped copy kept for diagnostics, outside the merge path */
+  fullDayFilePath: string;
+  fullDayRows: number;
 }
 
 export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
@@ -266,13 +283,16 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
 
   const dir = sourceDir(eventId);
   await fs.mkdir(dir, { recursive: true });
+  const fdDir = fullDayDir(eventId);
+  await fs.mkdir(fdDir, { recursive: true });
   const filePath = path.join(dir, sourceFileName(date));
+  const fullDayFilePath = path.join(fdDir, fullDayFileName(date));
 
   if (!force && (await exists(filePath))) {
     return {
       rows: 0, filePath, skipped: true, reportedTotal: 0,
       durationMs: Date.now() - startedAt, duplicatesDropped: 0, clippedOutOfHours: 0,
-      hoursStart, hoursEnd,
+      hoursStart, hoursEnd, fullDayFilePath, fullDayRows: 0,
       warnings: { unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0 },
     };
   }
@@ -300,22 +320,33 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
   const warnings: DerivedWarnings = {
     unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0,
   };
+  // counted separately so the reported warnings describe the file the engine will actually read
+  const fullDayWarnings: DerivedWarnings = {
+    unknownGender: 0, unknownDirection: 0, unknownPersonType: 0, unresolvedLocation: 0, unresolvedCamera: 0,
+  };
 
   const tmpPath = `${filePath}.partial`;
+  const fdTmpPath = `${fullDayFilePath}.partial`;
   await fs.rm(tmpPath, { force: true });
+  await fs.rm(fdTmpPath, { force: true });
 
-  const wb = new ExcelJS.stream.xlsx.WorkbookWriter({
-    filename: tmpPath,
+  const mkWriter = (filename: string) => new ExcelJS.stream.xlsx.WorkbookWriter({
+    filename,
     useStyles: false,
     useSharedStrings: false,      // inline strings: bigger file, but constant memory
   });
+  const wb = mkWriter(tmpPath);
   const ws = wb.addWorksheet('data');   // the manual export's sheet name
+  const fdWb = mkWriter(fdTmpPath);
+  const fdWs = fdWb.addWorksheet('data');
 
   let rows = 0;
+  let fullDayRows = 0;
   let duplicatesDropped = 0;
   let clippedOutOfHours = 0;
   try {
     ws.addRow(VION_EXPORT_HEADER as unknown as string[]).commit();
+    fdWs.addRow(VION_EXPORT_HEADER as unknown as string[]).commit();
 
     // Every unid seen today. The vendor repeats rows across pages, so this has to span the
     // whole day, not just a page boundary. One UUID string per distinct row: ~80 MB at the
@@ -335,19 +366,25 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
         const r = batch.records[i];
         if (seenUnids.has(r.unid)) { duplicatesDropped++; continue; }
         seenUnids.add(r.unid);
+        // the unclipped copy gets every deduped row, with its own 1..N counter
+        fdWs.addRow(toRow(r, ++fullDayRows, catalog.locationByUnid, catalog.cameraByUnid, fullDayWarnings)).commit();
         if (!inHours(r.counttimeLocal)) { clippedOutOfHours++; continue; }
         ws.addRow(toRow(r, ++rows, catalog.locationByUnid, catalog.cameraByUnid, warnings)).commit();
       }
     }
 
     await wb.commit();
+    await fdWb.commit();
   } catch (err) {
-    await fs.rm(tmpPath, { force: true });    // never leave a half-written file the merge could pick up
+    // never leave a half-written file the merge could pick up
+    await fs.rm(tmpPath, { force: true });
+    await fs.rm(fdTmpPath, { force: true });
     throw err;
   }
 
   // rename last: the file only becomes visible to rawdataFiles.list() once it is complete
   await fs.rename(tmpPath, filePath);
+  await fs.rename(fdTmpPath, fullDayFilePath);
 
   const durationMs = Date.now() - startedAt;
   const w = warnings;
@@ -372,6 +409,7 @@ export async function fetchDay(args: FetchDayArgs): Promise<FetchDayResult> {
   return {
     rows, filePath, skipped: false, reportedTotal, durationMs, warnings,
     duplicatesDropped, clippedOutOfHours, hoursStart, hoursEnd,
+    fullDayFilePath, fullDayRows,
   };
 }
 
@@ -440,5 +478,5 @@ export function eachDay(from: string, to: string): string[] {
 }
 
 export const vionRawdataService = {
-  fetchDay, probePlaza, loadCatalog, sourceFileName, siteLocalDay, eachDay, isEventV2Enabled,
+  fetchDay, probePlaza, loadCatalog, sourceFileName, fullDayFileName, siteLocalDay, eachDay, isEventV2Enabled,
 };

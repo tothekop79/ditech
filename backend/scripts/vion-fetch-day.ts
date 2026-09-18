@@ -99,7 +99,8 @@ async function main() {
         const warn = w.unknownGender + w.unknownDirection + w.unknownPersonType + w.unresolvedLocation;
         console.log(
           `${date}  OK     ${String(r.rows).padStart(7)} rows  ` +
-          `(vendor ${r.reportedTotal}, ${r.clippedOutOfHours} outside ${r.hoursStart}:00-${r.hoursEnd}:00)  ` +
+          `(vendor ${r.reportedTotal}, ${r.clippedOutOfHours} outside ${r.hoursStart}:00-${r.hoursEnd}:00, ` +
+          `${r.fullDayRows} in _fullday)  ` +
           `${(r.durationMs / 1000).toFixed(1)}s` +
           (warn ? `  ⚠ ${warn} unmapped` : '') +
           (r.duplicatesDropped ? `  ⚠ ${r.duplicatesDropped} dup dropped` : ''),
