@@ -122,6 +122,15 @@ ${event.organizer ? `👤 ${event.organizer}\n` : ''}${event.venue ? `📍 ${eve
               sentAt: status === 'SENT' ? new Date() : null,
             },
           });
+
+          // ─── Event Report v2 — opt-in PDF attachment (nothing above this line changed) ───
+          // Only after the message itself went out, only when the rule asks for it, and never
+          // in a way that can change the report's status: the report is already COMPLETED and
+          // this is a side effect. sendReportPdf() records its own outcome and does not throw.
+          if (status === 'SENT' && (rule as { sendFile?: boolean }).sendFile) {
+            const { sendReportPdf } = await import('./eventReportPdf.service');
+            await sendReportPdf(reportId, recipient);
+          }
         }
       }
     } catch (err: any) {

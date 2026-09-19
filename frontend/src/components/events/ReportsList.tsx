@@ -17,6 +17,28 @@ export function ReportsList({ eventId, hasRawdata, event }: Props) {
   const qc = useQueryClient();
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [expandedError, setExpandedError] = useState<string | null>(null);
+  const [sendingPdf, setSendingPdf] = useState<string | null>(null);
+
+  // v2 Step 4: re-send a report's PDF to one chat, through the same path the dispatcher uses.
+  const resendPdf = async (reportId: string) => {
+    const chatId = window.prompt(
+      'ส่ง PDF ไปที่ chat id ไหน?\n(ใส่ chat id ของกลุ่มทดสอบ — ห้ามใส่กลุ่มลูกค้า)',
+    );
+    if (!chatId?.trim()) return;
+    setSendingPdf(reportId);
+    try {
+      const res = await api.post(`/events/reports/${reportId}/send-pdf`, { chatId: chatId.trim() });
+      const d = res.data?.data;
+      showToast(res.data?.success
+        ? `📎 ส่ง PDF แล้ว (${((d?.bytes ?? 0) / 1024 / 1024).toFixed(2)} MB)`
+        : (res.data?.message || 'ส่ง PDF ไม่สำเร็จ'));
+      qc.invalidateQueries({ queryKey: ['event-reports', eventId] });
+    } catch (e: any) {
+      showToast(e?.response?.data?.message || 'ส่ง PDF ไม่สำเร็จ');
+    } finally {
+      setSendingPdf(null);
+    }
+  };
 
   const { data: reports = [] } = useQuery({
     queryKey: ['event-reports', eventId],
@@ -156,6 +178,7 @@ export function ReportsList({ eventId, hasRawdata, event }: Props) {
                         {completed ? (
                           <span className="text-green-700 text-[10px]">
                             HTML {((r.htmlSize || 0) / 1024).toFixed(0)} KB · XLSX {((r.xlsxSize || 0) / 1024).toFixed(0)} KB
+                            <PdfSendStatus sentAt={r.telegramFileSentAt} error={r.telegramFileError} />
                           </span>
                         ) : failed ? (
                           <button type="button" onClick={() => setExpandedError(isExpanded ? null : r.id)}
@@ -177,6 +200,12 @@ export function ReportsList({ eventId, hasRawdata, event }: Props) {
                             <button type="button" onClick={() => downloadReportXlsx(r.id)}
                               className="text-[11px] px-2 py-1 border border-gray-300 rounded hover:bg-gray-50">
                               ⬇ XLSX
+                            </button>
+                            <button type="button" onClick={() => resendPdf(r.id)}
+                              disabled={sendingPdf === r.id}
+                              title="render Dashboard.pdf (ใช้ของเดิมถ้ามีแล้ว) แล้วส่งเข้า Telegram"
+                              className="text-[11px] px-2 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">
+                              {sendingPdf === r.id ? '…' : '📎 ส่ง PDF'}
                             </button>
                           </div>
                         ) : (
@@ -207,4 +236,23 @@ export function ReportsList({ eventId, hasRawdata, event }: Props) {
       />
     </div>
   );
+}
+
+/** v2 Step 4: whether this report's PDF made it to Telegram. Silent until one was attempted. */
+function PdfSendStatus({ sentAt, error }: { sentAt?: string | null; error?: string | null }) {
+  if (error) {
+    return (
+      <span className="block text-red-600 mt-0.5" title={error}>
+        📎 ส่งไฟล์ล้มเหลว — {error.slice(0, 40)}{error.length > 40 ? '…' : ''}
+      </span>
+    );
+  }
+  if (sentAt) {
+    return (
+      <span className="block text-gray-500 mt-0.5">
+        📎 ส่งแล้ว {new Date(sentAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      </span>
+    );
+  }
+  return null;
 }

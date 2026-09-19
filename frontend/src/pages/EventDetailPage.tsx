@@ -5,6 +5,7 @@ import { eventsApi, type EventStatus, STATUS_LABEL, PROFILE_DESC } from '../api/
 import { EventStatusBadge } from '../components/events/EventStatusBadge';
 import { RawdataUploader } from '../components/events/RawdataUploader';
 import { RawdataFilesPanel } from '../components/events/RawdataFilesPanel';
+import { vionApi } from '../api/vion';
 import { EditEventModal } from '../components/events/EditEventModal';
 import { LinkExistingPlanModal } from '../components/events/LinkExistingPlanModal';
 import { ReportsList } from '../components/events/ReportsList';
@@ -163,10 +164,7 @@ function OverviewTab({ event, hasRawdata }: { event: any; hasRawdata: boolean })
 
       <div className="space-y-4">
         <div className="bg-white border border-gray-200 rounded-lg p-4">
-          <RawdataFilesPanel
-            eventId={event.id}
-            configuredDates={(event.days || []).map((d: any) => (typeof d.date === 'string' ? d.date.slice(0, 10) : new Date(d.date).toISOString().slice(0, 10)))}
-          />
+          <RawdataFilesPanelWithSource event={event} />
           {hasRawdata && (
             <p className="text-[11px] text-gray-500 mt-2">
               ✅ Ready to generate reports — go to the Reports tab.
@@ -175,6 +173,27 @@ function OverviewTab({ event, hasRawdata }: { event: any; hasRawdata: boolean })
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── v2: same panel, plus which days came from the Vion API ──
+// An UPLOAD event issues no extra request at all — `enabled` is false — so a v1 page behaves
+// exactly as it did before v2. For a VION event the query still 404s when EVENT_V2_ENABLED is
+// off, leaving apiDates empty and every file badged "Upload".
+function RawdataFilesPanelWithSource({ event }: { event: any }) {
+  const isVion = event.dataSource === 'VION';
+  const { data } = useQuery({
+    queryKey: ['event-vion-fetches', event.id],
+    queryFn: () => vionApi.fetches(event.id),
+    enabled: isVion,
+    retry: false,
+  });
+  return (
+    <RawdataFilesPanel
+      eventId={event.id}
+      configuredDates={(event.days || []).map((d: any) => (typeof d.date === 'string' ? d.date.slice(0, 10) : new Date(d.date).toISOString().slice(0, 10)))}
+      apiDates={data?.apiDates ?? []}
+    />
   );
 }
 

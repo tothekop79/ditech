@@ -23,6 +23,10 @@ export interface EventCreateInput {
   excludeStaff?: boolean;
   showDwellBenchmark?: boolean;
   sponsorZones?: string;
+  // ─── Event Report v2 — Vion data source ───
+  dataSource?: 'UPLOAD' | 'VION';
+  vionServer?: 'MALL' | 'RETAIL' | null;
+  vionPlazaId?: string | null;
   // Initial setup data
   days?: Array<{ dayNumber: number; date: string; label: string; color?: string }>;
   gates?: Array<{ name: string; gateType: 'ENTRANCE' | 'PASSERBY'; sortOrder?: number }>;
@@ -201,6 +205,10 @@ export const eventService = {
     if (data.excludeStaff !== undefined) updateData.excludeStaff = data.excludeStaff;
     if (data.showDwellBenchmark !== undefined) updateData.showDwellBenchmark = data.showDwellBenchmark;
     if (data.sponsorZones !== undefined) updateData.sponsorZones = data.sponsorZones;
+    // ─── Event Report v2 — Vion data source (nothing above this line changed) ───
+    if (data.dataSource !== undefined) updateData.dataSource = data.dataSource;
+    if (data.vionServer !== undefined) updateData.vionServer = data.vionServer;
+    if (data.vionPlazaId !== undefined) updateData.vionPlazaId = data.vionPlazaId;
 
     return prisma.event.update({ where: { id }, data: updateData });
   },

@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { eventsApi, type Event, type EventDay, type EventGate, type EventZone, type EventActivity, type GateType } from '../../api/events';
 import { useToast } from '../Toast';
+import { VionDataSourceSection } from './VionDataSourceSection';
 
 const DAY_COLORS = ['#1F77B4', '#FF7F0E', '#2CA02C', '#D62728', '#9467BD', '#17BECF', '#E377C2'];
 
 export function EventConfigEditor({ event }: { event: Event }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* v2: renders nothing when EVENT_V2_ENABLED is off */}
+      <VionDataSourceSection event={event} />
       <DaysEditor event={event} />
       <GatesEditor event={event} />
       <ZonesEditor event={event} />

@@ -69,6 +69,42 @@ export interface VionGateHour {
   modifyTime?: string;
 }
 
+export interface VionGate {
+  plazaUnid: string;
+  gateUnid: string;
+  gateName: string;
+  isMallGate?: number;
+  isPassBy?: number;
+  gateStatus?: number;
+}
+
+export interface VionZone {
+  plazaUnid: string;
+  zoneUnid: string;
+  zoneName: string;
+  labelName?: string;
+  /** 1 = active. Inactive (2) rows are superseded renames and must be ignored. */
+  zoneStatus?: number;
+}
+
+/** One row of /api/v2/captureRecord. `gateUnid` is a *location* unid: it is a gate OR a zone. */
+export interface VionCaptureRecord {
+  unid: string;
+  personUnid: string;
+  personType: number;
+  gateUnid: string;
+  plazaUnid: string;
+  age: number;
+  gender: number;
+  direction: number;
+  /** "YYYY-MM-DD HH:mm:ss" — already SITE-LOCAL, never convert it. */
+  counttimeLocal: string;
+  countdate: string;
+}
+
+/** captureRecord is the only paged endpoint. `size` is capped at 1000 server-side. */
+export interface VionPage<T> { records: T[]; total: number; size: number; current: number; pages: number }
+
 interface Envelope<T> { code: number | string; success: boolean; message?: string; msg?: string; data: T }
 
 export class VionAuthError extends Error {}
@@ -164,6 +200,34 @@ export class VionClient {
       plazaUnid, gateUnid, startTime: `${day} 00:00:00`, endTime: `${day} 23:59:59`,
     })) ?? [];
   }
+
+  async listGates(plazaUnid: string): Promise<VionGate[]> {
+    return (await this.get<VionGate[] | null>('/api/v2/base/gateInfo', { plazaUnid })) ?? [];
+  }
+
+  /** Not served on every account (Retail店 404s on some) — treated as "no zones" rather than an error. */
+  async listZones(plazaUnid: string): Promise<VionZone[]> {
+    try { return (await this.get<VionZone[] | null>('/api/v2/base/zoneInfo', { plazaUnid })) ?? []; }
+    catch (e) { if (e instanceof VionApiError && e.code === 404) return []; throw e; }
+  }
+
+  /**
+   * One page of capture records for one site-local day.
+   * `pageSize` above 1000 is silently clamped by the vendor — do not bother asking for more.
+   * Rows come back strictly ASCENDING by `counttimeLocal`, across pages.
+   */
+  async captureRecord(plazaUnid: string, countdate: string, page: number, pageSize = 1000): Promise<VionPage<VionCaptureRecord>> {
+    const d = await this.get<VionPage<VionCaptureRecord> | null>('/api/v2/captureRecord', {
+      plazaUnid, countdate, page: String(page), pageSize: String(pageSize),
+    });
+    return {
+      records: d?.records ?? [],
+      total: Number(d?.total ?? 0),
+      size: Number(d?.size ?? pageSize),
+      current: Number(d?.current ?? page),
+      pages: Number(d?.pages ?? 0),
+    };
+  }
 }
 
 // ── factory from env (Sprint 1). Move to ApiSource table with encrypted secrets in Sprint 2. ──
@@ -184,4 +248,21 @@ export function clientsFromEnv(): VionClient[] {
   mk('MALL', 'VION_MALL');
   mk('RETAIL', 'VION_RETAIL');
   return out;
+}
+
+/** One client for one server, by name. Same env vars as clientsFromEnv(). */
+export function clientFromEnv(source: VionSource): VionClient {
+  const prefix = source === 'MALL' ? 'VION_MALL' : 'VION_RETAIL';
+  const e = process.env;
+  if (!e[`${prefix}_BASE_URL`] || !e[`${prefix}_APPKEY`]) {
+    throw new Error(`Vion ${source} is not configured — set ${prefix}_BASE_URL and ${prefix}_APPKEY`);
+  }
+  return new VionClient({
+    source,
+    baseUrl: e[`${prefix}_BASE_URL`]!.replace(/\/+$/, ''),
+    appkey: e[`${prefix}_APPKEY`]!,
+    username: e[`${prefix}_USERNAME`]!,
+    password: e[`${prefix}_PASSWORD`]!,
+    timeoutMs: Number(e.VION_TIMEOUT_MS) || 20_000,
+  });
 }

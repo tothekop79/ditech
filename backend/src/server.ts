@@ -19,6 +19,7 @@ import photoRoutes from './routes/photo.routes';
 import regionRoutes from './routes/region.routes';
 import eventRoutes from './routes/event.routes';
 import { startEventReportWorker } from './queues/eventReport.queue';
+import { startEventFetchWorker, syncAllRepeatables } from './queues/eventFetch.queue';
 import monitorRoutes from './routes/monitor.routes';
 import { startDeviceMonitor } from './queues/deviceMonitor.queue';
 import { wireCameraDigestToTelegram } from './services/cameraDigestNotifier';
@@ -108,6 +109,8 @@ server.listen(PORT, () => {
 
   startScheduler();
   startEventReportWorker();
+  startEventFetchWorker();   // Event Report v2 — no-op unless EVENT_V2_ENABLED=true
+  void syncAllRepeatables().catch((e) => console.error('[eventFetch] repeatable sync failed:', e));
   wireCameraDigestToTelegram();
   startDeviceMonitor().catch((e) => console.error('[monitor] start failed', e));
 });

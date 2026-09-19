@@ -186,6 +186,8 @@ model NotificationRule {
   daysAhead        Int?
   recipients       String[]
   templateBody     String?
+  /// Event Report v2 — attach the report PDF after the message (opt-in per rule)
+  sendFile         Boolean             @default(false)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   logs             NotificationLog[]
@@ -334,6 +336,16 @@ model Event {
   excludeStaff           Boolean              @default(true)
   showDwellBenchmark     Boolean              @default(false)
   sponsorZones           String?
+  // ─── Event Report v2 — Vion data source. All optional/defaulted: existing rows stay valid. ───
+  dataSource             EventDataSource      @default(UPLOAD)
+  vionServer             VionServerKey?
+  vionPlazaId            String?
+  /// 5-field cron, always daily in practice (e.g. "30 23 * * *"). Required once dataSource=VION.
+  fetchSchedule          String?
+  fetchTz                String               @default("Asia/Bangkok")
+  autoGenerate           Boolean              @default(true)
+  /// NotificationRule to notify when the auto-generated report is ready (Step 4 attaches the PDF)
+  autoSendRuleId         String?
   customerId             String?
   createdById            String?
   createdAt              DateTime             @default(now())
@@ -344,6 +356,7 @@ model Event {
   days                   EventDay[]
   gates                  EventGate[]
   reports                EventReport[]
+  fetchRuns              EventFetchRun[]
   zones                  EventZone[]
   plans                  InstallationPlan[]
   // ─── C1.1 BACK-RELATIONS ─── Event
@@ -426,6 +439,9 @@ model EventReport {
   stderr        String?
   errorMessage  String?
   triggeredById String?
+  /// Event Report v2 — outcome of the Telegram PDF send; both null until one is attempted
+  telegramFileSentAt DateTime?
+  telegramFileError  String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
@@ -480,6 +496,58 @@ enum PlanStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+/// Event Report v2 — one row per (event, day) fetch attempt from the Vion API.
+model EventFetchRun {
+  id            String            @id @default(uuid())
+  eventId       String
+  /// site-local YYYY-MM-DD
+  date          String
+  status        EventFetchStatus  @default(QUEUED)
+  triggeredBy   EventFetchTrigger @default(MANUAL)
+  triggeredById String?
+  force         Boolean           @default(false)
+  /// rows written to the file the engine reads (clipped to operating hours)
+  rows          Int?
+  /// rows written to the unclipped source/_fullday/ copy
+  fullDayRows   Int?
+  /// what the vendor claimed before dedupe — it overcounts on busy days
+  reportedTotal Int?
+  durationMs    Int?
+  errorMessage  String?
+  attempt       Int               @default(1)
+  createdAt     DateTime          @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([eventId, date])
+  @@index([status])
+}
+
+enum EventFetchStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum EventFetchTrigger {
+  MANUAL
+  SCHEDULE
+}
+
+enum EventDataSource {
+  UPLOAD
+  VION
+}
+
+enum VionServerKey {
+  MALL
+  RETAIL
 }
 
 enum NotificationTrigger {

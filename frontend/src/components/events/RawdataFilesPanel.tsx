@@ -14,9 +14,11 @@ interface SourceFile {
 interface Props {
   eventId: string;
   configuredDates?: string[];   // YYYY-MM-DD list from event days
+  /** v2: dates whose file was pulled from the Vion API. Empty → every file shows as Upload. */
+  apiDates?: string[];
 }
 
-export function RawdataFilesPanel({ eventId, configuredDates = [] }: Props) {
+export function RawdataFilesPanel({ eventId, configuredDates = [], apiDates = [] }: Props) {
   const showToast = useToast((s) => s.show);
   const qc = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -96,6 +98,14 @@ export function RawdataFilesPanel({ eventId, configuredDates = [] }: Props) {
     uploadMutation.mutate(list);
     if (inputRef.current) inputRef.current.value = '';
   };
+
+  const apiDateSet = new Set(apiDates);
+  // A file counts as API-sourced if a fetch run recorded that day, or if it still carries the
+  // exact name vionRawdata.service writes. The second test keeps the badge right when fetch
+  // history has been pruned; a hand-uploaded file never matches, because the manual export is
+  // named CaptureRecordsDetails-<EventName>-YYYYMMDD.xlsx.
+  const isApiFile = (f: SourceFile) =>
+    (!!f.date && apiDateSet.has(f.date)) || /^CaptureRecordsDetails-\d{4}-\d{2}-\d{2}\.xlsx$/i.test(f.filename);
 
   // Match configured dates to files
   const fileByDate = new Map<string, SourceFile>();
@@ -194,6 +204,8 @@ export function RawdataFilesPanel({ eventId, configuredDates = [] }: Props) {
                     {f.date ? <span className="font-mono">{f.date}</span> : <span className="text-red-600">no date in name</span>}
                     <span className="mx-1">·</span>
                     <span>{(f.size / 1024 / 1024).toFixed(2)} MB</span>
+                    <span className="mx-1">·</span>
+                    <SourceBadge fromApi={isApiFile(f)} />
                   </div>
                 </div>
                 <button onClick={() => {
@@ -234,5 +246,14 @@ export function RawdataFilesPanel({ eventId, configuredDates = [] }: Props) {
         Date is extracted from filenames containing YYYYMMDD or YYYY-MM-DD.
       </div>
     </div>
+  );
+}
+
+/** v2: where this day's file came from. Upload is the default for everything pre-v2. */
+function SourceBadge({ fromApi }: { fromApi: boolean }) {
+  return fromApi ? (
+    <span className="inline-block px-1 py-px rounded bg-sky-100 text-sky-700 font-semibold text-[9px] tracking-wide">API</span>
+  ) : (
+    <span className="inline-block px-1 py-px rounded bg-gray-200 text-gray-600 font-semibold text-[9px] tracking-wide">Upload</span>
   );
 }

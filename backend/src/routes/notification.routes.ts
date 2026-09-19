@@ -46,6 +46,7 @@ router.post('/rules', authorize('ADMIN', 'PROJECT_MANAGER'), async (req, res) =>
         daysAhead: body.daysAhead || null,
         recipients: body.recipients || [],
         templateBody: body.templateBody || null,
+        sendFile: body.sendFile === true,          // Event Report v2 — opt-in PDF attachment
       },
     });
     res.json({ success: true, data: rule });
@@ -71,6 +72,7 @@ router.put('/rules/:id', authorize('ADMIN', 'PROJECT_MANAGER'), async (req, res)
         ...(body.daysAhead !== undefined ? { daysAhead: body.daysAhead } : {}),
         ...(body.recipients !== undefined ? { recipients: body.recipients } : {}),
         ...(body.templateBody !== undefined ? { templateBody: body.templateBody } : {}),
+        ...(body.sendFile !== undefined ? { sendFile: body.sendFile === true } : {}),
       },
     });
     res.json({ success: true, data: rule });

@@ -1102,6 +1102,137 @@ Additional tech debt (gluing onto C1.10d):
     ให้ event loop responsive.
 
 
+## 📡 Event Report v2 — Vion data source (Sept 18–19 2026, branch `feat/event-report-v2`, 6 commits)
+
+Event reports used to need a human: export `CaptureRecordsDetails-*.xlsx` from the Vion web UI once
+per day, upload it, press Generate. v2 lets an event name a Vion plaza instead, and the system pulls
+the same file itself on a nightly schedule, generates, and attaches the PDF to the Telegram message.
+
+**Upload mode is untouched.** Every pre-existing event still has `dataSource=UPLOAD` and every commit
+was gated on regenerating a real UPLOAD event and diffing the rendered numbers against its pre-branch
+report (0 of 176 differ, identical byte size, every step).
+
+Everything is behind `EVENT_V2_ENABLED`, which is **`false` in `docker-compose.yml`**. Off means inert:
+the `/vion/*` routes 404, the fetch worker does not start, the UI section does not render, and any
+repeatable job left in Redis is torn out at boot.
+
+### Architecture
+
+```
+┌────────────────────────┐   PUT /:id/vion/config   ┌────────────────────────┐
+│ VionDataSourceSection  │ ───────────────────────► │ eventFetch.service     │
+│  (📡 แหล่งข้อมูล)        │  server·plaza·schedule   │  saveConfig()          │
+└────────────────────────┘                          │  — schedule REQUIRED   │
+                                                    └───────────┬────────────┘
+                                                                │ upsertJobScheduler
+                                                                ▼
+                                             ┌──────────────────────────────────┐
+                    boot: syncAllRepeatables │ eventFetch.queue  (BullMQ)       │
+                    ───────────────────────► │  scheduled-fetch  daily, per tz  │
+                                             │  jobId event-fetch--<eventId>    │
+                                             └───────────┬──────────────────────┘
+                                                         │ nightly tick
+                                                         ▼
+                                             ┌──────────────────────────────────┐
+                                             │ runScheduledFetch()              │
+                                             │  D-1, D-2 force · older: if gap  │
+                                             │  retires past endDate+1          │
+                                             └───────────┬──────────────────────┘
+                                                         │ per day
+                                                         ▼
+                                  ┌──────────────────────────────────────────────┐
+                                  │ vionRawdata.fetchDay()                       │
+                                  │  GET /api/v2/captureRecord  (page≤1000)      │
+                                  │  dedupe by unid · clip to displayHours       │
+                                  │  ExcelJS WorkbookWriter (streaming)          │
+                                  └───────────┬──────────────────────────────────┘
+                                              │ writes
+                                              ▼
+                       source/CaptureRecordsDetails-YYYY-MM-DD.xlsx   ← identical to a manual export
+                       source/_fullday/…-fullday.xlsx                 ← unclipped, outside merge path
+                                              │
+                                              │  ⇩ FROM HERE THE v1 PIPELINE IS UNCHANGED
+                                              ▼
+                       rawdataFiles.merge() → _config → dashboard_engine.py → HTML/XLSX
+                                              │
+                                              ▼
+                       dispatchEventReportReady() ──► Telegram message (unchanged)
+                                              └─────► if rule.sendFile: Dashboard.pdf as document
+```
+
+### Column mapping — captureRecord → the engine's `COL_NAMES`
+
+Identical on both servers; the endpoint returns the same 10 keys on Mall and Retail.
+
+| # | engine column | file header | API field | how |
+|---|---|---|---|---|
+| 1 | `No` | `No.` | — | running 1..N |
+| 2 | `unid` | `unid` | `unid` | direct |
+| 3 | `VideoId` | `Video Id` | — | `unid[:4]` (0 exceptions in 25,212 rows) |
+| 4 | `BodyID` | `BodyID` | `personUnid` | direct |
+| 5 | `PersonnelNo` | `Personnel No.` | — | **absent** — left blank; engine never reads it |
+| 6 | `CustomerType` | *(blank header)* | `personType` | `0→Customer`, `1→Staff` |
+| 7 | `AgeGroup` | `年龄` | `age` (years) | `≤18` / `19–35` / `36–55` / `≥56` → the four labels |
+| 8 | `Gender` | `性别` | `gender` | `1→Male`, `0→Female`, else `Unknown` |
+| 9 | `Event` | `Event` | `direction` | `1→in`, `-1→out`, `4`/`5`→`Unknown` |
+| 10 | `CameraID` | `Device SN` | — | `device.channelList[].site.gateUnid → serialnum` (99.9%); engine never reads it |
+| 11 | `Time` | `Time` | `counttimeLocal` | direct — **already site-local, never convert** |
+| 12 | `Location` | `Monitoring Point` | `gateUnid` | `gateInfo.gateName` ∪ `zoneInfo.zoneName` where `zoneStatus=1` |
+
+Proven by two independent row-level joins on `unid` against real manual exports (25,212 and 16,326
+rows), 100% matched, zero mismatches on every engine-visible column.
+
+### Limits found by measurement, not by reading the PDFs
+
+| | |
+|---|---|
+| retention | **~7 days per plaza.** Older days answer `total: 0`. Backfill beyond that is impossible, which is why a schedule is mandatory once `dataSource=VION`. |
+| page size | capped at **1000** server-side; asking for more still returns 1000 |
+| `total` | **overcounts** — see lesson #87 |
+| rate limit | none observed (30 rapid calls, both servers, no error) |
+| throughput | Retail booth ≈ 50 ms/page; the busiest Mall site 1,179 ms/page → **~18 min for one 900k-row day** |
+| timeout | `VION_FETCH_TIMEOUT_MS` default **1,800,000** (≈ measured worst case × 1.5) |
+
+### New files
+
+`backend/src/services/vionRawdata.service.ts` · `eventFetch.service.ts` · `eventReportPdf.service.ts` ·
+`backend/src/queues/eventFetch.queue.ts` · `backend/scripts/vion-fetch-day.ts` ·
+`frontend/src/api/vion.ts` · `frontend/src/components/events/VionDataSourceSection.tsx`
+
+### New env (all in `docker-compose.yml`, lesson #67)
+
+`EVENT_V2_ENABLED` (**false**) · `VION_FETCH_TIMEOUT_MS` (1800000) · `VION_SITE_TZ` (Asia/Bangkok) ·
+`TELEGRAM_MAX_FILE_BYTES` (45 MB, read by eventReportPdf.service)
+
+### Schema
+
+`Event`: `dataSource` (UPLOAD|VION, default UPLOAD), `vionServer`, `vionPlazaId`, `fetchSchedule`,
+`fetchTz` (default Asia/Bangkok), `autoGenerate` (default true), `autoSendRuleId` ·
+`EventFetchRun` (new table) · `NotificationRule.sendFile` (default false) ·
+`EventReport.telegramFileSentAt` / `telegramFileError`. Every field defaulted or nullable — no
+existing row was made invalid, checked after each migration.
+
+### Open decisions
+
+- **Telegram chat ids are all the same value.** `TELEGRAM_PM_GROUP_CHAT_ID`,
+  `TELEGRAM_CUSTOMER_GROUP_CHAT_ID` and `TELEGRAM_ADMIN_CHAT_ID` all point at one chat, and the single
+  `EVENT_REPORT_READY` rule points there too, alongside an enabled Camera Monitor rule. So "send to the
+  PM group but not the customer group" is currently not expressible. **Decide before enabling
+  `sendFile` in production.** This is why the Step 4 Telegram send has not been executed end to end —
+  the PDF render, caption, size fallback and failure handling are verified against a stubbed client,
+  but nothing has actually been delivered to a chat.
+- Whether a stuck `RUNNING` report should be swept at boot — see TODO below.
+
+### TODO (Phase 2)
+
+- **Startup sweep for stuck reports.** A backend restart during an engine run leaves the report
+  `RUNNING` for ever: the engine is a child process and dies with the container, and nothing revisits
+  the row. One was found in this branch (marked FAILED by hand). At boot, set any `RUNNING` report
+  older than `ENGINE_TIMEOUT_MS` to `FAILED` with an explanatory message. Extends the reasoning in
+  lesson #68 — the process that owns a status must be the one that can still write it.
+- Multi-plaza per event; POS/sales join; LINE Notify. All explicitly out of scope here.
+
+
 ## File location quick-reference
 
 ### Backend
@@ -1293,6 +1424,77 @@ Env (all declared in compose `environment:`): `VION_{MALL,RETAIL}_{BASE_URL,APPK
     schema written from assumption will 400 requests the route accepts today — grep
     every caller first. Doing that here caught `teamId="null"`, which a `.uuid()`
     would have rejected.
+
+85. **The vendor's export is not ground truth — it is one client of the same API.**
+    The Vion UI export of a busy day carried 36,700 rows holding only 29,053 distinct
+    `unid`, i.e. 7,647 duplicates, while missing records the API still had. A later
+    re-export of the same day produced 44,818 rows / 36,069 distinct. Both are the
+    vendor repeating rows across pages and passing that through. Deduping by `unid`
+    gives **exactly** the export's distinct set (verified: 0 rows either way). So
+    "matches the file the user downloaded" is the wrong bar; "matches the distinct
+    set, and every shared row agrees field by field" is the right one. Report the
+    difference instead of quietly matching the worse artefact. (Step 0–1)
+
+86. **`captureRecord` retains ~7 days per plaza — design for loss, not for backfill.**
+    Measured day by day on three plazas: exactly 7 consecutive days with data, hard
+    zero before that. An event configured a week late can never recover its first
+    days. Consequences baked into v2: a schedule is a **required** field once
+    `dataSource=VION` (saving without one is refused, with the reason), saving the
+    data source enqueues the whole retention window immediately, and the UI states
+    the floor date. An unscheduled VION event would look fine and lose data silently.
+
+87. **A vendor's `total` can exceed what it can actually give you.**
+    One day reported `total: 45,419` but yielded 36,670 distinct `unid` — identically
+    on every pass, at pageSize 1000/500/200, sweeping pages up or down. It is not
+    pagination instability, it is duplicate rows in their result set. Never trust
+    `total` as the row count to expect, and dedupe across the **whole** day; an
+    adjacent-page guard catches nothing (the duplicates were spread over 46 pages).
+
+88. **`getRepeatableJobs()` does not return the jobId you registered.**
+    BullMQ 5.76 reports repeatables with an opaque hashed `key` and no `id`, so a
+    repeatable cannot be found by the id it was added with, and "remove the old one,
+    add the new one" silently leaves both firing. Changing a schedule produced two
+    live jobs. Use the Job Scheduler API — `upsertJobScheduler(id, repeat, tpl)`,
+    `removeJobScheduler(id)`, `getJobSchedulers()` — which keys on an id you choose
+    and replaces a changed pattern in place. Also: **BullMQ rejects `:` in a custom
+    job id** (`"Custom Id cannot contain :"`), so ids read `event-fetch--<uuid>`.
+
+89. **`prisma migrate dev` needs a TTY the container cannot give.**
+    `docker exec ... prisma migrate dev` fails with "environment is non-interactive",
+    and `-t` just hangs on the prompt. Working recipe for this repo:
+    `prisma migrate diff --from-schema-datasource --to-schema-datamodel --script`,
+    write the SQL into `prisma/migrations/<timestamp>_<name>/migration.sql` **on the
+    host** (so it is owned by `ditech`, which sidesteps lesson #58 entirely), then
+    `prisma migrate deploy` + `prisma generate`. Read the generated SQL before
+    applying it: that is also the moment to confirm every new column is defaulted or
+    nullable so existing rows stay valid.
+
+90. **An export that is clipped to business hours does not announce it.**
+    The manual `CaptureRecordsDetails` files are cut to the event's
+    `displayHoursStart`–`displayHoursEnd`. Inside that window the API and the export
+    hold exactly the same rows; every extra API row sat outside it. Writing the
+    unclipped day would have inflated every unique-visitor and traffic number while
+    the file still looked correct. The tell was the timestamp range, not the row
+    count — check `min`/`max` of a time column before concluding two datasets differ
+    by "some backfill". A prompt-supplied rule ("convert from GMT+8") was wrong in
+    the same investigation: `counttimeLocal` is already site-local, and 41,538 rows
+    matched the export string for string. **Measure the claim before implementing it.**
+
+91. **A frontend enum that lags the Prisma enum corrupts data on save.**
+    `TRIGGER_OPTIONS` never gained `EVENT_REPORT_READY` or `CAMERA_DIGEST`, so those
+    rules showed the wrong badge and — worse — opening one in the editor left the
+    `<select>` with no matching option, displaying `DAILY_AT` and **writing it back
+    on save**, detaching the rule from the event that fires it. Nothing logged. Any
+    `<select>` bound to a DB enum needs its option list derived from, or tested
+    against, that enum; a literal list is a silent data-corruption bug waiting for
+    someone to open the form. (commit `2e5d16e`)
+
+92. **Write nothing rather than something empty.**
+    A scheduled fetch routinely asks for a day the vendor has no rows for (D-1 before
+    the cameras were bound, a day still in the future). The first version wrote a
+    header-only xlsx, which the merge would have turned into an empty `data_<date>`
+    sheet inside `Rawdata.xlsx`. `fetchDay` now writes no file at all for an empty
+    day and reports `empty: true`, and an empty day is not a reason to regenerate.
 
 ### Next
 - Sprint 3 candidates: `SITE_DOWN` correlation (all cameras of a site down → one CRIT alert), `STALE_OFFLINE` > 30 days → suggest archive, APIPA/IP-drift flags (`169.254.x`, name≠localIp), uptime % within business hours only.

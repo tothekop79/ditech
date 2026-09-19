@@ -76,7 +76,22 @@ export async function renderHtml(templateName: string, data: any): Promise<strin
   return tpl(data);
 }
 
-export async function renderPdf(html: string, opts?: { footerText?: string }): Promise<Buffer> {
+export async function renderPdf(
+  html: string,
+  opts?: {
+    footerText?: string;
+    /**
+     * Let the document's own `@page` rule decide size and margins.
+     * The report engine ships `@page{size:A4 portrait;margin:10mm 10mm 12mm 10mm}`, and that
+     * bottom margin is what keeps the footer off the content (lesson #61) — overriding it here
+     * with Puppeteer's own margins would put the overlap back. Callers that pass this must not
+     * also ask for a footerTemplate.
+     */
+    preferCSSPageSize?: boolean;
+    /** file:// URL to load instead of setContent, so relative assets still resolve */
+    url?: string;
+  },
+): Promise<Buffer> {
   const browser = await puppeteer.launch({
     executablePath: '/usr/bin/chromium',
     headless: true,
@@ -89,7 +104,8 @@ export async function renderPdf(html: string, opts?: { footerText?: string }): P
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    if (opts?.url) await page.goto(opts.url, { waitUntil: 'networkidle0' });
+    else await page.setContent(html, { waitUntil: 'networkidle0' });
     await page.evaluate(async () => {
       if ((document as any).fonts && (document as any).fonts.ready) {
         await (document as any).fonts.ready;
@@ -101,16 +117,18 @@ export async function renderPdf(html: string, opts?: { footerText?: string }): P
       ? `<div style="font-size:8pt; color:#6b7280; width:100%; text-align:center; padding:0 14mm; font-family: 'Sarabun', 'TH Sarabun New', Arial, sans-serif; border-top: 0.5pt solid #cbd5e1; padding-top: 4pt;">${opts.footerText} &nbsp;·&nbsp; หน้า <span class="pageNumber"></span> / <span class="totalPages"></span></div>`
       : `<span></span>`;
 
-    const pdf = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      displayHeaderFooter: useFooter,
-      headerTemplate: '<span></span>',
-      footerTemplate: footerHtml,
-      margin: useFooter
-        ? { top: '12mm', bottom: '18mm', left: '12mm', right: '12mm' }
-        : { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
-    });
+    const pdf = opts?.preferCSSPageSize
+      ? await page.pdf({ printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false })
+      : await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        displayHeaderFooter: useFooter,
+        headerTemplate: '<span></span>',
+        footerTemplate: footerHtml,
+        margin: useFooter
+          ? { top: '12mm', bottom: '18mm', left: '12mm', right: '12mm' }
+          : { top: '15mm', bottom: '15mm', left: '15mm', right: '15mm' },
+      });
     return Buffer.from(pdf);
   } finally {
     await browser.close();

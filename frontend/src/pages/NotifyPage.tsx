@@ -20,6 +20,11 @@ const TRIGGER_OPTIONS: { value: NotificationTrigger; label: string; emoji: strin
   { value: 'TEAM_CHANGED',       label: 'Team assigned/changed',  emoji: '👥', needs: [] },
   { value: 'PLAN_CREATED',       label: 'Plan created',           emoji: '🆕', needs: [] },
   { value: 'PHOTO_UPLOADED',     label: 'Photo uploaded',         emoji: '📷', needs: [] },
+  // Both exist in the Prisma enum and are in use, but were missing here: the rule list showed
+  // them as "Daily at time", and opening one in this editor would have saved the trigger back
+  // as DAILY_AT, quietly detaching it from the event that fires it.
+  { value: 'EVENT_REPORT_READY', label: 'Event report ready',     emoji: '📊', needs: [] },
+  { value: 'CAMERA_DIGEST',      label: 'Camera digest',          emoji: '📹', needs: ['triggerTime'] },
 ];
 const STATUS_VALUES = ['DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -408,6 +413,7 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
     daysAhead: rule.daysAhead || 3,
     recipients: rule.recipients,
     templateBody: rule.templateBody || '',
+    sendFile: rule.sendFile ?? false,
   } : {
     name: '',
     description: '',
@@ -419,6 +425,7 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
     daysAhead: 3,
     recipients: ['PM Group'],
     templateBody: '',
+    sendFile: false,
   });
 
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
@@ -586,6 +593,27 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
               )}
             </div>
           </div>
+
+          {/* Event Report v2 — attach the generated PDF. Only meaningful for report triggers. */}
+          {form.trigger === 'EVENT_REPORT_READY' && (
+            <div className="border border-gray-200 rounded p-2.5">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.sendFile ?? false}
+                  onChange={(e) => setForm({ ...form, sendFile: e.target.checked })}
+                />
+                <span className="text-xs">
+                  <span className="font-medium text-gray-800">📎 แนบไฟล์ PDF</span>
+                  <span className="block text-[11px] text-gray-500 mt-0.5">
+                    ส่งข้อความเหมือนเดิมก่อน แล้วตามด้วย Dashboard.pdf ของรายงานนั้น ·
+                    ถ้าไฟล์ใหญ่เกินที่ Telegram รับได้ จะส่งลิงก์แทนพร้อมบอกขนาด
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {/* Custom template body — VARIABLE_HINTS_BLOCK */}
           <div>
