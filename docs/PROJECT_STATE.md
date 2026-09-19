@@ -1215,13 +1215,32 @@ existing row was made invalid, checked after each migration.
 ### Open decisions
 
 - **Telegram chat ids are all the same value.** `TELEGRAM_PM_GROUP_CHAT_ID`,
-  `TELEGRAM_CUSTOMER_GROUP_CHAT_ID` and `TELEGRAM_ADMIN_CHAT_ID` all point at one chat, and the single
-  `EVENT_REPORT_READY` rule points there too, alongside an enabled Camera Monitor rule. So "send to the
-  PM group but not the customer group" is currently not expressible. **Decide before enabling
-  `sendFile` in production.** This is why the Step 4 Telegram send has not been executed end to end —
-  the PDF render, caption, size fallback and failure handling are verified against a stubbed client,
-  but nothing has actually been delivered to a chat.
+  `TELEGRAM_CUSTOMER_GROUP_CHAT_ID` and `TELEGRAM_ADMIN_CHAT_ID` all point at one chat
+  (`-4903207701`), and the long-standing `EVENT_REPORT_READY` rule points there too, alongside an
+  enabled Camera Monitor rule. So "send to the PM group but not the customer group" is still not
+  expressible through the built-in recipient names. **Decide before enabling `sendFile` on a rule
+  that targets a customer-facing chat.** The verification below deliberately went around this by
+  addressing a separate group by raw chat id.
 - Whether a stuck `RUNNING` report should be swept at boot — see TODO below.
+
+### Telegram document send — verified end to end (2026-09-19 02:26 UTC)
+
+Done against a real group created for the purpose, never a customer-facing chat.
+
+| | |
+|---|---|
+| rule | created through `POST /api/notifications/rules` rather than SQL, specifically to exercise the `sendFile` whitelist added in Step 4 — it round-tripped `sendFile: true` |
+| target | chat `-5589835480`, confirmed via `getChat` as group **"DITECH Report Test"** |
+| report | `4c6ee415…` of the `[V2 TEST]` event, 5-page PDF |
+| document | **715,229 bytes (0.68 MB)**, `V2_TEST_Xtool_-_Mega_Bangna-Dashboard.pdf` |
+| caption | `📊 [V2 TEST] … · ข้อมูลถึงวันที่ 2026-09-16 · profile standard · 7/10 วัน` |
+| timing | **8.04 s total** — 5,015 ms render + ≈3.0 s upload. A cached PDF skips the render entirely (0 ms). |
+| report row | stayed `COMPLETED`; only `telegramFileSentAt` moved, `telegramFileError` null |
+
+The test rule was set `enabled=false` immediately afterwards, so the only live `EVENT_REPORT_READY`
+rule is again the original PM-group one with `sendFile=false` — i.e. exactly the pre-v2 behaviour.
+Re-enable the test rule (or point a new one at a real group) before relying on automatic PDF
+delivery.
 
 ### TODO (Phase 2)
 
