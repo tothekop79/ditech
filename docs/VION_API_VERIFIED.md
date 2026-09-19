@@ -177,6 +177,47 @@ Retail `Central World` (216 plazas on the account, 6 devices, 7 gates, 10 zones)
 
 ---
 
+## `captureRecord` in production use (Event Report v2, 2026-09-18)
+
+This is the one endpoint the event-report pipeline depends on, so its behaviour is pinned down
+harder than the rest of this catalogue. Same 10 keys on both servers.
+
+```
+GET /api/v2/captureRecord?plazaUnid=<uuid>&countdate=YYYY-MM-DD&page=1&pageSize=1000
+```
+
+One row, BodyID obscured:
+
+```json
+{
+  "unid":          "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "personUnid":    "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "personType":    0,
+  "gateUnid":      "<gate OR zone unid>",
+  "plazaUnid":     "<plaza unid>",
+  "age":           30,
+  "gender":        1,
+  "direction":     1,
+  "counttimeLocal":"2026-09-18 14:22:07",
+  "countdate":     "2026-09-18"
+}
+```
+
+- `personType` `0`=Customer `1`=Staff · `gender` `1`=Male `0`=Female `-1`=unknown ·
+  `direction` `1`=in `-1`=out `4`/`5`=passer-by lines. Values `0`,`2`,`22`,`23` appear on mall-type
+  plazas only and have no known meaning; booth plazas emit only `{-1,1,4,5}`.
+- `age` is an estimated age in **years**, not a bucket code (observed 5,6,12,18,24,25,30,45,50,60,65).
+- `gateUnid` is a **location** id: resolve against `gateInfo` *and* `zoneInfo` (`zoneStatus=1` only).
+- `counttimeLocal` is **site-local already**. Only `modifyTime` is GMT+8, and this endpoint never
+  returns it.
+- `pageSize` is capped at 1000. `total` **overcounts** on busy days — dedupe by `unid` across the
+  whole day (see PROJECT_STATE lesson #87).
+- Retention is **~7 days per plaza**; older `countdate` values answer `total: 0`, not an error.
+- Throughput measured: Retail booth ≈ 50 ms/page, busiest Mall site 1,179 ms/page
+  (≈ 18 min for a 900k-row day).
+
+---
+
 ## Cross-server availability
 
 Several endpoints the PDFs document for only one server work on both — `gateTenMins`, `gateDay`,
