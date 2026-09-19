@@ -413,6 +413,7 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
     daysAhead: rule.daysAhead || 3,
     recipients: rule.recipients,
     templateBody: rule.templateBody || '',
+    sendFile: rule.sendFile ?? false,
   } : {
     name: '',
     description: '',
@@ -424,6 +425,7 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
     daysAhead: 3,
     recipients: ['PM Group'],
     templateBody: '',
+    sendFile: false,
   });
 
   const [previewMessage, setPreviewMessage] = useState<string | null>(null);
@@ -591,6 +593,27 @@ function RuleEditorModal({ rule, onClose, onSaved }: {
               )}
             </div>
           </div>
+
+          {/* Event Report v2 — attach the generated PDF. Only meaningful for report triggers. */}
+          {form.trigger === 'EVENT_REPORT_READY' && (
+            <div className="border border-gray-200 rounded p-2.5">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={form.sendFile ?? false}
+                  onChange={(e) => setForm({ ...form, sendFile: e.target.checked })}
+                />
+                <span className="text-xs">
+                  <span className="font-medium text-gray-800">📎 แนบไฟล์ PDF</span>
+                  <span className="block text-[11px] text-gray-500 mt-0.5">
+                    ส่งข้อความเหมือนเดิมก่อน แล้วตามด้วย Dashboard.pdf ของรายงานนั้น ·
+                    ถ้าไฟล์ใหญ่เกินที่ Telegram รับได้ จะส่งลิงก์แทนพร้อมบอกขนาด
+                  </span>
+                </span>
+              </label>
+            </div>
+          )}
 
           {/* Custom template body — VARIABLE_HINTS_BLOCK */}
           <div>

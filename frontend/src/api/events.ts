@@ -70,6 +70,9 @@ export interface EventReport {
   completedAt?: string | null;
   durationMs?: number | null;
   errorMessage?: string | null;
+  /** Event Report v2 — outcome of the Telegram PDF send */
+  telegramFileSentAt?: string | null;
+  telegramFileError?: string | null;
   triggeredBy?: { id: string; fullName: string } | null;
   createdAt: string;
 }

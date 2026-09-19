@@ -186,6 +186,8 @@ model NotificationRule {
   daysAhead        Int?
   recipients       String[]
   templateBody     String?
+  /// Event Report v2 — attach the report PDF after the message (opt-in per rule)
+  sendFile         Boolean             @default(false)
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   logs             NotificationLog[]
@@ -437,6 +439,9 @@ model EventReport {
   stderr        String?
   errorMessage  String?
   triggeredById String?
+  /// Event Report v2 — outcome of the Telegram PDF send; both null until one is attempted
+  telegramFileSentAt DateTime?
+  telegramFileError  String?
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
   event         Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)

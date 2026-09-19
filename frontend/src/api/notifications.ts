@@ -22,6 +22,8 @@ export interface NotificationRule {
   daysAhead?: number | null;
   recipients: string[];
   templateBody?: string | null;
+  /** Event Report v2 — attach the report PDF after the message */
+  sendFile?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,6 +68,7 @@ export interface CreateRuleInput {
   daysAhead?: number | null;
   recipients: string[];
   templateBody?: string | null;
+  sendFile?: boolean;
 }
 
 // ─── API ───

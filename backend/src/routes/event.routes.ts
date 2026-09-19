@@ -458,6 +458,24 @@ router.post('/:id/vion/fetch', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), as
   }
 });
 
+// Manual re-send of a report's PDF — same path the dispatcher uses.
+// Not behind v2Gate: a v1 upload-mode report is just as sendable, and the button only appears
+// once a report exists. `force` re-renders instead of reusing the cached Dashboard.pdf.
+router.post('/reports/:reportId/send-pdf', authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
+  try {
+    const { chatId, force } = req.body ?? {};
+    if (!chatId || typeof chatId !== 'string') {
+      res.status(400).json({ success: false, message: 'chatId is required' });
+      return;
+    }
+    const { sendReportPdf } = await import('../services/eventReportPdf.service');
+    const result = await sendReportPdf(req.params.reportId, chatId, { force: force === true });
+    res.json({ success: result.sent, data: result, message: result.error });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message ?? String(err) });
+  }
+});
+
 // The v2 config write path: validates the schedule, re-syncs the repeatable job and,
 // the first time an event becomes a VION source, queues the initial backfill.
 router.put('/:id/vion/config', v2Gate, authorize('ADMIN', 'PROJECT_MANAGER'), async (req: Request, res: Response) => {
