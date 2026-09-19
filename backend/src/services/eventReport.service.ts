@@ -56,6 +56,18 @@ export const eventReportService = {
   },
   async dispatchEventReportReady(eventId: string, reportId: string): Promise<void> {
     try {
+      // Per-event kill switch, checked before any rule is loaded so it covers the message and
+      // the PDF alike. This is how a [TEST] event stays silent — muting a real rule instead
+      // means someone has to remember to turn it back on.
+      const notifyCheck = await prisma.event.findUnique({
+        where: { id: eventId },
+        select: { name: true, notifyEnabled: true },
+      });
+      if (notifyCheck && !notifyCheck.notifyEnabled) {
+        console.log(`[notify] notifications suppressed for "${notifyCheck.name}" (notifyEnabled=false)`);
+        return;
+      }
+
       const rules = await prisma.notificationRule.findMany({
         where: { trigger: 'EVENT_REPORT_READY' as any, enabled: true },
       });

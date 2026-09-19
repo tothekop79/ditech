@@ -335,6 +335,9 @@ model Event {
   engagementThresholdSec Int                  @default(60)
   excludeStaff           Boolean              @default(true)
   showDwellBenchmark     Boolean              @default(false)
+  /// false silences EVENT_REPORT_READY for this event entirely — message and PDF alike.
+  /// Set it on any [TEST] event so a test generate cannot page a real group.
+  notifyEnabled          Boolean              @default(true)
   sponsorZones           String?
   // ─── Event Report v2 — Vion data source. All optional/defaulted: existing rows stay valid. ───
   dataSource             EventDataSource      @default(UPLOAD)

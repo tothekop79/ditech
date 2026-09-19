@@ -107,6 +107,8 @@ export interface Event {
   excludeStaff: boolean;
   showDwellBenchmark: boolean;
   sponsorZones?: string | null;
+  /** false silences the EVENT_REPORT_READY notification for this event */
+  notifyEnabled?: boolean;
   // ─── Event Report v2 — Vion data source (optional: absent on older payloads) ───
   dataSource?: 'UPLOAD' | 'VION';
   vionServer?: 'MALL' | 'RETAIL' | null;
@@ -152,6 +154,7 @@ export interface EventCreateInput {
   excludeStaff?: boolean;
   showDwellBenchmark?: boolean;
   sponsorZones?: string;
+  notifyEnabled?: boolean;
   dataSource?: 'UPLOAD' | 'VION';
   vionServer?: 'MALL' | 'RETAIL' | null;
   vionPlazaId?: string | null;

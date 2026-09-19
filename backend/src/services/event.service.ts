@@ -23,6 +23,7 @@ export interface EventCreateInput {
   excludeStaff?: boolean;
   showDwellBenchmark?: boolean;
   sponsorZones?: string;
+  notifyEnabled?: boolean;
   // ─── Event Report v2 — Vion data source ───
   dataSource?: 'UPLOAD' | 'VION';
   vionServer?: 'MALL' | 'RETAIL' | null;
@@ -205,6 +206,7 @@ export const eventService = {
     if (data.excludeStaff !== undefined) updateData.excludeStaff = data.excludeStaff;
     if (data.showDwellBenchmark !== undefined) updateData.showDwellBenchmark = data.showDwellBenchmark;
     if (data.sponsorZones !== undefined) updateData.sponsorZones = data.sponsorZones;
+    if (data.notifyEnabled !== undefined) updateData.notifyEnabled = data.notifyEnabled;
     // ─── Event Report v2 — Vion data source (nothing above this line changed) ───
     if (data.dataSource !== undefined) updateData.dataSource = data.dataSource;
     if (data.vionServer !== undefined) updateData.vionServer = data.vionServer;

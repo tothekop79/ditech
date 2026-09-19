@@ -24,6 +24,7 @@ export function EditEventModal({ event, open, onClose }: Props) {
     description: event.description || '',
     confidential: event.confidential,
     showPasserby: event.showPasserby,
+    notifyEnabled: event.notifyEnabled ?? true,
     systemCredit: event.systemCredit || 'AI People Counting',
   });
 
@@ -40,6 +41,7 @@ export function EditEventModal({ event, open, onClose }: Props) {
         description: event.description || '',
         confidential: event.confidential,
         showPasserby: event.showPasserby,
+        notifyEnabled: event.notifyEnabled ?? true,
         systemCredit: event.systemCredit || 'AI People Counting',
       });
     }
@@ -58,6 +60,7 @@ export function EditEventModal({ event, open, onClose }: Props) {
         description: form.description.trim() || undefined,
         confidential: form.confidential,
         showPasserby: form.showPasserby,
+        notifyEnabled: form.notifyEnabled,
         systemCredit: form.systemCredit.trim() || undefined,
       } as any),
     onSuccess: () => {
@@ -173,6 +176,17 @@ export function EditEventModal({ event, open, onClose }: Props) {
               Show passerby data
             </label>
           </div>
+
+          <label className="flex items-start gap-2 text-sm pt-1">
+            <input type="checkbox" className="mt-0.5" checked={form.notifyEnabled}
+              onChange={(e) => setForm({ ...form, notifyEnabled: e.target.checked })} />
+            <span>
+              ส่งแจ้งเตือน Telegram เมื่อ report เสร็จ
+              <span className="block text-[11px] text-gray-500">
+                ปิดไว้สำหรับ event ทดสอบ — ปิดแล้วจะไม่ส่งทั้งข้อความและไฟล์ PDF
+              </span>
+            </span>
+          </label>
         </div>
 
         {/* Footer */}
