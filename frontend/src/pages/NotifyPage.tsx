@@ -20,6 +20,11 @@ const TRIGGER_OPTIONS: { value: NotificationTrigger; label: string; emoji: strin
   { value: 'TEAM_CHANGED',       label: 'Team assigned/changed',  emoji: '👥', needs: [] },
   { value: 'PLAN_CREATED',       label: 'Plan created',           emoji: '🆕', needs: [] },
   { value: 'PHOTO_UPLOADED',     label: 'Photo uploaded',         emoji: '📷', needs: [] },
+  // Both exist in the Prisma enum and are in use, but were missing here: the rule list showed
+  // them as "Daily at time", and opening one in this editor would have saved the trigger back
+  // as DAILY_AT, quietly detaching it from the event that fires it.
+  { value: 'EVENT_REPORT_READY', label: 'Event report ready',     emoji: '📊', needs: [] },
+  { value: 'CAMERA_DIGEST',      label: 'Camera digest',          emoji: '📹', needs: ['triggerTime'] },
 ];
 const STATUS_VALUES = ['DRAFT', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
